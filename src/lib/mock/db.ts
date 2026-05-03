@@ -41,6 +41,7 @@ function ensureConnection() {
   connection.exec("PRAGMA foreign_keys = ON;");
   initializeSchema(connection);
   bootstrapIfNeeded(connection);
+  applyDataPatches(connection);
   return connection;
 }
 
@@ -216,6 +217,82 @@ function bootstrapIfNeeded(db: SqliteDatabase) {
 
 function loadInitialState() {
   return createSeedDb();
+}
+
+function applyDataPatches(db: SqliteDatabase) {
+  const calendarPatch = db
+    .prepare("SELECT value FROM meta WHERE key = 'demo_calendar_seed_v1'")
+    .get() as { value?: string } | undefined;
+
+  if (calendarPatch?.value === "1") {
+    return;
+  }
+
+  const seed = createSeedDb();
+  const seedRequest = seed.requests.find((request) => request.id === "req_1");
+  const seedQuote = seed.quotes.find((quote) => quote.id === "quote_1");
+  const seedBooking = seed.bookings.find(
+    (booking) => booking.id === "booking_seed_amy_aircon",
+  );
+  const seedEvent = seed.bookingStatusEvents.find(
+    (event) => event.id === "book_event_seed_amy_aircon_accepted",
+  );
+
+  if (!seedRequest || !seedQuote || !seedBooking || !seedEvent) {
+    return;
+  }
+
+  runInTransaction(db, () => {
+    const requestExists = db
+      .prepare("SELECT id FROM requests WHERE id = ? LIMIT 1")
+      .get(seedRequest.id);
+    const quoteExists = db
+      .prepare("SELECT id FROM quotes WHERE id = ? LIMIT 1")
+      .get(seedQuote.id);
+    const bookingExists = db
+      .prepare("SELECT id FROM bookings WHERE id = ? LIMIT 1")
+      .get(seedBooking.id);
+
+    if (requestExists && quoteExists && !bookingExists) {
+      db.prepare(
+        "UPDATE requests SET status = ?, payload = ? WHERE id = ?",
+      ).run(seedRequest.status, JSON.stringify(seedRequest), seedRequest.id);
+      db.prepare("UPDATE quotes SET status = ?, payload = ? WHERE id = ?").run(
+        seedQuote.status,
+        JSON.stringify(seedQuote),
+        seedQuote.id,
+      );
+      db.prepare(
+        `
+          INSERT INTO bookings (id, request_id, quote_id, pro_id, customer_id, status, payload)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `,
+      ).run(
+        seedBooking.id,
+        seedBooking.requestId,
+        seedBooking.quoteId,
+        seedBooking.proId,
+        seedBooking.customerId,
+        seedBooking.status,
+        JSON.stringify(seedBooking),
+      );
+      db.prepare(
+        `
+          INSERT OR IGNORE INTO booking_status_events (id, booking_id, status, payload)
+          VALUES (?, ?, ?, ?)
+        `,
+      ).run(
+        seedEvent.id,
+        seedEvent.bookingId,
+        seedEvent.status,
+        JSON.stringify(seedEvent),
+      );
+    }
+
+    db.prepare(
+      "INSERT OR REPLACE INTO meta (key, value) VALUES ('demo_calendar_seed_v1', '1')",
+    ).run();
+  });
 }
 
 function parsePayloadRows<T>(rows: Array<{ payload: string }>) {
