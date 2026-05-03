@@ -59,7 +59,7 @@ export function ServiceStoryPanels({ locale }: { locale: "zh-HK" | "en" }) {
               src={panel.image}
               alt={panel.title}
               fill
-              className="object-cover"
+              className="pointer-events-none object-cover"
               sizes="(min-width: 1024px) 33vw, 100vw"
             />
           </div>

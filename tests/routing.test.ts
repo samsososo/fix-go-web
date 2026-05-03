@@ -15,6 +15,7 @@ describe("routing helpers", () => {
       "/customer",
       "/customer/requests/new",
       "/customer/orders",
+      "/customer/calendar",
       "/customer/messages",
       "/customer/profile",
     ]);
@@ -24,6 +25,7 @@ describe("routing helpers", () => {
       "/pro/profile",
       "/pro/leads",
       "/pro/jobs",
+      "/pro/calendar",
       "/pro/earnings",
     ]);
 
@@ -33,6 +35,7 @@ describe("routing helpers", () => {
       "/admin/pros",
       "/admin/requests",
       "/admin/quotes",
+      "/admin/calendar",
     ]);
   });
 

@@ -1,11 +1,11 @@
 # Deep UI QA Report
 
-- Run ID: `94754685`
+- Run ID: `96234388`
 - Base URL: `http://localhost:3002`
 - Locale tested: `zh-HK`
-- Request title: `Deep QA 冷氣測試 94754685`
-- Request ID: `req_qa3yf0hq`
-- Booking ID: `booking_46vym9sg`
+- Request title: `Deep QA 冷氣測試 96234388`
+- Request ID: `req_o3hz9tuo`
+- Booking ID: `booking_5xjhag5w`
 - Passed steps: `31`
 - Failed steps: `0`
 

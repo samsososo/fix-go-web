@@ -376,6 +376,29 @@ export async function getCustomerBookingDetail(
   );
 }
 
+export async function listCustomerCalendarBookings(customerId: string) {
+  const db = await readDb();
+  return db.bookings
+    .filter(
+      (booking) =>
+        booking.customerId === customerId && booking.status !== "cancelled",
+    )
+    .map((booking) =>
+      hydrateBooking(
+        booking,
+        db.requests,
+        db.users,
+        db.quotes,
+        db.bookingStatusEvents,
+      ),
+    )
+    .sort((a, b) =>
+      (a.scheduledDate ?? a.updatedAt).localeCompare(
+        b.scheduledDate ?? b.updatedAt,
+      ),
+    );
+}
+
 export async function listCustomerMessages(customerId: string) {
   const db = await readDb();
   return db.notifications
@@ -643,6 +666,28 @@ export async function getProJobDetail(proId: string, bookingId: string) {
   );
 }
 
+export async function listProCalendarBookings(proId: string) {
+  const db = await readDb();
+  return db.bookings
+    .filter(
+      (booking) => booking.proId === proId && booking.status !== "cancelled",
+    )
+    .map((booking) =>
+      hydrateBooking(
+        booking,
+        db.requests,
+        db.users,
+        db.quotes,
+        db.bookingStatusEvents,
+      ),
+    )
+    .sort((a, b) =>
+      (a.scheduledDate ?? a.updatedAt).localeCompare(
+        b.scheduledDate ?? b.updatedAt,
+      ),
+    );
+}
+
 export async function getProEarningsSummary(proId: string) {
   const db = await readDb();
   const jobs = db.bookings.filter((booking) => booking.proId === proId);
@@ -821,6 +866,26 @@ export async function listAdminQuotes() {
         db.bookings.find((booking) => booking.quoteId === quote.id) ?? null,
     }))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+export async function listAdminCalendarBookings() {
+  const db = await readDb();
+  return db.bookings
+    .filter((booking) => booking.status !== "cancelled")
+    .map((booking) =>
+      hydrateBooking(
+        booking,
+        db.requests,
+        db.users,
+        db.quotes,
+        db.bookingStatusEvents,
+      ),
+    )
+    .sort((a, b) =>
+      (a.scheduledDate ?? a.updatedAt).localeCompare(
+        b.scheduledDate ?? b.updatedAt,
+      ),
+    );
 }
 
 export async function getAdminRequestDetail(requestId: string) {

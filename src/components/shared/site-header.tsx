@@ -25,7 +25,7 @@ export async function SiteHeader({
   ];
 
   return (
-    <header className="sticky top-0 z-20 border-b border-white/60 bg-[#f5efe4]/78 backdrop-blur-xl">
+    <header className="sticky top-0 z-50 border-b border-white/60 bg-[#f5efe4]/78 backdrop-blur-xl">
       <div className="content-wrap flex min-h-20 items-center justify-between gap-4 py-4">
         <Link href="/" locale={locale} className="flex items-center gap-3">
           <span className="relative flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-surface-strong text-sm font-display font-extrabold text-white shadow-[0_12px_30px_rgba(18,37,58,0.22)]">

@@ -1,9 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
+  acceptCustomerQuote,
   createCustomerRequest,
   getAdminRequestDetail,
+  listAdminCalendarBookings,
   listAdminRequests,
+  listCustomerCalendarBookings,
+  listProCalendarBookings,
   submitProQuote,
 } from "@/lib/mock/repositories";
 import { readDb } from "@/lib/mock/db";
@@ -100,5 +104,18 @@ describe("marketplace repositories", () => {
     const detail = await getAdminRequestDetail("req_1");
     expect(detail.quotes.length).toBe(1);
     expect(detail.quotes[0]?.id).toBe("quote_1");
+  });
+
+  it("exposes accepted bookings in customer, pro, and admin calendars", async () => {
+    await acceptCustomerQuote("user_customer_amy", "req_1", "quote_1", "zh-HK");
+
+    const customerCalendar =
+      await listCustomerCalendarBookings("user_customer_amy");
+    const proCalendar = await listProCalendarBookings("user_pro_chan");
+    const adminCalendar = await listAdminCalendarBookings();
+
+    expect(customerCalendar[0]?.request?.title).toContain("冷氣滴水");
+    expect(proCalendar[0]?.customer?.fullName).toBe("陳小姐");
+    expect(adminCalendar[0]?.quote?.total).toBe(780);
   });
 });

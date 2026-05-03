@@ -1,11 +1,11 @@
 # Role Flow QA Report
 
-- Run ID: `94754685`
+- Run ID: `96234389`
 - Base URL: `http://localhost:3002`
 - Locale tested: `zh-HK`
-- Request title: `QA 冷氣測試 94754685`
-- Request ID: `req_uea0oo0t`
-- Booking ID: `booking_tr1ma322`
+- Request title: `QA 冷氣測試 96234389`
+- Request ID: `req_h9p5wr29`
+- Booking ID: `booking_51c3m9of`
 - Passed steps: `24`
 - Failed steps: `0`
 

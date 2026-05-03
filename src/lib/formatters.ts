@@ -38,7 +38,9 @@ export function formatDateTime(value: string | undefined, locale: string) {
     return locale === "en" ? "Not set" : "未設定";
   }
 
-  return new Date(value).toLocaleString(locale);
+  return new Date(value).toLocaleString(locale, {
+    timeZone: "Asia/Hong_Kong",
+  });
 }
 
 export function formatStatusLabel(

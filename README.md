@@ -22,9 +22,9 @@ Implemented sections:
 
 - Public marketing pages: home, how it works, service categories, become a pro, FAQ / trust
 - Shared auth: email or Hong Kong phone plus password, signup, role-based session handling
-- Customer portal: dashboard, create request, request detail, incoming quotes, accept quote, booking history, message centre shell, profile / saved addresses
-- Pro portal: dashboard, profile completion, lead list/detail, send quote, accepted jobs, booking status updates, earnings shell
-- Admin area: overview, customers, pros, requests, quotes, manual request status updates, pro verification toggle
+- Customer portal: dashboard, create request, request detail, incoming quotes, accept quote, booking history, booking calendar, message centre shell, profile / saved addresses
+- Pro portal: dashboard, profile completion, lead list/detail, send quote, accepted jobs, work calendar, booking status updates, earnings shell
+- Admin area: overview, customers, pros, requests, quotes, operations calendar, manual request status updates, pro verification toggle
 
 ## Stack
 

@@ -16,6 +16,11 @@ export function getCustomerNav(locale: string, current: string) {
       active: current === "orders",
     },
     {
+      href: "/customer/calendar",
+      label: locale === "en" ? "Calendar" : "日程",
+      active: current === "calendar",
+    },
+    {
       href: "/customer/messages",
       label: locale === "en" ? "Messages" : "訊息中心",
       active: current === "messages",
@@ -51,6 +56,11 @@ export function getProNav(locale: string, current: string) {
       active: current === "jobs",
     },
     {
+      href: "/pro/calendar",
+      label: locale === "en" ? "Calendar" : "日程",
+      active: current === "calendar",
+    },
+    {
       href: "/pro/earnings",
       label: locale === "en" ? "Earnings" : "收入",
       active: current === "earnings",
@@ -84,6 +94,11 @@ export function getAdminNav(locale: string, current: string) {
       href: "/admin/quotes",
       label: locale === "en" ? "Quotes" : "報價",
       active: current === "quotes",
+    },
+    {
+      href: "/admin/calendar",
+      label: locale === "en" ? "Calendar" : "排程",
+      active: current === "calendar",
     },
   ];
 }
