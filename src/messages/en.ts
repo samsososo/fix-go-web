@@ -1,0 +1,52 @@
+const en = {
+  common: {
+    brand: "Hotfix",
+    localeLabel: "Language",
+    nav: {
+      home: "Home",
+      howItWorks: "How it works",
+      categories: "Categories",
+      becomePro: "Become a pro",
+      faq: "Trust & FAQ",
+      login: "Log in",
+      signup: "Sign up",
+      customer: "Customer portal",
+      pro: "Pro portal",
+      admin: "Ops",
+      requests: "Requests",
+      orders: "Orders",
+      profile: "Profile",
+      leads: "Leads",
+      jobs: "Jobs",
+      earnings: "Earnings",
+      customers: "Customers",
+      pros: "Pros",
+      quotes: "Quotes",
+    },
+    actions: {
+      startRequest: "Start a request",
+      sendQuote: "Send quote",
+      acceptQuote: "Accept quote",
+      save: "Save changes",
+      continue: "Continue",
+      viewDetails: "View details",
+      signOut: "Sign out",
+      updateStatus: "Update status",
+      verify: "Mark verified",
+      unverify: "Mark unverified",
+    },
+    roles: {
+      customer: "Customer",
+      pro: "Pro",
+      admin: "Admin",
+    },
+    futureModules: {
+      otp: "OTP authentication is not currently enabled.",
+      messageCenter: "Messaging will be introduced in a later release.",
+      earnings: "Earnings reporting will be introduced in a later release.",
+      verification: "Verification workflows are still being expanded.",
+    },
+  },
+};
+
+export default en;

@@ -1,0 +1,141 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f5efe4;
+  --foreground: #152131;
+  --card: #fffaf5;
+  --muted: #697381;
+  --line: #d9d0c2;
+  --primary: #0f635f;
+  --primary-foreground: #f5fcfb;
+  --secondary: #d9932d;
+  --secondary-foreground: #191f2b;
+  --success: #1f7a55;
+  --warning: #a86b16;
+  --danger: #b34b3e;
+  --soft-accent: #deeee6;
+  --surface-strong: #10253a;
+  --surface-tint: #edf5ef;
+  --ink-blue: #102942;
+  --paper-warm: #fff8ec;
+  --signal: #e64f3d;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-soft-accent: var(--soft-accent);
+  --color-surface-strong: var(--surface-strong);
+  --color-surface-tint: var(--surface-tint);
+  --color-ink-blue: var(--ink-blue);
+  --color-paper-warm: var(--paper-warm);
+  --color-signal: var(--signal);
+  --font-sans: var(--font-body);
+  --font-display: var(--font-display);
+}
+
+* {
+  border-color: var(--line);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-body), sans-serif;
+  background-image:
+    radial-gradient(
+      circle at top left,
+      rgba(217, 147, 45, 0.12),
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at top right,
+      rgba(15, 99, 95, 0.1),
+      transparent 26%
+    ),
+    linear-gradient(180deg, #f5efe4 0%, #fff9ef 45%, #edf5ef 100%);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  outline: none;
+}
+
+.page-shell {
+  @apply min-h-screen;
+  background-image:
+    radial-gradient(
+      circle at top left,
+      rgba(217, 147, 45, 0.1),
+      transparent 30%
+    ),
+    radial-gradient(
+      circle at bottom right,
+      rgba(15, 99, 95, 0.09),
+      transparent 32%
+    ),
+    linear-gradient(180deg, #f5efe4 0%, #fff9ef 48%, #edf5ef 100%);
+}
+
+.content-wrap {
+  @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+}
+
+.section-title {
+  font-family: var(--font-display), sans-serif;
+  @apply text-3xl font-extrabold tracking-[-0.025em] text-foreground sm:text-4xl;
+}
+
+.eyebrow {
+  @apply inline-flex items-center rounded-full border border-line/80 bg-white/78 px-3 py-1.5 text-xs font-semibold text-primary/80;
+}
+
+.surface-panel {
+  @apply rounded-[24px] border border-line/70 bg-white/78 shadow-[0_14px_36px_rgba(24,36,51,0.06)] backdrop-blur;
+}
+
+.market-card {
+  @apply rounded-[24px] border border-line/70 bg-card/90 shadow-[0_12px_34px_rgba(24,36,51,0.06)] backdrop-blur transition duration-200;
+}
+
+.match-chip {
+  @apply inline-flex items-center gap-2 rounded-full border border-line/70 bg-white/76 px-3 py-1.5 text-xs font-semibold text-foreground/70;
+}
+
+.signal-dot {
+  @apply inline-flex h-2.5 w-2.5 rounded-full bg-signal shadow-[0_0_0_5px_rgba(230,79,61,0.12)];
+}
+
+.route-line {
+  background-image: linear-gradient(
+    90deg,
+    rgba(15, 99, 95, 0.14) 0,
+    rgba(15, 99, 95, 0.46) 48%,
+    rgba(217, 147, 45, 0.38) 100%
+  );
+}
+
+.premium-focus {
+  @apply transition duration-200 hover:shadow-[0_18px_46px_rgba(24,36,51,0.09)];
+}

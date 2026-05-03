@@ -1,0 +1,52 @@
+const zhHK = {
+  common: {
+    brand: "Hotfix",
+    localeLabel: "語言",
+    nav: {
+      home: "主頁",
+      howItWorks: "運作方式",
+      categories: "服務分類",
+      becomePro: "成為師傅",
+      faq: "常見問題與保障",
+      login: "登入",
+      signup: "註冊",
+      customer: "客戶中心",
+      pro: "師傅中心",
+      admin: "營運後台",
+      requests: "服務請求",
+      orders: "訂單",
+      profile: "個人檔案",
+      leads: "工作機會",
+      jobs: "已接訂單",
+      earnings: "收入",
+      customers: "客戶",
+      pros: "師傅",
+      quotes: "報價",
+    },
+    actions: {
+      startRequest: "建立請求",
+      sendQuote: "提交報價",
+      acceptQuote: "接受報價",
+      save: "儲存",
+      continue: "繼續",
+      viewDetails: "查看詳情",
+      signOut: "登出",
+      updateStatus: "更新狀態",
+      verify: "標記已驗證",
+      unverify: "取消驗證",
+    },
+    roles: {
+      customer: "客戶",
+      pro: "師傅",
+      admin: "管理員",
+    },
+    futureModules: {
+      otp: "現時未啟用 OTP 驗證。",
+      messageCenter: "訊息功能會於後續版本推出。",
+      earnings: "收入報表會於後續版本推出。",
+      verification: "驗證流程仍會繼續擴充。",
+    },
+  },
+};
+
+export default zhHK;
