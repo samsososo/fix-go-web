@@ -5,7 +5,13 @@ const envSchema = z.object({
     .enum(["development", "test", "production"])
     .default("development"),
   APP_URL: z.url().default("http://localhost:3000"),
+  STORAGE_DRIVER: z.enum(["sqlite", "mongodb"]).default("mongodb"),
   DATA_DIR: z.string().min(1).default("data"),
+  MONGODB_URI: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.string().min(1).optional(),
+  ),
+  MONGODB_DATABASE: z.string().min(1).default("hotfix_dev"),
   SESSION_COOKIE_NAME: z.string().min(3).default("hotfix_session"),
   SESSION_TTL_HOURS: z.coerce
     .number()
@@ -14,6 +20,9 @@ const envSchema = z.object({
     .max(24 * 90)
     .default(24 * 30),
   ENABLE_DEMO_LOGIN: z
+    .union([z.literal("true"), z.literal("false"), z.boolean()])
+    .optional(),
+  ENABLE_DATABASE_SEEDING: z
     .union([z.literal("true"), z.literal("false"), z.boolean()])
     .optional(),
   DEMO_PASSWORD: z.string().min(10).default("HotfixDemo123!"),
@@ -27,10 +36,23 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data;
+function envBoolean(
+  value: boolean | "true" | "false" | undefined,
+  defaultValue: boolean,
+) {
+  if (value === undefined) {
+    return defaultValue;
+  }
+
+  return value === true || value === "true";
+}
+
 export const enableDemoLogin =
-  env.ENABLE_DEMO_LOGIN === undefined
-    ? env.NODE_ENV !== "production"
-    : env.ENABLE_DEMO_LOGIN === true || env.ENABLE_DEMO_LOGIN === "true";
+  envBoolean(env.ENABLE_DEMO_LOGIN, env.NODE_ENV !== "production");
+export const enableDatabaseSeeding = envBoolean(
+  env.ENABLE_DATABASE_SEEDING,
+  env.NODE_ENV !== "production",
+);
 
 export function isProduction() {
   return env.NODE_ENV === "production";

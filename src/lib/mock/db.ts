@@ -2,7 +2,21 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 
-import { env } from "@/lib/env";
+import { enableDatabaseSeeding, env } from "@/lib/env";
+import {
+  createMongoCredential,
+  createMongoSession,
+  findMongoCredentialByIdentifier,
+  findMongoUserById,
+  getMongoSessionUser,
+  invalidateMongoSession,
+  listMongoCredentialedDemoUsers,
+  readMongoDb,
+  resetMongoDb,
+  verifyMongoUserCredentials,
+  withMongoDb,
+  writeMongoDb,
+} from "@/lib/mock/mongo-db";
 import {
   hashPassword,
   verifyPassword,
@@ -29,6 +43,10 @@ const sqlitePath = path.join(
 type SqliteDatabase = Database.Database;
 
 let connection: SqliteDatabase | null = null;
+
+function shouldUseMongoStorage() {
+  return env.STORAGE_DRIVER === "mongodb";
+}
 
 function ensureConnection() {
   if (connection) {
@@ -186,6 +204,10 @@ function bootstrapIfNeeded(db: SqliteDatabase) {
     return;
   }
 
+  if (!enableDatabaseSeeding) {
+    return;
+  }
+
   const initialState = loadInitialState();
   writeState(db, initialState);
 
@@ -220,6 +242,10 @@ function loadInitialState() {
 }
 
 function applyDataPatches(db: SqliteDatabase) {
+  if (!enableDatabaseSeeding) {
+    return;
+  }
+
   const calendarPatch = db
     .prepare("SELECT value FROM meta WHERE key = 'demo_calendar_seed_v1'")
     .get() as { value?: string } | undefined;
@@ -499,6 +525,10 @@ function writeState(db: SqliteDatabase, state: MockDb) {
 }
 
 export async function readDb() {
+  if (shouldUseMongoStorage()) {
+    return readMongoDb();
+  }
+
   const db = ensureConnection();
   const users = (
     db
@@ -592,11 +622,19 @@ export async function readDb() {
 }
 
 export async function writeDb(dbState: MockDb) {
+  if (shouldUseMongoStorage()) {
+    return writeMongoDb(dbState);
+  }
+
   const db = ensureConnection();
   writeState(db, dbState);
 }
 
 export async function withDb<T>(updater: (db: MockDb) => Promise<T> | T) {
+  if (shouldUseMongoStorage()) {
+    return withMongoDb(updater);
+  }
+
   const dbState = await readDb();
   const result = await updater(dbState);
   await writeDb(dbState);
@@ -604,6 +642,10 @@ export async function withDb<T>(updater: (db: MockDb) => Promise<T> | T) {
 }
 
 export async function findCredentialByIdentifier(identifier: string) {
+  if (shouldUseMongoStorage()) {
+    return findMongoCredentialByIdentifier(identifier);
+  }
+
   const db = ensureConnection();
   const normalizedIdentifier = identifier.trim().toLowerCase();
   const row = db
@@ -662,6 +704,10 @@ export async function findCredentialByIdentifier(identifier: string) {
 }
 
 export async function findUserById(userId: string) {
+  if (shouldUseMongoStorage()) {
+    return findMongoUserById(userId);
+  }
+
   const db = ensureConnection();
   const row = db
     .prepare(
@@ -706,6 +752,10 @@ export async function createCredential(
   password: string,
   isDemo: boolean = false,
 ) {
+  if (shouldUseMongoStorage()) {
+    return createMongoCredential(userId, password, isDemo);
+  }
+
   const db = ensureConnection();
   db.prepare(
     `
@@ -719,6 +769,10 @@ export async function verifyUserCredentials(
   identifier: string,
   password: string,
 ) {
+  if (shouldUseMongoStorage()) {
+    return verifyMongoUserCredentials(identifier, password);
+  }
+
   const db = ensureConnection();
   const normalizedIdentifier = identifier.trim().toLowerCase();
   const recentFailures = (
@@ -769,6 +823,10 @@ export async function createSession(
   userId: string,
   metadata?: { userAgent?: string; ipAddress?: string },
 ) {
+  if (shouldUseMongoStorage()) {
+    return createMongoSession(userId, metadata);
+  }
+
   const db = ensureConnection();
   const sessionId = createOpaqueToken();
   const expiresAt = new Date(
@@ -793,6 +851,10 @@ export async function createSession(
 }
 
 export async function getSessionUser(sessionId: string) {
+  if (shouldUseMongoStorage()) {
+    return getMongoSessionUser(sessionId);
+  }
+
   const db = ensureConnection();
   const session = db
     .prepare(
@@ -848,11 +910,19 @@ export async function getSessionUser(sessionId: string) {
 }
 
 export async function invalidateSession(sessionId: string) {
+  if (shouldUseMongoStorage()) {
+    return invalidateMongoSession(sessionId);
+  }
+
   const db = ensureConnection();
   db.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
 }
 
 export async function listCredentialedDemoUsers() {
+  if (shouldUseMongoStorage()) {
+    return listMongoCredentialedDemoUsers();
+  }
+
   const db = ensureConnection();
   const rows = db
     .prepare(
@@ -899,6 +969,14 @@ export async function listCredentialedDemoUsers() {
 }
 
 export async function resetSqliteDb() {
+  if (shouldUseMongoStorage()) {
+    return resetMongoDb();
+  }
+
+  if (!enableDatabaseSeeding) {
+    throw new Error("Database reset is disabled when seeding is disabled.");
+  }
+
   const db = ensureConnection();
   const seed = createSeedDb();
 
