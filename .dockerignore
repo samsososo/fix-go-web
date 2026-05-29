@@ -1,0 +1,12 @@
+.git
+.next
+artifacts
+coverage
+data
+docs/qa-*.md
+node_modules
+npm-debug.log*
+.DS_Store
+.env
+.env.*
+!.env.example

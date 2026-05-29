@@ -1,0 +1,16 @@
+services:
+  web:
+    build:
+      context: .
+    image: fixgo:latest
+    restart: unless-stopped
+    env_file:
+      - path: .env.production
+        required: false
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      STORAGE_DRIVER: mongodb
+    ports:
+      - "3000:3000"
