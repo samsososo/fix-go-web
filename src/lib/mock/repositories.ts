@@ -142,7 +142,7 @@ function mapRequestStatusToBookingStatus(
 
 export async function listPublicCategories() {
   const db = await readDb();
-  return db.categories;
+  return db.categories.filter((category) => category.id !== "cleaning");
 }
 
 export async function listDistricts() {

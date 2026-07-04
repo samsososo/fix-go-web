@@ -25,7 +25,7 @@ export default async function CustomerRequestDetailPage({
 
   const request = await getCustomerRequestDetail(user.id, requestId);
   if (!request) {
-    redirect(`/${locale}/customer`);
+    redirect(`/customer`);
   }
 
   return (

@@ -81,14 +81,12 @@ export async function clearSession() {
   cookieStore.delete(env.SESSION_COOKIE_NAME);
 }
 
-export async function requireRole(
-  role: UserRole | UserRole[],
-  locale: string = "zh-HK",
-) {
+export async function requireRole(role: UserRole | UserRole[], locale?: string) {
+  void locale;
   const user = await getCurrentUser();
 
   if (!user || !canAccessPortal(user.role, role)) {
-    redirect(`/${locale}/auth/login`);
+    redirect("/auth/login");
   }
 
   return user;
@@ -102,10 +100,7 @@ export function roleHomePath(role: UserRole) {
   }[role];
 }
 
-export function localizedRoleHomePath(role: UserRole, locale: string) {
-  return {
-    customer: `/${locale}/customer`,
-    pro: `/${locale}/pro`,
-    admin: `/${locale}/admin`,
-  }[role];
+export function localizedRoleHomePath(role: UserRole, _locale?: string) {
+  void _locale;
+  return roleHomePath(role);
 }

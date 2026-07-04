@@ -26,7 +26,7 @@ export default async function ProJobDetailPage({
 
   const job = await getProJobDetail(user.id, bookingId);
   if (!job) {
-    redirect(`/${locale}/pro/jobs`);
+    redirect(`/pro/jobs`);
   }
 
   return (

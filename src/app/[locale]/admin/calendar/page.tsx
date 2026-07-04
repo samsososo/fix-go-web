@@ -14,7 +14,7 @@ export default async function AdminCalendarPage() {
   const bookings = await listAdminCalendarBookings();
   const events: CalendarEvent[] = bookings.map((booking) => ({
     id: booking.id,
-    href: `/${locale}/admin/requests/${booking.requestId}`,
+    href: `/admin/requests/${booking.requestId}`,
     title: booking.request?.title ?? booking.id,
     status: booking.status,
     scheduledAt: booking.scheduledDate,

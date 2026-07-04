@@ -105,9 +105,9 @@ export default async function LoginPage() {
                           locale,
                         });
                         if (!result.ok) {
-                          redirect(`/${locale}/auth/login`);
+                          redirect(`/auth/login`);
                         }
-                        redirect(result.target ?? `/${locale}/auth/login`);
+                        redirect(result.target ?? `/auth/login`);
                       }}
                       className="rounded-2xl border border-line bg-white p-4"
                     >

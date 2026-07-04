@@ -29,7 +29,7 @@ export function SignupForm({ locale }: { locale: string }) {
       phone: "",
       email: "",
       role: "customer",
-      locale: locale === "en" ? "en" : "zh-HK",
+      locale: "zh-HK",
       password: "",
       confirmPassword: "",
     },
@@ -44,7 +44,7 @@ export function SignupForm({ locale }: { locale: string }) {
         return;
       }
 
-      router.push(result.target ?? `/${locale}`);
+      router.push(result.target ?? "/");
     });
   };
 
@@ -85,7 +85,6 @@ export function SignupForm({ locale }: { locale: string }) {
       >
         <Select {...form.register("locale")}>
           <option value="zh-HK">繁體中文</option>
-          <option value="en">English</option>
         </Select>
       </Field>
       <Field

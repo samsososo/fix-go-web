@@ -25,7 +25,7 @@ export default async function CustomerBookingDetailPage({
 
   const booking = await getCustomerBookingDetail(user.id, bookingId);
   if (!booking) {
-    redirect(`/${locale}/customer/orders`);
+    redirect(`/customer/orders`);
   }
 
   return (

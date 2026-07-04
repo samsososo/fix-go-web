@@ -13,7 +13,7 @@ export const signupSchema = z
     phone: z.string().regex(hkPhoneRegex, "Invalid Hong Kong mobile number"),
     email: z.string().email().optional().or(z.literal("")),
     role: z.enum(["customer", "pro"]),
-    locale: z.enum(["zh-HK", "en"]),
+    locale: z.enum(["zh-HK"]),
     password: z
       .string()
       .min(10, "Minimum 10 characters")

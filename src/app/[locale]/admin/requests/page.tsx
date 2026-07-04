@@ -31,7 +31,7 @@ export default async function AdminRequestsPage({
           {requests.map((request) => (
             <a
               key={request.id}
-              href={`/${locale}/admin/requests/${request.id}`}
+              href={`/admin/requests/${request.id}`}
               className="block rounded-2xl border border-line bg-white p-4"
             >
               <div className="flex items-center justify-between gap-3">

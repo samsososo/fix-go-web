@@ -8,14 +8,15 @@ function isSupportedLocale(
 
 export function localizePathname(
   pathname: string,
-  locale: (typeof routing.locales)[number],
+  _locale: (typeof routing.locales)[number],
 ) {
+  void _locale;
   const segments = pathname.split("/").filter(Boolean);
   const rest = isSupportedLocale(segments[0] ?? "")
     ? segments.slice(1)
     : segments;
 
-  return `/${[locale, ...rest].join("/")}`;
+  return `/${rest.join("/")}`;
 }
 
 export function normalizeDuplicatedLocalePath(pathname: string) {

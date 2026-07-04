@@ -14,12 +14,6 @@ const panels = {
       label: "Professional",
       body: "Quotes break down labour, parts, call-out fee, availability, included work, and exclusions.",
     },
-    {
-      image: "/images/ops-board-ai.png",
-      title: "Keep every job traceable",
-      label: "Operations",
-      body: "Operations can inspect customers, pros, requests, quotes, and booking status when support is needed.",
-    },
   ],
   "zh-HK": [
     {
@@ -34,12 +28,6 @@ const panels = {
       label: "師傅",
       body: "每份報價可拆分人工、物料、上門費、最早時間、包含項目及不包含項目。",
     },
-    {
-      image: "/images/ops-board-ai.png",
-      title: "每張單都有記錄可追",
-      label: "營運",
-      body: "營運團隊可檢視客戶、師傅、請求、報價及訂單狀態，需要時協助處理。",
-    },
   ],
 } satisfies Record<
   "zh-HK" | "en",
@@ -48,7 +36,7 @@ const panels = {
 
 export function ServiceStoryPanels({ locale }: { locale: "zh-HK" | "en" }) {
   return (
-    <div className="grid gap-5 lg:grid-cols-3">
+    <div className="grid gap-5 lg:grid-cols-2">
       {panels[locale].map((panel) => (
         <article
           key={panel.title}

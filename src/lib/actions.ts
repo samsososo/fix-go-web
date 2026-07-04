@@ -78,7 +78,7 @@ export async function signUpAction(input: SignupInput) {
   await createCredential(user.id, parsed.data.password);
   await signInAs(user.id);
 
-  revalidatePath(`/${parsed.data.locale}`);
+  revalidatePath("/");
   return {
     ok: true,
     target: localizedRoleHomePath(user.role, parsed.data.locale),
@@ -98,8 +98,9 @@ export async function signInDemoAction(input: {
 }
 
 export async function logoutAction(input: { locale: string }) {
+  void input;
   await clearSession();
-  return { ok: true, target: `/${input.locale}` };
+  return { ok: true, target: "/" };
 }
 
 export async function createRequestAction(input: {
@@ -117,11 +118,11 @@ export async function createRequestAction(input: {
     parsed.data,
     input.locale,
   );
-  revalidatePath(`/${input.locale}/customer`);
-  revalidatePath(`/${input.locale}/pro/leads`);
+  revalidatePath("/customer");
+  revalidatePath("/pro/leads");
   return {
     ok: true,
-    target: `/${input.locale}/customer/requests/${request.id}`,
+    target: `/customer/requests/${request.id}`,
   };
 }
 
@@ -138,11 +139,11 @@ export async function acceptQuoteAction(input: {
       input.quoteId,
       input.locale,
     );
-    revalidatePath(`/${input.locale}/customer/requests/${input.requestId}`);
-    revalidatePath(`/${input.locale}/customer/orders`);
-    revalidatePath(`/${input.locale}/pro/jobs`);
+    revalidatePath(`/customer/requests/${input.requestId}`);
+    revalidatePath("/customer/orders");
+    revalidatePath("/pro/jobs");
     if (quote) {
-      revalidatePath(`/${input.locale}/pro/leads/${input.requestId}`);
+      revalidatePath(`/pro/leads/${input.requestId}`);
     }
     return { ok: true };
   } catch (error) {
@@ -164,8 +165,8 @@ export async function saveProProfileAction(input: {
   }
 
   await saveProProfile(input.userId, parsed.data);
-  revalidatePath(`/${input.locale}/pro`);
-  revalidatePath(`/${input.locale}/pro/profile`);
+  revalidatePath("/pro");
+  revalidatePath("/pro/profile");
   return { ok: true };
 }
 
@@ -181,9 +182,9 @@ export async function submitQuoteAction(input: {
   }
 
   await submitProQuote(input.proId, input.requestId, parsed.data, input.locale);
-  revalidatePath(`/${input.locale}/pro/leads`);
-  revalidatePath(`/${input.locale}/pro/leads/${input.requestId}`);
-  revalidatePath(`/${input.locale}/customer/requests/${input.requestId}`);
+  revalidatePath("/pro/leads");
+  revalidatePath(`/pro/leads/${input.requestId}`);
+  revalidatePath(`/customer/requests/${input.requestId}`);
   return { ok: true };
 }
 
@@ -200,13 +201,13 @@ export async function updateBookingStatusAction(input: {
       input.status,
       input.locale,
     );
-    revalidatePath(`/${input.locale}/pro/jobs`);
-    revalidatePath(`/${input.locale}/pro/jobs/${input.bookingId}`);
-    revalidatePath(`/${input.locale}/customer/orders`);
-    revalidatePath(`/${input.locale}/customer/orders/${input.bookingId}`);
+    revalidatePath("/pro/jobs");
+    revalidatePath(`/pro/jobs/${input.bookingId}`);
+    revalidatePath("/customer/orders");
+    revalidatePath(`/customer/orders/${input.bookingId}`);
     if (booking) {
-      revalidatePath(`/${input.locale}/customer/requests/${booking.requestId}`);
-      revalidatePath(`/${input.locale}/admin/requests/${booking.requestId}`);
+      revalidatePath(`/customer/requests/${booking.requestId}`);
+      revalidatePath(`/admin/requests/${booking.requestId}`);
     }
     return { ok: true };
   } catch (error) {
@@ -233,14 +234,14 @@ export async function updateAdminRequestStatusAction(input: {
       input.note,
       input.locale,
     );
-    revalidatePath(`/${input.locale}/admin`);
-    revalidatePath(`/${input.locale}/admin/requests`);
-    revalidatePath(`/${input.locale}/admin/requests/${input.requestId}`);
-    revalidatePath(`/${input.locale}/customer`);
-    revalidatePath(`/${input.locale}/customer/orders`);
-    revalidatePath(`/${input.locale}/pro/jobs`);
+    revalidatePath("/admin");
+    revalidatePath("/admin/requests");
+    revalidatePath(`/admin/requests/${input.requestId}`);
+    revalidatePath("/customer");
+    revalidatePath("/customer/orders");
+    revalidatePath("/pro/jobs");
     if (request) {
-      revalidatePath(`/${input.locale}/customer/requests/${request.id}`);
+      revalidatePath(`/customer/requests/${request.id}`);
     }
     return { ok: true };
   } catch (error) {
@@ -258,7 +259,7 @@ export async function toggleProVerificationAction(input: {
   verified: boolean;
 }) {
   await toggleProVerification(input.userId, input.verified);
-  revalidatePath(`/${input.locale}/admin/pros`);
-  revalidatePath(`/${input.locale}/admin/pros/${input.userId}`);
+  revalidatePath("/admin/pros");
+  revalidatePath(`/admin/pros/${input.userId}`);
   return { ok: true };
 }

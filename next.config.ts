@@ -5,8 +5,40 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "upload.wikimedia.org",
+      },
+    ],
+  },
   turbopack: {
     root: path.resolve(__dirname),
+  },
+  async redirects() {
+    return [
+      {
+        source: "/en",
+        destination: "/",
+        permanent: false,
+      },
+      {
+        source: "/en/:path*",
+        destination: "/:path*",
+        permanent: false,
+      },
+      {
+        source: "/zh-HK",
+        destination: "/",
+        permanent: false,
+      },
+      {
+        source: "/zh-HK/:path*",
+        destination: "/:path*",
+        permanent: false,
+      },
+    ];
   },
   async headers() {
     return [

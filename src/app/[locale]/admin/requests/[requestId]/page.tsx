@@ -25,7 +25,7 @@ export default async function AdminRequestDetailPage({
 
   const request = await getAdminRequestDetail(requestId);
   if (!request) {
-    redirect(`/${locale}/admin/requests`);
+    redirect(`/admin/requests`);
   }
 
   return (

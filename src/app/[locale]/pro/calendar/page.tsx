@@ -20,7 +20,7 @@ export default async function ProCalendarPage() {
   const bookings = await listProCalendarBookings(user.id);
   const events: CalendarEvent[] = bookings.map((booking) => ({
     id: booking.id,
-    href: `/${locale}/pro/jobs/${booking.id}`,
+    href: `/pro/jobs/${booking.id}`,
     title: booking.request?.title ?? booking.id,
     status: booking.status,
     scheduledAt: booking.scheduledDate,

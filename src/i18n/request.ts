@@ -2,7 +2,6 @@ import { hasLocale } from "next-intl";
 import { getRequestConfig } from "next-intl/server";
 
 import { routing } from "@/i18n/routing";
-import en from "@/messages/en";
 import zhHK from "@/messages/zh-HK";
 
 export default getRequestConfig(async ({ requestLocale }) => {
@@ -15,7 +14,7 @@ export default getRequestConfig(async ({ requestLocale }) => {
 
   return {
     locale,
-    messages: locale === "en" ? en : zhHK,
+    messages: zhHK,
     timeZone: "Asia/Hong_Kong",
   };
 });

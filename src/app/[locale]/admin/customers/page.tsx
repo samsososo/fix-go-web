@@ -44,7 +44,7 @@ export default async function AdminCustomersPage() {
                   <tr key={customer.id} className="border-t border-line">
                     <td className="py-3">
                       <a
-                        href={`/${locale}/admin/customers/${customer.id}`}
+                        href={`/admin/customers/${customer.id}`}
                         className="font-medium text-primary"
                       >
                         {customer.fullName}

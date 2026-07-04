@@ -8,8 +8,8 @@ export function SiteFooter({ locale }: { locale: string }) {
           </p>
           <p className="mt-2 max-w-xl leading-7">
             {locale === "en"
-              ? "Hong Kong home services platform for customers, service professionals, and operations teams."
-              : "為客戶、師傅及營運團隊而設的香港家居服務平台。"}
+              ? "Hong Kong home repair quote platform for customers and service professionals."
+              : "為客戶及師傅而設的香港家居維修報價平台。"}
           </p>
         </div>
         <div className="space-y-1 text-left lg:text-right">

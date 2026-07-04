@@ -7,12 +7,12 @@ export function getMarketingContent(locale: Locale) {
         eyebrow: "Hong Kong home repair quotes, made clearer",
         title: "Find the right pro for home repairs without endless calls.",
         description:
-          "Post one clear request, add photos and a Hong Kong address, then compare structured quotes for plumbing, electrical, air conditioning, cleaning, and other home-service jobs.",
+          "Post one clear request, add photos and a Hong Kong address, then compare structured quotes for plumbing, electrical, air conditioning, and minor renovation jobs.",
       },
       valuePoints: [
         "Clear briefs with photos, urgency, budget, and access notes",
         "Quotes split by labour, parts, call-out fee, and availability",
-        "One workflow for customers, pros, bookings, and ops review",
+        "Customers and pros keep requests, quotes, and bookings in one workflow",
       ],
       steps: [
         {
@@ -50,12 +50,12 @@ export function getMarketingContent(locale: Locale) {
       eyebrow: "香港家居維修報價，清楚比較先決定",
       title: "搵師傅唔使逐個問價，一次提交需求就可以比較報價。",
       description:
-        "Hotfix 幫香港住戶提交家居維修需求、上傳相片及地址，再集中比較水喉、電力、冷氣、清潔等師傅報價。",
+        "Hotfix 幫香港住戶提交家居維修需求、上傳相片及地址，再集中比較水喉、電力、冷氣、裝修雜項等師傅報價。",
     },
     valuePoints: [
       "一次填好相片、預算、緊急程度及出入備註",
       "報價拆分人工、物料、上門費及最早時間",
-      "客戶、師傅、訂單及營運覆核共用同一流程",
+      "客戶同師傅可在同一流程管理請求、報價及訂單",
     ],
     steps: [
       {

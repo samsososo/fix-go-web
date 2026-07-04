@@ -36,7 +36,7 @@ export default async function ProJobsPage() {
           jobs.map((job) => (
             <a
               key={job.id}
-              href={`/${locale}/pro/jobs/${job.id}`}
+              href={`/pro/jobs/${job.id}`}
               className="block"
             >
               <Card>

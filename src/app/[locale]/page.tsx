@@ -2,7 +2,6 @@ import {
   ArrowRight,
   BadgeCheck,
   BriefcaseBusiness,
-  Building2,
   House,
   ShieldCheck,
 } from "lucide-react";
@@ -43,12 +42,6 @@ export default async function HomePage() {
             metric: "Matched leads, less noise",
             body: "Set trade categories and service districts, review matched leads, and respond with clear pricing.",
           },
-          {
-            icon: Building2,
-            title: "For operations",
-            metric: "Manual control when needed",
-            body: "Inspect records, review status changes, and support edge cases without leaving the same platform.",
-          },
         ]
       : [
           {
@@ -63,24 +56,18 @@ export default async function HomePage() {
             metric: "配對線索，減少雜訊",
             body: "設定工種與服務地區，查看配對工作機會，再以清晰價目提交報價。",
           },
-          {
-            icon: Building2,
-            title: "營運端",
-            metric: "需要時可人手介入",
-            body: "檢視記錄、覆核狀態更新，並於需要時手動介入處理特別情況。",
-          },
         ];
 
   const trustPoints =
     locale === "en"
       ? [
           "Structured Hong Kong addresses with district and area fields",
-          "Role-based workspaces for customer, professional, and admin",
+          "Role-based workspaces for households and professionals",
           "Quote comparison built around labour, parts, and call-out fees",
         ]
       : [
           "香港地址欄位完整支援地區、分區與大廈資訊",
-          "客戶、師傅與營運採用角色化工作台",
+          "客戶與師傅採用清晰分工的工作台",
           "報價清楚拆分人工、物料與上門費用",
         ];
 
@@ -92,8 +79,8 @@ export default async function HomePage() {
             <span className="eyebrow">{content.hero.eyebrow}</span>
             <span className="match-chip">
               {locale === "en"
-                ? "Plumbing, electrical, aircon, cleaning"
-                : "水喉、電力、冷氣、清潔"}
+                ? "Plumbing, electrical, aircon, renovation"
+                : "水喉、電力、冷氣、裝修雜項"}
             </span>
           </div>
           <div className="space-y-4">
@@ -157,7 +144,7 @@ export default async function HomePage() {
         <ServiceStoryPanels locale={locale} />
       </section>
 
-      <section className="mt-14 grid gap-5 lg:grid-cols-3">
+      <section className="mt-14 grid gap-5 lg:grid-cols-2">
         {roleCards.map((card) => {
           const Icon = card.icon;
           return (

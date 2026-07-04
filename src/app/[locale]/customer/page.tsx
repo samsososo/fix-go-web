@@ -68,7 +68,7 @@ export default async function CustomerDashboardPage() {
                 {dashboard.requests.map((request) => (
                   <a
                     key={request.id}
-                    href={`/${locale}/customer/requests/${request.id}`}
+                    href={`/customer/requests/${request.id}`}
                     className="block rounded-2xl border border-line bg-white p-4"
                   >
                     <div className="flex items-center justify-between gap-3">

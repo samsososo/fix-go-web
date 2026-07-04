@@ -3,7 +3,6 @@ import {
   Camera,
   Clock3,
   MapPinned,
-  MessageSquareText,
   ShieldCheck,
   Star,
   Wrench,
@@ -24,7 +23,6 @@ export function HeroVisual({ locale }: { locale: "zh-HK" | "en" }) {
           compare: "Compare by price, timing, and scope before accepting.",
           verified: "Verified",
           response: "Fastest response",
-          ops: "Ops can review every record when support is needed.",
           pros: [
             {
               name: "Chan Plumbing",
@@ -50,7 +48,6 @@ export function HeroVisual({ locale }: { locale: "zh-HK" | "en" }) {
           compare: "確認前可按價錢、時間及工程範圍比較。",
           verified: "已核實",
           response: "最快回覆",
-          ops: "營運需要時可檢視每項記錄並協助處理。",
           pros: [
             {
               name: "陳記水喉工程",
@@ -140,7 +137,7 @@ export function HeroVisual({ locale }: { locale: "zh-HK" | "en" }) {
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="rounded-[30px] border border-white/12 bg-white/8 p-5">
               <div className="flex items-center gap-3">
                 <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
@@ -166,15 +163,6 @@ export function HeroVisual({ locale }: { locale: "zh-HK" | "en" }) {
                       : "檔案及服務地區已檢查"}
                   </p>
                 </div>
-              </div>
-            </div>
-
-            <div className="rounded-[30px] border border-white/12 bg-white/8 p-5">
-              <div className="flex items-start gap-3">
-                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
-                  <MessageSquareText className="h-5 w-5 text-[#a8e2d4]" />
-                </span>
-                <p className="text-sm leading-7 text-white/66">{copy.ops}</p>
               </div>
             </div>
           </div>

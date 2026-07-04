@@ -20,7 +20,7 @@ export default async function AdminCustomerDetailPage({
   const { customerId } = await params;
   const detail = await getAdminCustomerDetail(customerId);
   if (!detail) {
-    redirect(`/${locale}/admin/customers`);
+    redirect(`/admin/customers`);
   }
 
   return (
@@ -80,7 +80,7 @@ export default async function AdminCustomerDetailPage({
                 {detail.requests.map((request) => (
                   <a
                     key={request.id}
-                    href={`/${locale}/admin/requests/${request.id}`}
+                    href={`/admin/requests/${request.id}`}
                     className="block rounded-2xl border border-line bg-white p-4"
                   >
                     <div className="flex items-center justify-between gap-4">

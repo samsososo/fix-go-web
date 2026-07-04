@@ -31,7 +31,7 @@ export default async function AdminProsPage() {
               <CardContent className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <a
-                    href={`/${locale}/admin/pros/${pro.id}`}
+                    href={`/admin/pros/${pro.id}`}
                     className="font-display text-2xl font-bold text-primary"
                   >
                     {pro.profile?.displayName ?? pro.fullName}

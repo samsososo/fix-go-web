@@ -4,8 +4,12 @@ import { useEffect, useRef } from "react";
 import { useLocale } from "next-intl";
 import { usePathname, useSearchParams } from "next/navigation";
 
-import { routing } from "@/i18n/routing";
+import { publicLocales, routing } from "@/i18n/routing";
 import { localizePathname } from "@/lib/routing-utils";
+
+const localeLabels = {
+  "zh-HK": "繁體中文",
+} satisfies Record<(typeof routing.locales)[number], string>;
 
 export function LocaleSwitcher() {
   const locale = useLocale();
@@ -15,7 +19,7 @@ export function LocaleSwitcher() {
 
   function navigateToLocale(nextLocale: string) {
     if (
-      !routing.locales.includes(nextLocale as (typeof routing.locales)[number])
+      !publicLocales.includes(nextLocale as (typeof publicLocales)[number])
     ) {
       return;
     }
@@ -44,6 +48,10 @@ export function LocaleSwitcher() {
     }
   });
 
+  if (publicLocales.length <= 1) {
+    return null;
+  }
+
   return (
     <select
       aria-label="Switch locale"
@@ -52,8 +60,11 @@ export function LocaleSwitcher() {
       ref={selectRef}
       onChange={(event) => navigateToLocale(event.currentTarget.value)}
     >
-      <option value="zh-HK">繁體中文</option>
-      <option value="en">English</option>
+      {publicLocales.map((localeOption) => (
+        <option key={localeOption} value={localeOption}>
+          {localeLabels[localeOption]}
+        </option>
+      ))}
     </select>
   );
 }

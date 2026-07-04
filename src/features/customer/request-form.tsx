@@ -94,7 +94,7 @@ export function RequestForm({
         return;
       }
 
-      router.push(result.target ?? `/${locale}/customer`);
+      router.push(result.target ?? `/customer`);
     });
   };
 

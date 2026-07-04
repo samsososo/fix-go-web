@@ -20,7 +20,7 @@ export default async function CustomerCalendarPage() {
   const bookings = await listCustomerCalendarBookings(user.id);
   const events: CalendarEvent[] = bookings.map((booking) => ({
     id: booking.id,
-    href: `/${locale}/customer/orders/${booking.id}`,
+    href: `/customer/orders/${booking.id}`,
     title: booking.request?.title ?? booking.id,
     status: booking.status,
     scheduledAt: booking.scheduledDate,

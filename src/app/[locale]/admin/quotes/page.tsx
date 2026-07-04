@@ -45,7 +45,7 @@ export default async function AdminQuotesPage() {
                   <tr key={quote.id} className="border-t border-line">
                     <td className="py-3">
                       <a
-                        href={`/${locale}/admin/quotes/${quote.id}`}
+                        href={`/admin/quotes/${quote.id}`}
                         className="font-medium text-primary"
                       >
                         {quote.id}

@@ -35,7 +35,7 @@ export default async function ProLeadsPage() {
           leads.map((lead) => (
             <a
               key={lead.id}
-              href={`/${locale}/pro/leads/${lead.id}`}
+              href={`/pro/leads/${lead.id}`}
               className="block"
             >
               <Card>

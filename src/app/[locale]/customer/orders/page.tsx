@@ -37,7 +37,7 @@ export default async function OrdersPage() {
           bookings.map((request) => (
             <a
               key={request.id}
-              href={`/${locale}/customer/orders/${request.booking!.id}`}
+              href={`/customer/orders/${request.booking!.id}`}
               className="block"
             >
               <Card>

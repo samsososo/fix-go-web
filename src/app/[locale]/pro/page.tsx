@@ -69,7 +69,7 @@ export default async function ProDashboardPage() {
               {leads.map((lead) => (
                 <a
                   key={lead.id}
-                  href={`/${locale}/pro/leads/${lead.id}`}
+                  href={`/pro/leads/${lead.id}`}
                   className="block rounded-2xl border border-line bg-white p-4"
                 >
                   <div className="flex items-center justify-between gap-3">

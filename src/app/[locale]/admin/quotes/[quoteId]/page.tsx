@@ -19,7 +19,7 @@ export default async function AdminQuoteDetailPage({
   const { quoteId } = await params;
   const detail = await getAdminQuoteDetail(quoteId);
   if (!detail) {
-    redirect(`/${locale}/admin/quotes`);
+    redirect(`/admin/quotes`);
   }
 
   return (
@@ -81,7 +81,7 @@ export default async function AdminQuoteDetailPage({
             {detail.request ? (
               <div className="space-y-3">
                 <a
-                  href={`/${locale}/admin/requests/${detail.request.id}`}
+                  href={`/admin/requests/${detail.request.id}`}
                   className="block rounded-2xl border border-line bg-white p-4"
                 >
                   <p className="font-semibold">{detail.request.title}</p>

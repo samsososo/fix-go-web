@@ -25,7 +25,7 @@ export default async function AdminProDetailPage({
   const { proId } = await params;
   const detail = await getAdminProDetail(proId);
   if (!detail) {
-    redirect(`/${locale}/admin/pros`);
+    redirect(`/admin/pros`);
   }
 
   return (
@@ -110,7 +110,7 @@ export default async function AdminProDetailPage({
                 {detail.quotes.map((quote) => (
                   <a
                     key={quote.id}
-                    href={`/${locale}/admin/quotes/${quote.id}`}
+                    href={`/admin/quotes/${quote.id}`}
                     className="block rounded-2xl border border-line bg-white p-4"
                   >
                     <div className="flex items-center justify-between gap-4">

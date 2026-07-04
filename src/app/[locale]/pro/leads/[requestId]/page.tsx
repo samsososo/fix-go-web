@@ -24,7 +24,7 @@ export default async function ProLeadDetailPage({
 
   const lead = await getLeadDetail(user.id, requestId);
   if (!lead) {
-    redirect(`/${locale}/pro/leads`);
+    redirect(`/pro/leads`);
   }
 
   return (

@@ -35,7 +35,7 @@ export function LoginForm({ locale }: { locale: string }) {
         return;
       }
 
-      router.push(result.target ?? `/${locale}/auth/login`);
+      router.push(result.target ?? `/auth/login`);
     });
   };
 
