@@ -2,7 +2,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatDateTime } from "@/lib/formatters";
+import { formatDateTime, formatDurationMinutes } from "@/lib/formatters";
 import { cn, formatCurrency } from "@/lib/utils";
 import { BookingStatus } from "@/types/domain";
 
@@ -15,6 +15,7 @@ export interface CalendarEvent {
   title: string;
   status: BookingStatus;
   scheduledAt?: string;
+  durationMinutes?: number;
   district: string;
   counterpart: string;
   amount?: number;
@@ -68,6 +69,29 @@ function formatTime(value: string | undefined, locale: string) {
   }).format(new Date(value));
 }
 
+function addMinutes(value: string | undefined, minutes: number | undefined) {
+  if (!value || !minutes) {
+    return undefined;
+  }
+
+  return new Date(
+    new Date(value).getTime() + minutes * 60 * 1000,
+  ).toISOString();
+}
+
+function formatTimeRange(event: CalendarEvent, locale: string) {
+  if (!event.scheduledAt) {
+    return locale === "en" ? "Time TBC" : "時間待定";
+  }
+
+  const endAt = addMinutes(event.scheduledAt, event.durationMinutes);
+  if (!endAt) {
+    return formatTime(event.scheduledAt, locale);
+  }
+
+  return `${formatTime(event.scheduledAt, locale)} - ${formatTime(endAt, locale)}`;
+}
+
 function buildWeek(events: CalendarEvent[]) {
   const firstScheduled = events.find((event) => event.scheduledAt)?.scheduledAt;
   const start = new Date(firstScheduled ?? new Date().toISOString());
@@ -81,24 +105,45 @@ function buildWeek(events: CalendarEvent[]) {
   });
 }
 
+function buildMonth(events: CalendarEvent[]) {
+  const firstScheduled = events.find((event) => event.scheduledAt)?.scheduledAt;
+  const baseKey = getDateKey(firstScheduled ?? new Date().toISOString());
+  const [yearValue, monthValue] = baseKey.split("-");
+  const year = Number(yearValue);
+  const month = Number(monthValue);
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+
+  return Array.from({ length: daysInMonth }, (_, index) => {
+    const value = new Date(
+      Date.UTC(year, month - 1, index + 1, 4),
+    ).toISOString();
+    return {
+      key: getDateKey(value),
+      value,
+    };
+  });
+}
+
 export function BookingCalendar({
   locale,
   events,
+  view = "week",
   emptyTitle,
   emptyDescription,
   perspectiveLabel,
 }: {
   locale: string;
   events: CalendarEvent[];
+  view?: "week" | "month";
   emptyTitle: string;
   emptyDescription: string;
   perspectiveLabel: string;
 }) {
   const scheduledEvents = events.filter((event) => event.scheduledAt);
   const unscheduledEvents = events.filter((event) => !event.scheduledAt);
-  const week = buildWeek(events);
-  const visibleKeys = new Set(week.map((day) => day.key));
-  const outsideWeekEvents = scheduledEvents.filter(
+  const visibleDays = view === "month" ? buildMonth(events) : buildWeek(events);
+  const visibleKeys = new Set(visibleDays.map((day) => day.key));
+  const outsideVisibleEvents = scheduledEvents.filter(
     (event) => !visibleKeys.has(getDateKey(event.scheduledAt)),
   );
   const groupedEvents = scheduledEvents.reduce<Record<string, CalendarEvent[]>>(
@@ -111,7 +156,7 @@ export function BookingCalendar({
   );
 
   const nextEvent = scheduledEvents[0];
-  const weekEventCount = scheduledEvents.filter((event) =>
+  const visibleEventCount = scheduledEvents.filter((event) =>
     visibleKeys.has(getDateKey(event.scheduledAt)),
   ).length;
 
@@ -146,7 +191,7 @@ export function BookingCalendar({
               </h2>
               <p className="mt-2 text-sm text-white/72">
                 {nextEvent
-                  ? `${formatTime(nextEvent.scheduledAt, locale)} · ${nextEvent.title}`
+                  ? `${formatTimeRange(nextEvent, locale)} · ${nextEvent.title}`
                   : locale === "en"
                     ? "Accepted bookings without a time are listed below."
                     : "未設定時間的訂單會列在下方。"}
@@ -161,12 +206,16 @@ export function BookingCalendar({
               {locale === "en" ? "This schedule window" : "本排程視窗"}
             </p>
             <p className="mt-3 font-display text-4xl font-extrabold">
-              {weekEventCount}
+              {visibleEventCount}
             </p>
             <p className="mt-2 text-sm text-muted">
-              {locale === "en"
-                ? "Bookings shown in the 7-day calendar."
-                : "個訂單顯示於 7 日日程。"}
+              {view === "month"
+                ? locale === "en"
+                  ? "Bookings shown in this month."
+                  : "個訂單顯示於本月日程。"
+                : locale === "en"
+                  ? "Bookings shown in the 7-day calendar."
+                  : "個訂單顯示於 7 日日程。"}
             </p>
           </CardContent>
         </Card>
@@ -188,15 +237,18 @@ export function BookingCalendar({
         </Card>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-7">
-        {week.map((day, index) => {
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-7">
+        {visibleDays.map((day, index) => {
           const dayEvents = groupedEvents[day.key] ?? [];
           return (
             <Card
               key={day.key}
               className={cn(
-                "min-h-[210px] bg-white/82",
-                index === 0 && "border-primary/35 bg-primary/5",
+                "bg-white/82",
+                view === "month" ? "min-h-[170px]" : "min-h-[210px]",
+                index === 0 && view === "week"
+                  ? "border-primary/35 bg-primary/5"
+                  : "",
               )}
             >
               <CardContent className="space-y-4 p-4">
@@ -217,7 +269,7 @@ export function BookingCalendar({
                         className="block rounded-2xl border border-line bg-card p-3 transition hover:-translate-y-0.5 hover:border-primary/35"
                       >
                         <p className="text-xs font-semibold text-primary">
-                          {formatTime(event.scheduledAt, locale)}
+                          {formatTimeRange(event, locale)}
                         </p>
                         <p className="mt-1 line-clamp-2 text-sm font-semibold">
                           {event.title}
@@ -257,7 +309,7 @@ export function BookingCalendar({
           </div>
 
           <div className="space-y-3">
-            {[...scheduledEvents, ...outsideWeekEvents, ...unscheduledEvents]
+            {[...scheduledEvents, ...outsideVisibleEvents, ...unscheduledEvents]
               .filter(
                 (event, index, list) =>
                   list.findIndex((entry) => entry.id === event.id) === index,
@@ -270,10 +322,14 @@ export function BookingCalendar({
                 >
                   <div>
                     <p className="text-sm font-semibold text-primary">
-                      {formatTime(event.scheduledAt, locale)}
+                      {formatTimeRange(event, locale)}
                     </p>
                     <p className="mt-1 text-sm text-muted">
                       {formatDateTime(event.scheduledAt, locale)}
+                    </p>
+                    <p className="mt-1 text-xs text-muted">
+                      {locale === "en" ? "Duration" : "需時"}:{" "}
+                      {formatDurationMinutes(event.durationMinutes, locale)}
                     </p>
                   </div>
                   <div>

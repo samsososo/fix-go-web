@@ -131,6 +131,7 @@ export interface Quote {
   includedWork: string;
   exclusions: string;
   earliestAvailability: string;
+  estimatedDurationMinutes: number;
   noteToCustomer: string;
   status: QuoteStatus;
   createdAt: string;
@@ -154,6 +155,7 @@ export interface Booking {
   proId: string;
   status: BookingStatus;
   scheduledDate?: string;
+  estimatedDurationMinutes?: number;
   createdAt: string;
   updatedAt: string;
   statusEventIds: string[];

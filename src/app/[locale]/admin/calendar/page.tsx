@@ -18,6 +18,9 @@ export default async function AdminCalendarPage() {
     title: booking.request?.title ?? booking.id,
     status: booking.status,
     scheduledAt: booking.scheduledDate,
+    durationMinutes:
+      booking.estimatedDurationMinutes ??
+      booking.quote?.estimatedDurationMinutes,
     district: booking.request
       ? formatDistrictName(booking.request.address.district, locale)
       : locale === "en"

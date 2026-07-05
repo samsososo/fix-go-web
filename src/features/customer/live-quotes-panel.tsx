@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { AcceptQuoteButton } from "@/features/customer/accept-quote-button";
+import { formatDateTime, formatDurationMinutes } from "@/lib/formatters";
 import { formatCurrency } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -13,6 +14,7 @@ type QuoteView = {
   includedWork: string;
   exclusions: string;
   earliestAvailability: string;
+  estimatedDurationMinutes: number;
   noteToCustomer: string;
   status: string;
   proName: string;
@@ -75,6 +77,23 @@ export function LiveQuotesPanel({
               </div>
             </div>
             <div className="grid gap-3 text-sm text-muted md:grid-cols-2">
+              <div>
+                <p className="font-semibold text-foreground">
+                  {locale === "en" ? "Earliest visit" : "最早可上門"}
+                </p>
+                <p>{formatDateTime(quote.earliestAvailability, locale)}</p>
+              </div>
+              <div>
+                <p className="font-semibold text-foreground">
+                  {locale === "en" ? "Estimated duration" : "預計需時"}
+                </p>
+                <p>
+                  {formatDurationMinutes(
+                    quote.estimatedDurationMinutes,
+                    locale,
+                  )}
+                </p>
+              </div>
               <div>
                 <p className="font-semibold text-foreground">
                   {locale === "en" ? "Included work" : "包含項目"}

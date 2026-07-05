@@ -89,8 +89,8 @@ export default async function CustomerDashboardPage() {
                 title={locale === "en" ? "No requests yet" : "未有請求"}
                 description={
                   locale === "en"
-                    ? "Create your first request to begin collecting quotes from matched professionals."
-                    : "建立第一張服務請求後，即可開始收集配對師傅的報價。"
+                    ? "Create your first request to begin collecting quotes from professionals."
+                    : "建立第一張服務請求後，即可開始收集師傅報價。"
                 }
               />
             )}

@@ -8,7 +8,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { formatDistrictName } from "@/lib/hk-locale";
 import { listCustomerRequests } from "@/lib/mock/repositories";
 import { getCustomerNav } from "@/lib/nav";
-import { formatDateTime } from "@/lib/formatters";
+import { formatDateTime, formatDurationMinutes } from "@/lib/formatters";
 import { formatCurrency } from "@/lib/utils";
 
 export default async function OrdersPage() {
@@ -81,12 +81,16 @@ export default async function OrdersPage() {
                     </div>
                     <div className="rounded-2xl bg-soft-accent/45 p-4 text-sm">
                       <p className="font-semibold">
-                        {locale === "en" ? "Order detail" : "訂單詳情"}
+                        {locale === "en" ? "Estimated duration" : "預計需時"}
                       </p>
                       <p className="mt-2 text-muted">
-                        {locale === "en"
-                          ? "Open booking timeline and accepted quote"
-                          : "查看訂單時間線及已接受報價"}
+                        {formatDurationMinutes(
+                          request.booking?.estimatedDurationMinutes ??
+                            request.quotes.find(
+                              (quote) => quote.id === request.acceptedQuoteId,
+                            )?.estimatedDurationMinutes,
+                          locale,
+                        )}
                       </p>
                     </div>
                   </div>

@@ -3,10 +3,16 @@ import { redirect } from "next/navigation";
 
 import { PortalShell } from "@/components/shared/portal-shell";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { WhatsAppContactLink } from "@/components/shared/whatsapp-contact-link";
 import { Card, CardContent } from "@/components/ui/card";
 import { BookingStatusForm } from "@/features/pro/booking-status-form";
 import { getCurrentUser } from "@/lib/auth";
-import { formatDateTime, formatStatusLabel } from "@/lib/formatters";
+import {
+  formatDateTime,
+  formatDurationMinutes,
+  formatHongKongPhone,
+  formatStatusLabel,
+} from "@/lib/formatters";
 import { formatDistrictName } from "@/lib/hk-locale";
 import { getProJobDetail } from "@/lib/mock/repositories";
 import { getProNav } from "@/lib/nav";
@@ -52,6 +58,18 @@ export default async function ProJobDetailPage({
                   {locale === "en" ? "Customer" : "客戶"}
                 </p>
                 <p className="mt-2 text-muted">{job.customer?.fullName}</p>
+                {job.customer ? (
+                  <>
+                    <p className="mt-1 text-muted">
+                      {formatHongKongPhone(job.customer.phone)}
+                    </p>
+                    <WhatsAppContactLink
+                      phone={job.customer.phone}
+                      locale={locale}
+                      className="mt-3"
+                    />
+                  </>
+                ) : null}
               </div>
               <div className="rounded-2xl bg-soft-accent/45 p-4 text-sm">
                 <p className="font-semibold">
@@ -70,6 +88,18 @@ export default async function ProJobDetailPage({
                 </p>
               </div>
               <div className="rounded-2xl bg-soft-accent/45 p-4 text-sm">
+                <p className="font-semibold">
+                  {locale === "en" ? "Estimated duration" : "預計需時"}
+                </p>
+                <p className="mt-2 text-muted">
+                  {formatDurationMinutes(
+                    job.estimatedDurationMinutes ??
+                      job.quote?.estimatedDurationMinutes,
+                    locale,
+                  )}
+                </p>
+              </div>
+              <div className="rounded-2xl bg-soft-accent/45 p-4 text-sm md:col-span-2">
                 <p className="font-semibold">
                   {locale === "en" ? "Service district" : "服務地區"}
                 </p>

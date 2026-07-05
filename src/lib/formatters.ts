@@ -15,6 +15,18 @@ export function formatHongKongPhone(phone: string) {
   return `${digits.slice(0, 4)} ${digits.slice(4)}`;
 }
 
+export function formatWhatsAppUrl(phone: string | undefined) {
+  const digits = phone?.replace(/\D/g, "") ?? "";
+  const whatsappPhone =
+    digits.length === 8
+      ? `852${digits}`
+      : digits.length === 11 && digits.startsWith("852")
+        ? digits
+        : "";
+
+  return whatsappPhone ? `https://wa.me/${whatsappPhone}` : undefined;
+}
+
 export function formatUrgencyLabel(urgency: RequestUrgency, locale: string) {
   if (locale === "en") {
     return {
@@ -41,6 +53,30 @@ export function formatDateTime(value: string | undefined, locale: string) {
   return new Date(value).toLocaleString(locale, {
     timeZone: "Asia/Hong_Kong",
   });
+}
+
+export function formatDurationMinutes(
+  minutes: number | undefined,
+  locale: string,
+) {
+  if (!minutes) {
+    return locale === "en" ? "Not set" : "未設定";
+  }
+
+  if (minutes < 60) {
+    return locale === "en" ? `${minutes} min` : `${minutes} 分鐘`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+
+  if (remainingMinutes === 0) {
+    return locale === "en" ? `${hours}h` : `${hours} 小時`;
+  }
+
+  return locale === "en"
+    ? `${hours}h ${remainingMinutes}m`
+    : `${hours} 小時 ${remainingMinutes} 分鐘`;
 }
 
 export function formatStatusLabel(

@@ -11,7 +11,6 @@ import {
   formatHongKongPhone,
   formatStatusLabel,
 } from "@/lib/formatters";
-import { formatDistrictList } from "@/lib/hk-locale";
 import { getAdminNav } from "@/lib/nav";
 import { getAdminProDetail } from "@/lib/mock/repositories";
 import { formatCurrency } from "@/lib/utils";
@@ -88,14 +87,6 @@ export default async function AdminProDetailPage({
             <p className="text-sm text-muted">{detail.pro.email ?? "-"}</p>
             <p className="text-sm text-muted">
               {formatHongKongPhone(detail.pro.phone)}
-            </p>
-            <p className="text-sm text-muted">
-              {detail.profile
-                ? formatDistrictList(
-                    detail.profile.serviceAreaDistricts,
-                    locale,
-                  ).join(", ")
-                : "-"}
             </p>
           </CardContent>
         </Card>

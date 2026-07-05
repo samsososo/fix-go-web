@@ -141,6 +141,7 @@ export async function acceptQuoteAction(input: {
     );
     revalidatePath(`/customer/requests/${input.requestId}`);
     revalidatePath("/customer/orders");
+    revalidatePath("/pro/calendar");
     revalidatePath("/pro/jobs");
     if (quote) {
       revalidatePath(`/pro/leads/${input.requestId}`);
@@ -184,6 +185,7 @@ export async function submitQuoteAction(input: {
   await submitProQuote(input.proId, input.requestId, parsed.data, input.locale);
   revalidatePath("/pro/leads");
   revalidatePath(`/pro/leads/${input.requestId}`);
+  revalidatePath("/pro/calendar");
   revalidatePath(`/customer/requests/${input.requestId}`);
   return { ok: true };
 }
@@ -202,6 +204,7 @@ export async function updateBookingStatusAction(input: {
       input.locale,
     );
     revalidatePath("/pro/jobs");
+    revalidatePath("/pro/calendar");
     revalidatePath(`/pro/jobs/${input.bookingId}`);
     revalidatePath("/customer/orders");
     revalidatePath(`/customer/orders/${input.bookingId}`);

@@ -11,11 +11,11 @@ export function Field({
 }) {
   return (
     <label className="block space-y-2">
-      <span className="text-sm font-medium text-foreground">{label}</span>
+      <span className="text-base font-medium text-foreground">{label}</span>
       {children}
-      {hint ? <span className="block text-xs text-muted">{hint}</span> : null}
+      {hint ? <span className="block text-sm text-muted">{hint}</span> : null}
       {error ? (
-        <span className="block text-xs text-danger">{error}</span>
+        <span className="block text-sm text-danger">{error}</span>
       ) : null}
     </label>
   );

@@ -1,4 +1,11 @@
+import { env } from "@/lib/env";
 import { listCredentialedDemoUsers, withDb, readDb } from "@/lib/mock/db";
+import {
+  listMongoCategoryOptions,
+  listMongoProCalendarBookings,
+  listMongoProJobs,
+  listMongoRelevantLeads,
+} from "@/lib/mock/mongo-db";
 import {
   canTransitionBookingStatus,
   canTransitionRequestStatus,
@@ -48,12 +55,14 @@ function textForLocale(locale: string, en: string, zh: string) {
   return locale === "en" ? en : zh;
 }
 
+function shouldUseMongoStorage() {
+  return env.STORAGE_DRIVER === "mongodb";
+}
+
 function summarizeProfileCompletion(profile: ProProfile) {
   const checks = [
     Boolean(profile.displayName),
     profile.yearsOfExperience > 0,
-    profile.serviceCategoryIds.length > 0,
-    profile.serviceAreaDistricts.length > 0,
     profile.languagesSpoken.length > 0,
     profile.introduction.length >= 30,
     profile.documentPlaceholders.length > 0,
@@ -63,16 +72,19 @@ function summarizeProfileCompletion(profile: ProProfile) {
   return Math.round((done / checks.length) * 100);
 }
 
-function matchProsForRequest(
-  request: RequestFormInput,
-  proProfiles: ProProfile[],
-) {
+const openLeadStatuses: RequestStatus[] = [
+  "submitted",
+  "awaiting_quotes",
+  "quoted",
+];
+
+function isOpenLead(request: ServiceRequest) {
+  return openLeadStatuses.includes(request.status);
+}
+
+function matchProsForRequest(proProfiles: ProProfile[], categoryId: string) {
   return proProfiles
-    .filter(
-      (profile) =>
-        profile.serviceCategoryIds.includes(request.categoryId) &&
-        profile.serviceAreaDistricts.includes(request.address.district),
-    )
+    .filter((profile) => profile.serviceCategoryIds.includes(categoryId))
     .map((profile) => profile.userId);
 }
 
@@ -205,7 +217,7 @@ export async function createUserAccount(input: SignupInput) {
         userId: user.id,
         displayName: user.fullName,
         yearsOfExperience: 0,
-        serviceCategoryIds: [],
+        serviceCategoryIds: input.serviceCategoryIds ?? [],
         serviceAreaDistricts: [],
         languagesSpoken: [input.locale],
         introduction: "",
@@ -268,19 +280,11 @@ export async function createCustomerRequest(
       id: createId("addr"),
       ...input.address,
     };
-    const matchedProIds = matchProsForRequest(input, db.proProfiles);
+    const matchedProIds = matchProsForRequest(db.proProfiles, input.categoryId);
     const status: RequestStatus =
       matchedProIds.length > 0 ? "awaiting_quotes" : "submitted";
-    const attachments = input.attachmentNames.map((name) => ({
-      id: createId("att"),
-      requestId,
-      fileName: name,
-      mimeType: "image/jpeg",
-      uploadedAt: nowIso(),
-    }));
 
     db.addresses.push(address);
-    db.attachments.push(...attachments);
 
     const request: ServiceRequest = {
       id: requestId,
@@ -295,7 +299,7 @@ export async function createCustomerRequest(
       accessNotes: input.accessNotes,
       budgetMin: input.budgetMin,
       budgetMax: input.budgetMax,
-      attachmentIds: attachments.map((entry) => entry.id),
+      attachmentIds: [],
       status,
       matchedProIds,
       createdAt: nowIso(),
@@ -307,7 +311,7 @@ export async function createCustomerRequest(
       ...matchedProIds.map((proId) => ({
         id: createId("notif"),
         userId: proId,
-        title: textForLocale(locale, "New matched lead", "新的配對工作機會"),
+        title: textForLocale(locale, "New service request", "新的服務需求"),
         body: request.title,
         read: false,
         createdAt: nowIso(),
@@ -448,6 +452,7 @@ export async function acceptCustomerQuote(
       proId: quote.proId,
       status: "accepted",
       scheduledDate: quote.earliestAvailability,
+      estimatedDurationMinutes: quote.estimatedDurationMinutes,
       createdAt: nowIso(),
       updatedAt: nowIso(),
       statusEventIds: [eventId],
@@ -483,9 +488,7 @@ export async function getProDashboard(proId: string) {
   const db = await readDb();
   const profile = findProProfile(db.proProfiles, proId);
   const leads = db.requests.filter(
-    (request) =>
-      request.matchedProIds.includes(proId) &&
-      ["submitted", "awaiting_quotes", "quoted"].includes(request.status),
+    (request) => isOpenLead(request) && request.matchedProIds.includes(proId),
   );
   const quotes = db.quotes.filter((quote) => quote.proId === proId);
   const jobs = db.bookings.filter((booking) => booking.proId === proId);
@@ -528,13 +531,18 @@ export async function saveProProfile(userId: string, input: ProProfileInput) {
   });
 }
 
-export async function listRelevantLeads(proId: string) {
+export async function listRelevantLeads(proId: string, categoryId?: string) {
+  if (shouldUseMongoStorage()) {
+    return listMongoRelevantLeads(proId, categoryId);
+  }
+
   const db = await readDb();
   return db.requests
     .filter(
       (request) =>
+        isOpenLead(request) &&
         request.matchedProIds.includes(proId) &&
-        ["submitted", "awaiting_quotes", "quoted"].includes(request.status),
+        (!categoryId || request.categoryId === categoryId),
     )
     .map((request) => ({
       ...request,
@@ -551,7 +559,10 @@ export async function listRelevantLeads(proId: string) {
 export async function getLeadDetail(proId: string, requestId: string) {
   const db = await readDb();
   const request = db.requests.find(
-    (entry) => entry.id === requestId && entry.matchedProIds.includes(proId),
+    (entry) =>
+      entry.id === requestId &&
+      isOpenLead(entry) &&
+      entry.matchedProIds.includes(proId),
   );
   if (!request) {
     return null;
@@ -580,7 +591,10 @@ export async function submitProQuote(
 ) {
   return withDb((db) => {
     const request = db.requests.find(
-      (entry) => entry.id === requestId && entry.matchedProIds.includes(proId),
+      (entry) =>
+        entry.id === requestId &&
+        isOpenLead(entry) &&
+        entry.matchedProIds.includes(proId),
     );
     if (!request) {
       throw new Error("Lead not found");
@@ -633,6 +647,10 @@ export async function submitProQuote(
 }
 
 export async function listProJobs(proId: string) {
+  if (shouldUseMongoStorage()) {
+    return listMongoProJobs(proId);
+  }
+
   const db = await readDb();
   return db.bookings
     .filter((booking) => booking.proId === proId)
@@ -667,6 +685,10 @@ export async function getProJobDetail(proId: string, bookingId: string) {
 }
 
 export async function listProCalendarBookings(proId: string) {
+  if (shouldUseMongoStorage()) {
+    return listMongoProCalendarBookings(proId);
+  }
+
   const db = await readDb();
   return db.bookings
     .filter(
@@ -1102,6 +1124,10 @@ export async function toggleProVerification(userId: string, verified: boolean) {
 }
 
 export async function listCategoryOptions(locale: Locale) {
+  if (shouldUseMongoStorage()) {
+    return listMongoCategoryOptions(locale);
+  }
+
   const categories = await listPublicCategories();
   return categories.map((category) => ({
     id: category.id,

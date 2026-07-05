@@ -15,7 +15,18 @@ import {
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+
+const durationOptions = [
+  { value: 30, zh: "30 分鐘", en: "30 min" },
+  { value: 60, zh: "1 小時", en: "1h" },
+  { value: 90, zh: "1.5 小時", en: "1.5h" },
+  { value: 120, zh: "2 小時", en: "2h" },
+  { value: 180, zh: "3 小時", en: "3h" },
+  { value: 240, zh: "4 小時", en: "4h" },
+  { value: 480, zh: "全日", en: "Full day" },
+];
 
 export function QuoteForm({
   locale,
@@ -43,6 +54,7 @@ export function QuoteForm({
       includedWork: initialValues?.includedWork ?? "",
       exclusions: initialValues?.exclusions ?? "",
       earliestAvailability: initialValues?.earliestAvailability ?? "",
+      estimatedDurationMinutes: initialValues?.estimatedDurationMinutes ?? 120,
       noteToCustomer: initialValues?.noteToCustomer ?? "",
     },
   });
@@ -100,10 +112,19 @@ export function QuoteForm({
             type="datetime-local"
           />
         </Field>
-        <Field label={locale === "en" ? "Note to customer" : "給客戶的備註"}>
-          <Textarea {...form.register("noteToCustomer")} className="min-h-20" />
+        <Field label={locale === "en" ? "Estimated duration" : "預計需時"}>
+          <Select {...form.register("estimatedDurationMinutes")}>
+            {durationOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {locale === "en" ? option.en : option.zh}
+              </option>
+            ))}
+          </Select>
         </Field>
       </div>
+      <Field label={locale === "en" ? "Note to customer" : "給客戶的備註"}>
+        <Textarea {...form.register("noteToCustomer")} className="min-h-20" />
+      </Field>
       {serverError ? (
         <p className="text-sm text-danger">{serverError}</p>
       ) : null}

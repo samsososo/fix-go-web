@@ -5,7 +5,6 @@ import { PortalShell } from "@/components/shared/portal-shell";
 import { Card, CardContent } from "@/components/ui/card";
 import { ToggleProVerificationButton } from "@/features/admin/toggle-pro-verification-button";
 import { formatStatusLabel } from "@/lib/formatters";
-import { formatDistrictList } from "@/lib/hk-locale";
 import { getAdminNav } from "@/lib/nav";
 import { listAdminPros } from "@/lib/mock/repositories";
 
@@ -19,8 +18,8 @@ export default async function AdminProsPage() {
       title={locale === "en" ? "Pros" : "師傅"}
       subtitle={
         locale === "en"
-          ? "Inspect verification status, service areas, and quoting activity."
-          : "檢查驗證狀態、服務地區及報價活動。"
+          ? "Inspect verification status, contact details, and quoting activity."
+          : "檢查驗證狀態、聯絡資料及報價活動。"
       }
       navItems={getAdminNav(locale, "pros")}
     >
@@ -37,13 +36,7 @@ export default async function AdminProsPage() {
                     {pro.profile?.displayName ?? pro.fullName}
                   </a>
                   <p className="text-sm text-muted">
-                    {pro.profile
-                      ? formatDistrictList(
-                          pro.profile.serviceAreaDistricts,
-                          locale,
-                        ).join(", ")
-                      : "-"}{" "}
-                    ·{" "}
+                    {pro.email ?? pro.phone} ·{" "}
                     {pro.profile?.verificationStatus
                       ? formatStatusLabel(
                           pro.profile.verificationStatus,

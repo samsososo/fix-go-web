@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 
 import { signUpAction } from "@/lib/actions";
 import { useHydrated } from "@/hooks/use-hydrated";
@@ -17,7 +17,13 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 
-export function SignupForm({ locale }: { locale: string }) {
+export function SignupForm({
+  locale,
+  categoryOptions,
+}: {
+  locale: string;
+  categoryOptions: { id: string; label: string }[];
+}) {
   const router = useRouter();
   const isHydrated = useHydrated();
   const [isPending, startTransition] = useTransition();
@@ -29,11 +35,13 @@ export function SignupForm({ locale }: { locale: string }) {
       phone: "",
       email: "",
       role: "customer",
+      serviceCategoryIds: [],
       locale: "zh-HK",
       password: "",
       confirmPassword: "",
     },
   });
+  const role = useWatch({ control: form.control, name: "role" });
 
   const onSubmit = (values: SignupInput) => {
     setServerError(null);
@@ -57,13 +65,18 @@ export function SignupForm({ locale }: { locale: string }) {
         <Input {...form.register("fullName")} />
       </Field>
       <Field
-        label={locale === "en" ? "Hong Kong phone" : "香港電話"}
+        label={locale === "en" ? "WhatsApp contact phone" : "WhatsApp 聯絡電話"}
+        hint={
+          locale === "en"
+            ? "Use a Hong Kong mobile number that can be reached on WhatsApp."
+            : "請填可用 WhatsApp 聯絡的香港手提電話。"
+        }
         error={form.formState.errors.phone?.message}
       >
         <Input {...form.register("phone")} placeholder="91234567" />
       </Field>
       <Field
-        label={locale === "en" ? "Email" : "電郵"}
+        label={locale === "en" ? "Email (optional)" : "電郵（可留空）"}
         error={form.formState.errors.email?.message}
       >
         <Input {...form.register("email")} placeholder="you@example.com" />
@@ -79,6 +92,28 @@ export function SignupForm({ locale }: { locale: string }) {
           <option value="pro">{locale === "en" ? "Pro" : "師傅"}</option>
         </Select>
       </Field>
+      {role === "pro" ? (
+        <Field
+          label={locale === "en" ? "Specialties" : "專長"}
+          error={form.formState.errors.serviceCategoryIds?.message}
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
+            {categoryOptions.map((category) => (
+              <label
+                key={category.id}
+                className="flex items-center gap-3 rounded-2xl border border-line bg-white px-4 py-3 text-sm font-semibold"
+              >
+                <input
+                  {...form.register("serviceCategoryIds")}
+                  type="checkbox"
+                  value={category.id}
+                />
+                {category.label}
+              </label>
+            ))}
+          </div>
+        </Field>
+      ) : null}
       <Field
         label={locale === "en" ? "Preferred language" : "偏好語言"}
         error={form.formState.errors.locale?.message}

@@ -6,7 +6,6 @@ import { useForm, useWatch } from "react-hook-form";
 
 import { saveProProfileAction } from "@/lib/actions";
 import { useHydrated } from "@/hooks/use-hydrated";
-import { formatDistrictName } from "@/lib/hk-locale";
 import { type ProProfile } from "@/types/domain";
 import {
   proProfileSchema,
@@ -22,14 +21,10 @@ export function ProProfileForm({
   locale,
   userId,
   profile,
-  categoryOptions,
-  districts,
 }: {
   locale: string;
   userId: string;
   profile: ProProfile;
-  categoryOptions: { id: string; label: string }[];
-  districts: { district: string }[];
 }) {
   const isHydrated = useHydrated();
   const [isPending, startTransition] = useTransition();
@@ -80,66 +75,6 @@ export function ProProfileForm({
           <Input {...form.register("yearsOfExperience")} type="number" />
         </Field>
       </div>
-
-      <Field
-        label={locale === "en" ? "Service categories" : "服務分類"}
-        hint={
-          locale === "en"
-            ? "Use comma-separated category IDs."
-            : "請以逗號分隔分類 ID。"
-        }
-      >
-        <Input
-          defaultValue={profile.serviceCategoryIds.join(", ")}
-          onChange={(event) =>
-            form.setValue(
-              "serviceCategoryIds",
-              event.target.value
-                .split(",")
-                .map((value) => value.trim())
-                .filter(Boolean),
-            )
-          }
-          list="category-options"
-        />
-        <datalist id="category-options">
-          {categoryOptions.map((category) => (
-            <option key={category.id} value={category.id}>
-              {category.label}
-            </option>
-          ))}
-        </datalist>
-      </Field>
-
-      <Field
-        label={locale === "en" ? "Service districts" : "服務地區"}
-        hint={
-          locale === "en"
-            ? "Comma-separated district names."
-            : "以逗號分隔地區名稱。"
-        }
-      >
-        <Input
-          defaultValue={profile.serviceAreaDistricts.join(", ")}
-          onChange={(event) =>
-            form.setValue(
-              "serviceAreaDistricts",
-              event.target.value
-                .split(",")
-                .map((value) => value.trim())
-                .filter(Boolean),
-            )
-          }
-          list="district-options"
-        />
-        <datalist id="district-options">
-          {districts.map((district) => (
-            <option key={district.district} value={district.district}>
-              {formatDistrictName(district.district, locale)}
-            </option>
-          ))}
-        </datalist>
-      </Field>
 
       <Field
         label={locale === "en" ? "Languages spoken" : "可使用語言"}

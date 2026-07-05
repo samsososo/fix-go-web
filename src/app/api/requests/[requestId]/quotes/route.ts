@@ -16,6 +16,7 @@ export async function GET(
       includedWork: quote.includedWork,
       exclusions: quote.exclusions,
       earliestAvailability: quote.earliestAvailability,
+      estimatedDurationMinutes: quote.estimatedDurationMinutes,
       noteToCustomer: quote.noteToCustomer,
       status: quote.status,
       proName:

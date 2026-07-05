@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { cache } from "react";
 
 import { canAccessPortal } from "@/lib/access";
 import { env, shouldUseSecureCookies } from "@/lib/env";
@@ -22,14 +23,14 @@ export async function getSession() {
   return value;
 }
 
-export async function getCurrentUser(): Promise<User | null> {
+export const getCurrentUser = cache(async (): Promise<User | null> => {
   const session = await getSession();
   if (!session) {
     return null;
   }
 
   return getSessionUser(session);
-}
+});
 
 export async function signInWithCredentials(
   identifier: string,
@@ -81,7 +82,10 @@ export async function clearSession() {
   cookieStore.delete(env.SESSION_COOKIE_NAME);
 }
 
-export async function requireRole(role: UserRole | UserRole[], locale?: string) {
+export async function requireRole(
+  role: UserRole | UserRole[],
+  locale?: string,
+) {
   void locale;
   const user = await getCurrentUser();
 
@@ -95,7 +99,7 @@ export async function requireRole(role: UserRole | UserRole[], locale?: string) 
 export function roleHomePath(role: UserRole) {
   return {
     customer: "/customer",
-    pro: "/pro",
+    pro: "/pro/calendar",
     admin: "/admin",
   }[role];
 }

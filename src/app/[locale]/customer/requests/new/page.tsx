@@ -35,6 +35,7 @@ export default async function NewRequestPage() {
           <RequestForm
             locale={locale}
             customerId={user.id}
+            customerPhone={user.phone}
             categoryOptions={categoryOptions}
             districts={districts}
           />

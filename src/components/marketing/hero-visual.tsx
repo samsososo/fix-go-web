@@ -1,172 +1,129 @@
-import {
-  BadgeCheck,
-  Camera,
-  Clock3,
-  MapPinned,
-  ShieldCheck,
-  Star,
-  Wrench,
-} from "lucide-react";
+import Image from "next/image";
+
+type HeroVisualCopy = {
+  photoCards: {
+    title: string;
+    body: string;
+    image: string;
+    alt: string;
+  }[];
+  stats: {
+    label: string;
+    body: string;
+  }[];
+};
+
+const plumbingPhoto =
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/Exterior_Plumbing_-_Hong_Kong.jpg/960px-Exterior_Plumbing_-_Hong_Kong.jpg";
+
+const electricalPhoto =
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/HK_KTD_Sau_Mau_Ping_%E5%AE%89%E6%B3%B0%E9%82%A8_On_Tai_Estate_%E9%9B%BB%E5%99%A8%E7%B8%BD%E5%88%B6_Fuse_boxes_January_2023_Px3_01.jpg/960px-HK_KTD_Sau_Mau_Ping_%E5%AE%89%E6%B3%B0%E9%82%A8_On_Tai_Estate_%E9%9B%BB%E5%99%A8%E7%B8%BD%E5%88%B6_Fuse_boxes_January_2023_Px3_01.jpg";
 
 export function HeroVisual({ locale }: { locale: "zh-HK" | "en" }) {
-  const copy =
+  const copy: HeroVisualCopy =
     locale === "en"
       ? {
-          requestLabel: "Customer request",
-          request: "Water heater repair",
-          district: "Kowloon Tong",
-          timing: "Today, 6:30 PM",
-          address: "Estate access notes included",
-          photos: "3 photos attached",
-          quotes: "Quotes ready",
-          quoteCount: "3 pros responded",
-          compare: "Compare by price, timing, and scope before accepting.",
-          verified: "Verified",
-          response: "Fastest response",
-          pros: [
+          photoCards: [
             {
-              name: "Chan Plumbing",
-              meta: "4.9 rating · earliest today",
-              amount: "HK$1,980",
+              title: "Plumbing repairs",
+              body: "Share photos, location, urgency, and access notes before pros quote.",
+              image: plumbingPhoto,
+              alt: "Hong Kong residential exterior plumbing",
             },
             {
-              name: "Kowloon Home Fix",
-              meta: "4.8 rating · tomorrow",
-              amount: "HK$2,120",
+              title: "Electrical work",
+              body: "Switches, sockets, and fuse boxes stay organised by service type.",
+              image: electricalPhoto,
+              alt: "Hong Kong residential electrical distribution box",
+            },
+          ],
+          stats: [
+            {
+              label: "Free quote arrangement",
+              body: "Share the request first, then compare responses before booking.",
+            },
+            {
+              label: "Multiple pros can respond",
+              body: "Compare price, earliest time, and work scope before confirming.",
+            },
+            {
+              label: "Clear quote details",
+              body: "Labour, parts, and call-out fees are listed separately.",
             },
           ],
         }
       : {
-          requestLabel: "住戶請求",
-          request: "熱水爐維修",
-          district: "九龍塘",
-          timing: "今日晚上 6:30",
-          address: "已填大廈出入備註",
-          photos: "已附 3 張相片",
-          quotes: "報價已準備",
-          quoteCount: "3 位師傅已回覆",
-          compare: "確認前可按價錢、時間及工程範圍比較。",
-          verified: "已核實",
-          response: "最快回覆",
-          pros: [
+          photoCards: [
             {
-              name: "陳記水喉工程",
-              meta: "4.9 評分 · 最快今日",
-              amount: "HK$1,980",
+              title: "水喉維修",
+              body: "先交位置、緊急程度及工程內容，再等師傅用同一格式報價。",
+              image: plumbingPhoto,
+              alt: "香港住宅外牆水喉維修參考相片",
             },
             {
-              name: "九龍家居維修",
-              meta: "4.8 評分 · 明日可到",
-              amount: "HK$2,120",
+              title: "電力工程",
+              body: "燈掣、插蘇、配電箱，用清楚分類減少來回問答。",
+              image: electricalPhoto,
+              alt: "香港住宅配電箱參考相片",
+            },
+          ],
+          stats: [
+            {
+              label: "免費安排報價",
+              body: "先提交需求，再比較師傅回覆。",
+            },
+            {
+              label: "多位師傅可回覆",
+              body: "確認前比較價錢、最快時間、工程範圍。",
+            },
+            {
+              label: "報價資料清楚",
+              body: "人工、物料、上門費分開列明。",
             },
           ],
         };
 
   return (
-    <div className="relative overflow-hidden rounded-[40px] bg-[#10263b] p-5 text-white shadow-[0_30px_80px_rgba(16,37,58,0.24)] sm:p-6">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_22%_0%,_rgba(217,147,45,0.24),transparent_28%),radial-gradient(circle_at_100%_30%,_rgba(103,190,173,0.16),transparent_26%)]" />
-      <div className="relative grid gap-4">
-        <div className="rounded-[30px] border border-white/12 bg-white/8 p-5 backdrop-blur">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/54">
-                {copy.requestLabel}
-              </p>
-              <h3 className="mt-3 font-display text-3xl font-extrabold tracking-tight">
-                {copy.request}
+    <div className="relative overflow-hidden rounded-[28px] bg-surface-strong p-4 text-white shadow-[0_24px_54px_rgba(16,37,58,0.2)] sm:p-5 lg:rounded-[32px]">
+      <div className="grid gap-3 sm:grid-cols-2">
+        {copy.photoCards.map((card) => (
+          <figure
+            key={card.title}
+            className="relative min-h-[280px] overflow-hidden rounded-xl bg-surface-strong sm:min-h-[332px]"
+          >
+            <Image
+              src={card.image}
+              alt={card.alt}
+              fill
+              className="object-cover"
+              sizes="(min-width: 1024px) 280px, (min-width: 640px) 46vw, 92vw"
+              priority
+            />
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(16,37,58,0)_34%,rgba(16,37,58,0.78)_100%)]" />
+            <figcaption className="absolute inset-x-0 bottom-0 z-10 p-5">
+              <h3 className="font-display text-2xl font-extrabold tracking-normal">
+                {card.title}
               </h3>
-            </div>
-            <span className="rounded-full bg-[#f7d392]/18 px-3 py-1.5 text-xs font-semibold text-[#ffe1a7]">
-              ASAP
-            </span>
-          </div>
+              <p className="mt-2 max-w-[17rem] text-sm leading-6 text-white/84">
+                {card.body}
+              </p>
+            </figcaption>
+          </figure>
+        ))}
+      </div>
 
-          <div className="mt-6 grid gap-3 text-sm text-white/76 sm:grid-cols-3">
-            <div className="rounded-2xl bg-white/8 p-3">
-              <MapPinned className="mb-2 h-4 w-4 text-[#ffd79b]" />
-              {copy.district}
-            </div>
-            <div className="rounded-2xl bg-white/8 p-3">
-              <Clock3 className="mb-2 h-4 w-4 text-[#a8e2d4]" />
-              {copy.timing}
-            </div>
-            <div className="rounded-2xl bg-white/8 p-3">
-              <Camera className="mb-2 h-4 w-4 text-[#c4d4ff]" />
-              {copy.photos}
-            </div>
-          </div>
-
-          <div className="mt-4 flex items-center gap-2 rounded-2xl bg-white/8 px-4 py-3 text-sm text-white/70">
-            <ShieldCheck className="h-4 w-4 text-[#a8e2d4]" />
-            <span>{copy.address}</span>
-          </div>
-        </div>
-
-        <div className="grid gap-4">
-          <div className="rounded-[30px] bg-[#fff8ec] p-5 text-foreground">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary/68">
-              {copy.quotes}
+      <div className="mt-3 grid overflow-hidden rounded-xl border border-line/70 bg-paper-warm text-foreground shadow-[0_16px_34px_rgba(24,36,51,0.08)] sm:grid-cols-3">
+        {copy.stats.map((stat, index) => (
+          <div
+            key={stat.label}
+            className={`p-5 ${index > 0 ? "border-t border-line/70 sm:border-l sm:border-t-0" : ""}`}
+          >
+            <p className="font-display text-xl font-extrabold tracking-normal text-foreground">
+              {stat.label}
             </p>
-            <h4 className="mt-3 font-display text-2xl font-extrabold">
-              {copy.quoteCount}
-            </h4>
-            <p className="mt-3 text-sm leading-7 text-muted">{copy.compare}</p>
-
-            <div className="mt-5 grid gap-3">
-              {copy.pros.map((pro, index) => (
-                <div
-                  key={pro.name}
-                  className="rounded-2xl border border-line/70 bg-white/78 p-4"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-semibold">{pro.name}</p>
-                        {index === 0 ? (
-                          <BadgeCheck className="h-4 w-4 text-success" />
-                        ) : null}
-                      </div>
-                      <p className="mt-1 text-xs text-muted">{pro.meta}</p>
-                    </div>
-                    <p className="font-display text-xl font-extrabold">
-                      {pro.amount}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <p className="mt-2 text-sm leading-6 text-muted">{stat.body}</p>
           </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="rounded-[30px] border border-white/12 bg-white/8 p-5">
-              <div className="flex items-center gap-3">
-                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
-                  <Wrench className="h-5 w-5 text-[#ffd79b]" />
-                </span>
-                <div>
-                  <p className="font-semibold">{copy.response}</p>
-                  <p className="text-sm text-white/62">18 min</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-[30px] border border-white/12 bg-white/8 p-5">
-              <div className="flex items-center gap-3">
-                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
-                  <Star className="h-5 w-5 fill-[#ffd79b] text-[#ffd79b]" />
-                </span>
-                <div>
-                  <p className="font-semibold">{copy.verified}</p>
-                  <p className="text-sm text-white/62">
-                    {locale === "en"
-                      ? "Profile and service area checked"
-                      : "檔案及服務地區已檢查"}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        ))}
       </div>
     </div>
   );

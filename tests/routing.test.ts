@@ -11,22 +11,12 @@ describe("routing helpers", () => {
   it("keeps portal nav hrefs locale-free so next-intl can prefix them once", () => {
     expect(
       getCustomerNav("zh-HK", "dashboard").map((item) => item.href),
-    ).toEqual([
-      "/customer",
-      "/customer/requests/new",
-      "/customer/orders",
-      "/customer/calendar",
-      "/customer/messages",
-      "/customer/profile",
-    ]);
+    ).toEqual(["/customer", "/customer/requests/new", "/customer/orders"]);
 
     expect(getProNav("zh-HK", "dashboard").map((item) => item.href)).toEqual([
-      "/pro",
-      "/pro/profile",
+      "/pro/calendar",
       "/pro/leads",
       "/pro/jobs",
-      "/pro/calendar",
-      "/pro/earnings",
     ]);
 
     expect(getAdminNav("zh-HK", "dashboard").map((item) => item.href)).toEqual([
@@ -41,31 +31,28 @@ describe("routing helpers", () => {
 
   it("separates locale-free and localized role home paths", () => {
     expect(roleHomePath("customer")).toBe("/customer");
-    expect(roleHomePath("pro")).toBe("/pro");
+    expect(roleHomePath("pro")).toBe("/pro/calendar");
     expect(roleHomePath("admin")).toBe("/admin");
 
-    expect(localizedRoleHomePath("customer", "zh-HK")).toBe("/zh-HK/customer");
-    expect(localizedRoleHomePath("pro", "en")).toBe("/en/pro");
+    expect(localizedRoleHomePath("customer", "zh-HK")).toBe("/customer");
+    expect(localizedRoleHomePath("pro", "zh-HK")).toBe("/pro/calendar");
   });
 
   it("normalizes repeated locale segments", () => {
     expect(
       normalizeDuplicatedLocalePath("/zh-HK/zh-HK/customer/requests/new"),
     ).toBe("/zh-HK/customer/requests/new");
-    expect(normalizeDuplicatedLocalePath("/en/en/pro")).toBe("/en/pro");
-    expect(normalizeDuplicatedLocalePath("/zh-HK/en/customer")).toBe(
-      "/en/customer",
-    );
+    expect(normalizeDuplicatedLocalePath("/zh-HK/en/customer")).toBeNull();
     expect(normalizeDuplicatedLocalePath("/zh-HK/customer")).toBeNull();
   });
 
   it("rebuilds the current pathname for a new locale without duplication", () => {
-    expect(localizePathname("/zh-HK", "en")).toBe("/en");
-    expect(localizePathname("/en/customer/orders", "zh-HK")).toBe(
-      "/zh-HK/customer/orders",
+    expect(localizePathname("/zh-HK", "zh-HK")).toBe("/");
+    expect(localizePathname("/zh-HK/customer/orders", "zh-HK")).toBe(
+      "/customer/orders",
     );
     expect(localizePathname("/customer/orders", "zh-HK")).toBe(
-      "/zh-HK/customer/orders",
+      "/customer/orders",
     );
   });
 });

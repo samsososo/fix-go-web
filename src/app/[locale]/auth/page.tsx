@@ -1,4 +1,4 @@
-import { ArrowRight, BriefcaseBusiness, Building2, House } from "lucide-react";
+import { ArrowRight, BriefcaseBusiness, House } from "lucide-react";
 import type { Metadata } from "next";
 import { getLocale } from "next-intl/server";
 
@@ -26,12 +26,7 @@ export default async function AuthHubPage() {
           {
             icon: BriefcaseBusiness,
             title: "Professional",
-            body: "Complete your trade profile, review matched leads, send quotes, and update job progress.",
-          },
-          {
-            icon: Building2,
-            title: "Ops / Admin",
-            body: "Inspect customers, pros, requests, and quotes. Apply manual status updates when operations need to intervene.",
+            body: "Review open service requests, filter by category, send quotes, and update job progress.",
           },
         ]
       : [
@@ -43,12 +38,7 @@ export default async function AuthHubPage() {
           {
             icon: BriefcaseBusiness,
             title: "師傅",
-            body: "完善工種檔案、查看已配對工作機會、提交報價，並更新服務進度。",
-          },
-          {
-            icon: Building2,
-            title: "營運",
-            body: "檢視客戶、師傅、請求及報價，並於需要時作人手狀態調整。",
+            body: "查看所有開放服務需求、按分類篩選、提交報價，並更新服務進度。",
           },
         ];
 
@@ -63,13 +53,13 @@ export default async function AuthHubPage() {
             <div className="space-y-4">
               <h1 className="font-display text-4xl font-extrabold tracking-tight">
                 {locale === "en"
-                  ? "One platform, three role-based workspaces"
-                  : "同一平台，三個角色化工作台"}
+                  ? "One platform, two role-based workspaces"
+                  : "同一平台，兩個角色化工作台"}
               </h1>
               <p className="text-sm leading-7 text-white/72">
                 {locale === "en"
-                  ? "Choose the right route before you sign in. Customers, professionals, and operations share the same account system, but each role lands in a different workflow."
-                  : "登入前先了解正確入口。客戶、師傅與營運共用同一帳戶系統，但登入後會進入不同工作流程。"}
+                  ? "Choose the right route before you sign in. Customers and professionals share the same account system, then land in the workflow built for their role."
+                  : "登入前先了解正確入口。客戶與師傅共用同一帳戶系統，登入後會進入對應工作流程。"}
               </p>
             </div>
             <div className="space-y-3">
@@ -168,13 +158,8 @@ export default async function AuthHubPage() {
                 </p>
                 <p>
                   {locale === "en"
-                    ? "Professional accounts go to the lead, quote, and job workspace."
-                    : "師傅帳戶會進入工作機會、報價與工作管理工作台。"}
-                </p>
-                <p>
-                  {locale === "en"
-                    ? "Admin accounts remain internal and open the ops workspace directly."
-                    : "營運帳戶屬內部使用，會直接進入營運後台。"}
+                    ? "Professional accounts go to the open request, quote, and job workspace."
+                    : "師傅帳戶會進入開放需求、報價與工作管理工作台。"}
                 </p>
               </div>
             </div>

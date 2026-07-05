@@ -4,24 +4,24 @@ export function getMarketingContent(locale: Locale) {
   if (locale === "en") {
     return {
       hero: {
-        eyebrow: "Hong Kong home repair quotes, made clearer",
-        title: "Find the right pro for home repairs without endless calls.",
+        eyebrow: "Free quote arrangement for Hong Kong home repairs",
+        title: "Arrange free repair quotes, then compare before you confirm.",
         description:
-          "Post one clear request, add photos and a Hong Kong address, then compare structured quotes for plumbing, electrical, air conditioning, and minor renovation jobs.",
+          "Post the address and repair details once. Hotfix helps arrange structured quotes so you can compare price, timing, and scope before booking.",
       },
       valuePoints: [
-        "Clear briefs with photos, urgency, budget, and access notes",
+        "Free quote arrangement before you decide",
         "Quotes split by labour, parts, call-out fee, and availability",
-        "Customers and pros keep requests, quotes, and bookings in one workflow",
+        "Compare multiple pros without calling one by one",
       ],
       steps: [
         {
           title: "Tell us what needs fixing",
-          body: "Choose a trade, describe the issue, upload photos, and add a structured Hong Kong address.",
+          body: "Choose a trade, describe the issue, and add a structured Hong Kong address.",
         },
         {
-          title: "Relevant pros review the lead",
-          body: "Tradespeople see jobs that match their category and service districts before deciding whether to quote.",
+          title: "Pros review open leads",
+          body: "Tradespeople can browse open requests and use category filters before deciding whether to quote.",
         },
         {
           title: "Compare quotes before committing",
@@ -47,24 +47,24 @@ export function getMarketingContent(locale: Locale) {
 
   return {
     hero: {
-      eyebrow: "香港家居維修報價，清楚比較先決定",
-      title: "搵師傅唔使逐個問價，一次提交需求就可以比較報價。",
+      eyebrow: "免費安排香港家居維修報價",
+      title: "免費安排報價，先講清楚再比較。",
       description:
-        "Hotfix 幫香港住戶提交家居維修需求、上傳相片及地址，再集中比較水喉、電力、冷氣、裝修雜項等師傅報價。",
+        "一次提交地址及維修要求，Hotfix 幫你安排師傅報價。確認前先比較價錢、時間及工程範圍。",
     },
     valuePoints: [
-      "一次填好相片、預算、緊急程度及出入備註",
+      "免費安排報價，確認前不需付款",
       "報價拆分人工、物料、上門費及最早時間",
-      "客戶同師傅可在同一流程管理請求、報價及訂單",
+      "一次提交需求，集中比較多位師傅",
     ],
     steps: [
       {
         title: "講清楚要整咩",
-        body: "選擇工種、描述問題、上傳相片，並輸入完整香港地址及出入備註。",
+        body: "選擇工種、描述問題，並輸入完整香港地址及出入備註。",
       },
       {
-        title: "合適師傅查看工作機會",
-        body: "師傅按工種及服務地區看到相關需求，再決定是否提交報價。",
+        title: "師傅查看開放工作機會",
+        body: "師傅可瀏覽開放需求，並按分類篩選，再決定是否提交報價。",
       },
       {
         title: "比較清楚先確認",

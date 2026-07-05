@@ -3,21 +3,38 @@ import { getLocale } from "next-intl/server";
 import { EmptyState } from "@/components/shared/empty-state";
 import { PortalShell } from "@/components/shared/portal-shell";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Select } from "@/components/ui/select";
 import { getCurrentUser } from "@/lib/auth";
 import { formatUrgencyLabel } from "@/lib/formatters";
 import { formatDistrictName } from "@/lib/hk-locale";
-import { listRelevantLeads } from "@/lib/mock/repositories";
+import {
+  listCategoryOptions,
+  listRelevantLeads,
+} from "@/lib/mock/repositories";
 import { getProNav } from "@/lib/nav";
 
-export default async function ProLeadsPage() {
+export default async function ProLeadsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ category?: string }>;
+}) {
   const locale = await getLocale();
+  const { category } = await searchParams;
   const user = await getCurrentUser();
   if (!user) {
     return null;
   }
 
-  const leads = await listRelevantLeads(user.id);
+  const categoryOptions = await listCategoryOptions(locale as "zh-HK" | "en");
+  const activeCategory = categoryOptions.some((entry) => entry.id === category)
+    ? category
+    : "all";
+  const leads = await listRelevantLeads(
+    user.id,
+    activeCategory === "all" ? undefined : activeCategory,
+  );
 
   return (
     <PortalShell
@@ -25,19 +42,46 @@ export default async function ProLeadsPage() {
       title={locale === "en" ? "Job leads" : "工作機會"}
       subtitle={
         locale === "en"
-          ? "Open matched requests and submit a structured quote."
-          : "查看已配對的服務請求，並提交結構化報價。"
+          ? "Review open customer requests, filter by category, and submit a structured quote."
+          : "查看開放服務需求，可按分類篩選並提交結構化報價。"
       }
       navItems={getProNav(locale, "leads")}
     >
+      <form
+        action="/pro/leads"
+        className="mb-5 flex flex-col gap-3 rounded-2xl border border-line bg-card/90 p-4 sm:flex-row sm:items-end"
+      >
+        <div className="min-w-0 flex-1">
+          <label
+            htmlFor="lead-category-filter"
+            className="text-sm font-semibold text-muted"
+          >
+            {locale === "en" ? "Category filter" : "分類篩選"}
+          </label>
+          <Select
+            id="lead-category-filter"
+            name="category"
+            defaultValue={activeCategory}
+            className="mt-2"
+          >
+            <option value="all">
+              {locale === "en" ? "All categories" : "全部分類"}
+            </option>
+            {categoryOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <Button type="submit" className="sm:w-auto">
+          {locale === "en" ? "Apply" : "套用"}
+        </Button>
+      </form>
       <div className="grid gap-5">
         {leads.length ? (
           leads.map((lead) => (
-            <a
-              key={lead.id}
-              href={`/pro/leads/${lead.id}`}
-              className="block"
-            >
+            <a key={lead.id} href={`/pro/leads/${lead.id}`} className="block">
               <Card>
                 <CardContent className="space-y-4">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -89,8 +133,8 @@ export default async function ProLeadsPage() {
                       </p>
                       <p className="mt-2 text-muted">
                         {locale === "en"
-                          ? "Review attachments, scope, and send quote"
-                          : "查看附件、工作範圍及提交報價"}
+                          ? "Review scope and send quote"
+                          : "查看工作範圍及提交報價"}
                       </p>
                     </div>
                   </div>
@@ -103,13 +147,13 @@ export default async function ProLeadsPage() {
             locale={locale}
             title={
               locale === "en"
-                ? "No matched leads right now"
-                : "暫時未有配對工作機會"
+                ? "No open leads right now"
+                : "暫時未有開放工作機會"
             }
             description={
               locale === "en"
-                ? "As new requests match your trades and service areas, they will appear here automatically."
-                : "當新請求符合你的工種及服務地區時，系統會自動在此顯示。"
+                ? "Try another category or check back when new customer requests arrive."
+                : "可以改用其他分類，或稍後查看新的客戶需求。"
             }
           />
         )}

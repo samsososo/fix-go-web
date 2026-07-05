@@ -24,7 +24,7 @@ const pageSeo = {
     "/": {
       title: "Hotfix | 香港家居維修報價平台",
       description:
-        "Hotfix 幫香港住戶提交家居維修需求、比較師傅報價，涵蓋水喉、電力、冷氣、裝修雜項等服務，讓客戶與師傅在同一平台完成流程。",
+        "Hotfix 幫香港住戶免費安排家居維修報價，提交地址及需求後比較師傅報價，涵蓋水喉、電力、冷氣及裝修雜項。",
     },
     "/how-it-works": {
       title: "Hotfix 如何運作 | 由家居維修需求到確認報價",
@@ -39,7 +39,7 @@ const pageSeo = {
     "/become-a-pro": {
       title: "成為 Hotfix 師傅 | 接收香港家居維修工作機會",
       description:
-        "師傅可在 Hotfix 建立工種檔案、設定服務地區、查看合適工作機會，並向客戶提交清晰報價。",
+        "師傅可在 Hotfix 查看開放家居維修需求、按分類篩選工作機會，並向客戶提交清晰報價。",
     },
     "/faq": {
       title: "Hotfix 常見問題 | 家居維修報價與師傅驗證",
@@ -47,9 +47,8 @@ const pageSeo = {
         "了解 Hotfix 家居維修平台的報價、訂單狀態、師傅驗證、訊息中心及營運覆核安排。",
     },
     "/auth": {
-      title: "登入或註冊 Hotfix | 客戶、師傅及營運入口",
-      description:
-        "使用同一 Hotfix 帳戶系統，按身份進入客戶、師傅或營運工作台。",
+      title: "登入或註冊 Hotfix | 客戶及師傅入口",
+      description: "使用同一 Hotfix 帳戶系統，按身份進入客戶或師傅工作台。",
     },
     "/auth/login": {
       title: "登入 Hotfix | 香港家居服務平台",
@@ -58,7 +57,7 @@ const pageSeo = {
     "/auth/signup": {
       title: "註冊 Hotfix | 建立客戶或師傅帳戶",
       description:
-        "註冊 Hotfix，客戶可提交家居維修需求，師傅可設定工種及服務地區接收工作機會。",
+        "註冊 Hotfix，客戶可提交家居維修需求，師傅可查看開放需求並提交報價。",
     },
   },
 } satisfies Record<

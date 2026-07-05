@@ -48,13 +48,13 @@ export function LoginForm({ locale }: { locale: string }) {
         }
         hint={
           locale === "en"
-            ? "Example: amy@hotfix.hk or 91234567"
-            : "例如 amy@hotfix.hk 或 91234567"
+            ? "Example: name@example.com or 91234567"
+            : "例如 name@example.com 或 91234567"
         }
       >
         <Input
           {...form.register("identifier")}
-          placeholder="amy@hotfix.hk / 91234567"
+          placeholder="name@example.com / 91234567"
         />
       </Field>
       <Field

@@ -13,6 +13,7 @@ export const signupSchema = z
     phone: z.string().regex(hkPhoneRegex, "Invalid Hong Kong mobile number"),
     email: z.string().email().optional().or(z.literal("")),
     role: z.enum(["customer", "pro"]),
+    serviceCategoryIds: z.array(z.string()).default([]),
     locale: z.enum(["zh-HK"]),
     password: z
       .string()
@@ -22,6 +23,13 @@ export const signupSchema = z
       .regex(/\d/, "Must contain a number"),
     confirmPassword: z.string().min(10, "Confirm your password"),
   })
+  .refine(
+    (value) => value.role !== "pro" || value.serviceCategoryIds.length > 0,
+    {
+      message: "Select at least one specialty",
+      path: ["serviceCategoryIds"],
+    },
+  )
   .refine((value) => value.password === value.confirmPassword, {
     message: "Passwords do not match",
     path: ["confirmPassword"],
@@ -60,14 +68,15 @@ export const quoteFormSchema = z.object({
   includedWork: z.string().min(10),
   exclusions: z.string().min(5),
   earliestAvailability: z.string().min(1),
+  estimatedDurationMinutes: z.coerce.number().min(30).max(480),
   noteToCustomer: z.string().min(10),
 });
 
 export const proProfileSchema = z.object({
   displayName: z.string().min(2),
   yearsOfExperience: z.coerce.number().min(0).max(50),
-  serviceCategoryIds: z.array(z.string()).min(1),
-  serviceAreaDistricts: z.array(z.string()).min(1),
+  serviceCategoryIds: z.array(z.string()).default([]),
+  serviceAreaDistricts: z.array(z.string()).default([]),
   languagesSpoken: z.array(z.enum(["zh-HK", "en", "yue"])).min(1),
   introduction: z.string().min(30),
   emergencyAvailability: z.boolean(),

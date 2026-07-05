@@ -7,6 +7,7 @@ import { useForm, useWatch } from "react-hook-form";
 
 import { createRequestAction } from "@/lib/actions";
 import { useHydrated } from "@/hooks/use-hydrated";
+import { formatHongKongPhone } from "@/lib/formatters";
 import { formatAreaName, formatDistrictName } from "@/lib/hk-locale";
 import { type DistrictAreaSeed } from "@/types/domain";
 import {
@@ -23,11 +24,13 @@ import { Textarea } from "@/components/ui/textarea";
 export function RequestForm({
   locale,
   customerId,
+  customerPhone,
   categoryOptions,
   districts,
 }: {
   locale: string;
   customerId: string;
+  customerPhone: string;
   categoryOptions: {
     id: string;
     label: string;
@@ -100,6 +103,18 @@ export function RequestForm({
 
   return (
     <form className="space-y-5" onSubmit={form.handleSubmit(onSubmit)}>
+      <div className="rounded-2xl border border-line bg-soft-accent/45 p-4 text-sm">
+        <p className="font-semibold">
+          {locale === "en" ? "WhatsApp contact" : "WhatsApp 聯絡電話"}
+        </p>
+        <p className="mt-1 text-muted">
+          {formatHongKongPhone(customerPhone)} ·{" "}
+          {locale === "en"
+            ? "Pros can use this number to contact you about this request. Email is optional."
+            : "師傅可用此電話 WhatsApp 聯絡你跟進需求；電郵可留空。"}
+        </p>
+      </div>
+
       <div className="grid gap-5 md:grid-cols-2">
         <Field
           label={locale === "en" ? "Request title" : "請求標題"}
@@ -247,27 +262,6 @@ export function RequestForm({
           <Input {...form.register("budgetMax")} type="number" />
         </Field>
       </div>
-
-      <Field
-        label={locale === "en" ? "Upload photos" : "上傳相片"}
-        hint={
-          locale === "en"
-            ? "Files are currently captured as local file references during development."
-            : "開發版本現時會先以本地檔案名稱記錄上傳內容。"
-        }
-      >
-        <Input
-          type="file"
-          multiple
-          accept="image/*"
-          onChange={(event) => {
-            const names = Array.from(event.target.files ?? []).map(
-              (file) => file.name,
-            );
-            form.setValue("attachmentNames", names);
-          }}
-        />
-      </Field>
 
       {serverError ? (
         <p className="text-sm text-danger">{serverError}</p>

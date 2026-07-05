@@ -2,7 +2,7 @@ export function getCustomerNav(locale: string, current: string) {
   return [
     {
       href: "/customer",
-      label: locale === "en" ? "Dashboard" : "主頁",
+      label: locale === "en" ? "My requests" : "我的請求",
       active: current === "dashboard",
     },
     {
@@ -15,35 +15,15 @@ export function getCustomerNav(locale: string, current: string) {
       label: locale === "en" ? "Orders" : "訂單",
       active: current === "orders",
     },
-    {
-      href: "/customer/calendar",
-      label: locale === "en" ? "Calendar" : "日程",
-      active: current === "calendar",
-    },
-    {
-      href: "/customer/messages",
-      label: locale === "en" ? "Messages" : "訊息中心",
-      active: current === "messages",
-    },
-    {
-      href: "/customer/profile",
-      label: locale === "en" ? "Profile" : "個人資料",
-      active: current === "profile",
-    },
   ];
 }
 
 export function getProNav(locale: string, current: string) {
   return [
     {
-      href: "/pro",
-      label: locale === "en" ? "Dashboard" : "主頁",
-      active: current === "dashboard",
-    },
-    {
-      href: "/pro/profile",
-      label: locale === "en" ? "Profile" : "檔案",
-      active: current === "profile",
+      href: "/pro/calendar",
+      label: locale === "en" ? "Schedule" : "日程",
+      active: current === "calendar",
     },
     {
       href: "/pro/leads",
@@ -54,16 +34,6 @@ export function getProNav(locale: string, current: string) {
       href: "/pro/jobs",
       label: locale === "en" ? "Jobs" : "已接訂單",
       active: current === "jobs",
-    },
-    {
-      href: "/pro/calendar",
-      label: locale === "en" ? "Calendar" : "日程",
-      active: current === "calendar",
-    },
-    {
-      href: "/pro/earnings",
-      label: locale === "en" ? "Earnings" : "收入",
-      active: current === "earnings",
     },
   ];
 }

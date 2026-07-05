@@ -250,10 +250,6 @@ function applyDataPatches(db: SqliteDatabase) {
     .prepare("SELECT value FROM meta WHERE key = 'demo_calendar_seed_v1'")
     .get() as { value?: string } | undefined;
 
-  if (calendarPatch?.value === "1") {
-    return;
-  }
-
   const seed = createSeedDb();
   const seedRequest = seed.requests.find((request) => request.id === "req_1");
   const seedQuote = seed.quotes.find((quote) => quote.id === "quote_1");
@@ -268,55 +264,94 @@ function applyDataPatches(db: SqliteDatabase) {
     return;
   }
 
-  runInTransaction(db, () => {
-    const requestExists = db
-      .prepare("SELECT id FROM requests WHERE id = ? LIMIT 1")
-      .get(seedRequest.id);
-    const quoteExists = db
-      .prepare("SELECT id FROM quotes WHERE id = ? LIMIT 1")
-      .get(seedQuote.id);
-    const bookingExists = db
-      .prepare("SELECT id FROM bookings WHERE id = ? LIMIT 1")
-      .get(seedBooking.id);
+  if (calendarPatch?.value !== "1") {
+    runInTransaction(db, () => {
+      const requestExists = db
+        .prepare("SELECT id FROM requests WHERE id = ? LIMIT 1")
+        .get(seedRequest.id);
+      const quoteExists = db
+        .prepare("SELECT id FROM quotes WHERE id = ? LIMIT 1")
+        .get(seedQuote.id);
+      const bookingExists = db
+        .prepare("SELECT id FROM bookings WHERE id = ? LIMIT 1")
+        .get(seedBooking.id);
 
-    if (requestExists && quoteExists && !bookingExists) {
+      if (requestExists && quoteExists && !bookingExists) {
+        db.prepare(
+          "UPDATE requests SET status = ?, payload = ? WHERE id = ?",
+        ).run(seedRequest.status, JSON.stringify(seedRequest), seedRequest.id);
+        db.prepare(
+          "UPDATE quotes SET status = ?, payload = ? WHERE id = ?",
+        ).run(seedQuote.status, JSON.stringify(seedQuote), seedQuote.id);
+        db.prepare(
+          `
+            INSERT INTO bookings (id, request_id, quote_id, pro_id, customer_id, status, payload)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `,
+        ).run(
+          seedBooking.id,
+          seedBooking.requestId,
+          seedBooking.quoteId,
+          seedBooking.proId,
+          seedBooking.customerId,
+          seedBooking.status,
+          JSON.stringify(seedBooking),
+        );
+        db.prepare(
+          `
+            INSERT OR IGNORE INTO booking_status_events (id, booking_id, status, payload)
+            VALUES (?, ?, ?, ?)
+          `,
+        ).run(
+          seedEvent.id,
+          seedEvent.bookingId,
+          seedEvent.status,
+          JSON.stringify(seedEvent),
+        );
+      }
+
       db.prepare(
-        "UPDATE requests SET status = ?, payload = ? WHERE id = ?",
-      ).run(seedRequest.status, JSON.stringify(seedRequest), seedRequest.id);
-      db.prepare("UPDATE quotes SET status = ?, payload = ? WHERE id = ?").run(
-        seedQuote.status,
-        JSON.stringify(seedQuote),
+        "INSERT OR REPLACE INTO meta (key, value) VALUES ('demo_calendar_seed_v1', '1')",
+      ).run();
+    });
+  }
+
+  const durationPatch = db
+    .prepare("SELECT value FROM meta WHERE key = 'demo_duration_seed_v1'")
+    .get() as { value?: string } | undefined;
+
+  if (durationPatch?.value === "1") {
+    return;
+  }
+
+  runInTransaction(db, () => {
+    const quoteRow = db
+      .prepare("SELECT payload FROM quotes WHERE id = ? LIMIT 1")
+      .get(seedQuote.id) as { payload?: string } | undefined;
+    const bookingRow = db
+      .prepare("SELECT payload FROM bookings WHERE id = ? LIMIT 1")
+      .get(seedBooking.id) as { payload?: string } | undefined;
+
+    if (quoteRow?.payload) {
+      const quote = JSON.parse(quoteRow.payload);
+      quote.estimatedDurationMinutes = seedQuote.estimatedDurationMinutes;
+      db.prepare("UPDATE quotes SET payload = ? WHERE id = ?").run(
+        JSON.stringify(quote),
         seedQuote.id,
       );
-      db.prepare(
-        `
-          INSERT INTO bookings (id, request_id, quote_id, pro_id, customer_id, status, payload)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-        `,
-      ).run(
+    }
+
+    if (bookingRow?.payload) {
+      const booking = JSON.parse(bookingRow.payload);
+      booking.estimatedDurationMinutes = seedBooking.estimatedDurationMinutes;
+      db.prepare("UPDATE bookings SET payload = ? WHERE id = ?").run(
+        JSON.stringify(booking),
         seedBooking.id,
-        seedBooking.requestId,
-        seedBooking.quoteId,
-        seedBooking.proId,
-        seedBooking.customerId,
-        seedBooking.status,
-        JSON.stringify(seedBooking),
-      );
-      db.prepare(
-        `
-          INSERT OR IGNORE INTO booking_status_events (id, booking_id, status, payload)
-          VALUES (?, ?, ?, ?)
-        `,
-      ).run(
-        seedEvent.id,
-        seedEvent.bookingId,
-        seedEvent.status,
-        JSON.stringify(seedEvent),
       );
     }
 
     db.prepare(
-      "INSERT OR REPLACE INTO meta (key, value) VALUES ('demo_calendar_seed_v1', '1')",
+      "INSERT OR REPLACE INTO meta (key, value) VALUES ('demo_duration_seed_v1', '1')",
     ).run();
   });
 }

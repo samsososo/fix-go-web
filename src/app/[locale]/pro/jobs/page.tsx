@@ -5,7 +5,7 @@ import { PortalShell } from "@/components/shared/portal-shell";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/auth";
-import { formatDateTime } from "@/lib/formatters";
+import { formatDateTime, formatDurationMinutes } from "@/lib/formatters";
 import { formatDistrictName } from "@/lib/hk-locale";
 import { listProJobs } from "@/lib/mock/repositories";
 import { getProNav } from "@/lib/nav";
@@ -34,11 +34,7 @@ export default async function ProJobsPage() {
       <div className="grid gap-5">
         {jobs.length ? (
           jobs.map((job) => (
-            <a
-              key={job.id}
-              href={`/pro/jobs/${job.id}`}
-              className="block"
-            >
+            <a key={job.id} href={`/pro/jobs/${job.id}`} className="block">
               <Card>
                 <CardContent className="space-y-4">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -81,12 +77,14 @@ export default async function ProJobsPage() {
                     </div>
                     <div className="rounded-2xl bg-soft-accent/45 p-4 text-sm">
                       <p className="font-semibold">
-                        {locale === "en" ? "Next step" : "下一步"}
+                        {locale === "en" ? "Estimated duration" : "預計需時"}
                       </p>
                       <p className="mt-2 text-muted">
-                        {locale === "en"
-                          ? "Open the job to update service progress"
-                          : "打開訂單以更新服務進度"}
+                        {formatDurationMinutes(
+                          job.estimatedDurationMinutes ??
+                            job.quote?.estimatedDurationMinutes,
+                          locale,
+                        )}
                       </p>
                     </div>
                   </div>

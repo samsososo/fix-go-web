@@ -6,12 +6,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ProProfileForm } from "@/features/pro/pro-profile-form";
 import { getCurrentUser } from "@/lib/auth";
-import { formatDistrictList } from "@/lib/hk-locale";
-import {
-  listCategoryOptions,
-  listDistricts,
-  getProProfile,
-} from "@/lib/mock/repositories";
+import { getProProfile } from "@/lib/mock/repositories";
 import { getProNav } from "@/lib/nav";
 
 export default async function ProProfilePage() {
@@ -21,11 +16,7 @@ export default async function ProProfilePage() {
     return null;
   }
 
-  const [profile, categoryOptions, districts] = await Promise.all([
-    getProProfile(user.id),
-    listCategoryOptions(locale as "zh-HK" | "en"),
-    listDistricts(),
-  ]);
+  const profile = await getProProfile(user.id);
 
   return (
     <PortalShell
@@ -33,8 +24,8 @@ export default async function ProProfilePage() {
       title={locale === "en" ? "Complete your pro profile" : "完善師傅檔案"}
       subtitle={
         locale === "en"
-          ? "This profile controls lead relevance and future trust indicators."
-          : "此檔案直接影響工作機會配對及信任訊號。"
+          ? "Keep your business details clear so customers can understand who is quoting."
+          : "保持師傅資料清楚，方便客戶了解報價由誰提供。"
       }
       navItems={getProNav(locale, "profile")}
     >
@@ -54,17 +45,25 @@ export default async function ProProfilePage() {
           hint={locale === "en" ? "Lead response speed" : "回應工作機會的速度"}
         />
         <StatCard
-          label={locale === "en" ? "Service districts" : "服務地區"}
-          value={profile.serviceAreaDistricts.length}
+          label={locale === "en" ? "Emergency jobs" : "緊急工作"}
+          value={
+            profile.emergencyAvailability
+              ? locale === "en"
+                ? "Yes"
+                : "可接"
+              : locale === "en"
+                ? "No"
+                : "暫不接"
+          }
           hint={
             locale === "en"
-              ? "Districts currently covered"
-              : "現時已覆蓋地區數量"
+              ? "Shown as an availability signal"
+              : "作為可接工作訊號"
           }
         />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
+      <div className="mt-8 grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
         <Card>
           <CardContent className="space-y-4">
             <h2 className="font-display text-2xl font-bold">
@@ -83,18 +82,6 @@ export default async function ProProfilePage() {
               {profile.introduction ||
                 (locale === "en" ? "No introduction yet." : "尚未填寫介紹。")}
             </p>
-            <div className="grid gap-3 text-sm text-muted">
-              <div className="rounded-2xl bg-soft-accent/45 p-4">
-                {locale === "en" ? "Categories" : "服務分類"}:{" "}
-                {profile.serviceCategoryIds.join(", ") || "-"}
-              </div>
-              <div className="rounded-2xl bg-soft-accent/45 p-4">
-                {locale === "en" ? "Districts" : "服務地區"}:{" "}
-                {formatDistrictList(profile.serviceAreaDistricts, locale).join(
-                  ", ",
-                ) || "-"}
-              </div>
-            </div>
           </CardContent>
         </Card>
         <Card>
@@ -103,11 +90,6 @@ export default async function ProProfilePage() {
               locale={locale}
               userId={user.id}
               profile={profile}
-              categoryOptions={categoryOptions.map((item) => ({
-                id: item.id,
-                label: item.label,
-              }))}
-              districts={districts}
             />
           </CardContent>
         </Card>

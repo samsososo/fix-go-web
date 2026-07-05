@@ -84,7 +84,7 @@ export async function SiteHeader({
                   locale={locale}
                   className={buttonVariants({ size: "sm" })}
                 >
-                  {t("nav.signup")}
+                  {locale === "en" ? "Free quote" : "免費安排報價"}
                 </Link>
               </>
             )}
@@ -139,7 +139,7 @@ export async function SiteHeader({
                         locale={locale}
                         className={`${buttonVariants({ size: "sm" })} w-full`}
                       >
-                        {t("nav.signup")}
+                        {locale === "en" ? "Free quote" : "免費安排報價"}
                       </Link>
                     </div>
                   )}

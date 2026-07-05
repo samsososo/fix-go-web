@@ -1,13 +1,9 @@
 import type { Metadata } from "next";
 import { getLocale } from "next-intl/server";
-import { redirect } from "next/navigation";
 
 import { Link } from "@/i18n/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { LoginForm } from "@/features/auth/login-form";
-import { signInDemoAction } from "@/lib/actions";
-import { enableDemoLogin, env } from "@/lib/env";
-import { listDemoUsers } from "@/lib/mock/repositories";
 import { createPageMetadata } from "@/lib/seo";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -17,7 +13,6 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function LoginPage() {
   const locale = await getLocale();
-  const demoUsers = enableDemoLogin ? await listDemoUsers() : [];
   const leftPanelPoints =
     locale === "en"
       ? [
@@ -84,48 +79,6 @@ export default async function LoginPage() {
               </p>
             </div>
             <LoginForm locale={locale} />
-            {enableDemoLogin ? (
-              <div className="space-y-3 border-t border-line pt-5">
-                <p className="text-sm font-semibold">
-                  {locale === "en" ? "Local quick access" : "本地快速登入"}
-                </p>
-                <p className="text-xs text-muted">
-                  {locale === "en"
-                    ? `Bootstrap local password: ${env.DEMO_PASSWORD}`
-                    : `Bootstrap 本地密碼：${env.DEMO_PASSWORD}`}
-                </p>
-                <div className="grid gap-3 md:grid-cols-2">
-                  {demoUsers.map((user) => (
-                    <form
-                      key={user.id}
-                      action={async () => {
-                        "use server";
-                        const result = await signInDemoAction({
-                          userId: user.id,
-                          locale,
-                        });
-                        if (!result.ok) {
-                          redirect(`/auth/login`);
-                        }
-                        redirect(result.target ?? `/auth/login`);
-                      }}
-                      className="rounded-2xl border border-line bg-white p-4"
-                    >
-                      <p className="font-semibold">{user.fullName}</p>
-                      <p className="text-xs text-muted">
-                        {user.role} · {user.email ?? user.phone}
-                      </p>
-                      <button
-                        className="mt-3 text-sm font-semibold text-primary"
-                        type="submit"
-                      >
-                        {locale === "en" ? "Sign in locally" : "以本地帳戶登入"}
-                      </button>
-                    </form>
-                  ))}
-                </div>
-              </div>
-            ) : null}
           </CardContent>
         </Card>
       </div>

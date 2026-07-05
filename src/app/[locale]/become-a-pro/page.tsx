@@ -15,13 +15,13 @@ export default async function BecomeAProPage() {
   const bullets =
     locale === "en"
       ? [
-          "Show customers your trade categories, service districts, and experience",
-          "Review matched jobs before spending time on a quote",
+          "Show customers your experience, availability, and business profile",
+          "Review open jobs and filter by category before quoting",
           "Send clearer quotes with labour, parts, call-out fee, timing, and scope",
         ]
       : [
-          "展示你的工種、服務地區及經驗",
-          "先查看合適工作機會，再決定是否報價",
+          "展示你的經驗、可接工作狀態及商業資料",
+          "先查看開放工作機會，再按分類篩選是否報價",
           "提交更清楚的報價，包括人工、物料、上門費、時間及工程範圍",
         ];
 
@@ -39,8 +39,8 @@ export default async function BecomeAProPage() {
           </h1>
           <p className="text-lg leading-8 text-muted">
             {locale === "en"
-              ? "Hotfix helps tradespeople spend less time chasing vague enquiries and more time quoting jobs that match their trade and service area."
-              : "Hotfix 幫師傅減少處理模糊查詢，把時間集中在符合工種及服務地區的工作機會。"}
+              ? "Hotfix helps tradespeople spend less time chasing vague enquiries and more time quoting clear customer requests."
+              : "Hotfix 幫師傅減少處理模糊查詢，把時間集中在清楚列明的客戶需求。"}
           </p>
           <ul className="space-y-3 text-sm text-muted">
             {bullets.map((bullet) => (
@@ -63,8 +63,8 @@ export default async function BecomeAProPage() {
             <ul className="space-y-4 text-sm text-white/80">
               <li>
                 {locale === "en"
-                  ? "Profile completion and service area setup"
-                  : "完善個人檔案及設定服務地區"}
+                  ? "Business profile and availability setup"
+                  : "完善個人檔案及可接工作狀態"}
               </li>
               <li>
                 {locale === "en"

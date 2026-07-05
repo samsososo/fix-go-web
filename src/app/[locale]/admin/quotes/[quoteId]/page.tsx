@@ -5,7 +5,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { PortalShell } from "@/components/shared/portal-shell";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatDateTime } from "@/lib/formatters";
+import { formatDateTime, formatDurationMinutes } from "@/lib/formatters";
 import { getAdminNav } from "@/lib/nav";
 import { getAdminQuoteDetail } from "@/lib/mock/repositories";
 import { formatCurrency } from "@/lib/utils";
@@ -53,6 +53,17 @@ export default async function AdminQuoteDetailPage({
                 </p>
                 <p className="mt-2 text-muted">
                   {formatDateTime(detail.earliestAvailability, locale)}
+                </p>
+              </div>
+              <div className="rounded-2xl bg-soft-accent/45 p-4 text-sm md:col-span-2">
+                <p className="font-semibold">
+                  {locale === "en" ? "Estimated duration" : "預計需時"}
+                </p>
+                <p className="mt-2 text-muted">
+                  {formatDurationMinutes(
+                    detail.estimatedDurationMinutes,
+                    locale,
+                  )}
                 </p>
               </div>
             </div>

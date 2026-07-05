@@ -5,6 +5,7 @@ import { getLocale } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { SignupForm } from "@/features/auth/signup-form";
+import { listCategoryOptions } from "@/lib/mock/repositories";
 import { createPageMetadata } from "@/lib/seo";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -14,17 +15,16 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function SignupPage() {
   const locale = await getLocale();
+  const categoryOptions = await listCategoryOptions(locale as "zh-HK" | "en");
   const rolePoints =
     locale === "en"
       ? [
           "Customers submit repair requests and compare quotes.",
-          "Pros set trades, districts, and availability before quoting.",
-          "Ops accounts are managed internally for support and review.",
+          "Pros choose specialties, review matching requests, and quote when ready.",
         ]
       : [
           "客戶可以提交維修需求，集中比較報價。",
-          "師傅可以設定工種、地區及可上門時間，再提交報價。",
-          "營運帳戶由內部管理，用作支援及覆核。",
+          "師傅可選擇專長，查看合適需求，再決定是否報價。",
         ];
 
   return (
@@ -77,8 +77,8 @@ export default async function SignupPage() {
               </h2>
               <p className="mt-2 text-sm text-muted">
                 {locale === "en"
-                  ? "Public signup is available for customer and professional roles. Admin access remains internal."
-                  : "公開註冊現時支援客戶與師傅身份，營運帳戶仍然由內部管理。"}
+                  ? "Public signup is available for customer and professional roles."
+                  : "公開註冊現時支援客戶與師傅身份。"}
               </p>
               <p className="mt-2 text-sm text-muted">
                 <Link
@@ -90,7 +90,7 @@ export default async function SignupPage() {
                 </Link>
               </p>
             </div>
-            <SignupForm locale={locale} />
+            <SignupForm locale={locale} categoryOptions={categoryOptions} />
           </CardContent>
         </Card>
       </div>

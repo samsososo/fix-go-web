@@ -3,9 +3,15 @@ import { redirect } from "next/navigation";
 
 import { PortalShell } from "@/components/shared/portal-shell";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { WhatsAppContactLink } from "@/components/shared/whatsapp-contact-link";
 import { Card, CardContent } from "@/components/ui/card";
 import { QuoteForm } from "@/features/pro/quote-form";
 import { getCurrentUser } from "@/lib/auth";
+import {
+  formatDateTime,
+  formatDurationMinutes,
+  formatHongKongPhone,
+} from "@/lib/formatters";
 import { formatDistrictName } from "@/lib/hk-locale";
 import { getLeadDetail } from "@/lib/mock/repositories";
 import { getProNav } from "@/lib/nav";
@@ -48,6 +54,14 @@ export default async function ProLeadDetailPage({
                   {locale === "en" ? "Customer" : "客戶"}
                 </p>
                 <p className="mt-2 text-muted">{lead.customer.fullName}</p>
+                <p className="mt-1 text-muted">
+                  {formatHongKongPhone(lead.customer.phone)}
+                </p>
+                <WhatsAppContactLink
+                  phone={lead.customer.phone}
+                  locale={locale}
+                  className="mt-3"
+                />
               </div>
               <div className="rounded-2xl bg-soft-accent/45 p-4 text-sm">
                 <p className="font-semibold">
@@ -57,16 +71,6 @@ export default async function ProLeadDetailPage({
                   {formatDistrictName(lead.address.district, locale)}
                 </p>
               </div>
-            </div>
-            <div className="rounded-2xl border border-line bg-white p-4 text-sm text-muted">
-              <p className="font-semibold text-foreground">
-                {locale === "en" ? "Attachments" : "附件"}
-              </p>
-              <ul className="mt-2 space-y-1">
-                {lead.attachments.map((attachment) => (
-                  <li key={attachment.id}>{attachment.fileName}</li>
-                ))}
-              </ul>
             </div>
           </CardContent>
         </Card>
@@ -98,7 +102,18 @@ export default async function ProLeadDetailPage({
                       {locale === "en"
                         ? "Earliest availability"
                         : "最早可上門時間"}
-                      : {lead.existingQuote.earliestAvailability || "-"}
+                      :{" "}
+                      {formatDateTime(
+                        lead.existingQuote.earliestAvailability,
+                        locale,
+                      )}
+                    </p>
+                    <p>
+                      {locale === "en" ? "Estimated duration" : "預計需時"}:{" "}
+                      {formatDurationMinutes(
+                        lead.existingQuote.estimatedDurationMinutes,
+                        locale,
+                      )}
                     </p>
                   </div>
                 </div>

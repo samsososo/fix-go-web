@@ -5,7 +5,11 @@ import { PortalShell } from "@/components/shared/portal-shell";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/auth";
-import { formatDateTime, formatStatusLabel } from "@/lib/formatters";
+import {
+  formatDateTime,
+  formatDurationMinutes,
+  formatStatusLabel,
+} from "@/lib/formatters";
 import { formatAreaName, formatDistrictName } from "@/lib/hk-locale";
 import { getCustomerBookingDetail } from "@/lib/mock/repositories";
 import { getCustomerNav } from "@/lib/nav";
@@ -61,12 +65,24 @@ export default async function CustomerBookingDetailPage({
               </div>
               <div className="rounded-2xl bg-soft-accent/45 p-4 text-sm">
                 <p className="font-semibold">
-                  {locale === "en" ? "Scheduled date" : "預約時間"}
+                  {locale === "en" ? "Estimated duration" : "預計需時"}
                 </p>
                 <p className="mt-2 text-muted">
-                  {formatDateTime(booking.scheduledDate, locale)}
+                  {formatDurationMinutes(
+                    booking.estimatedDurationMinutes ??
+                      booking.quote?.estimatedDurationMinutes,
+                    locale,
+                  )}
                 </p>
               </div>
+            </div>
+            <div className="rounded-2xl bg-soft-accent/45 p-4 text-sm">
+              <p className="font-semibold">
+                {locale === "en" ? "Scheduled date" : "預約時間"}
+              </p>
+              <p className="mt-2 text-muted">
+                {formatDateTime(booking.scheduledDate, locale)}
+              </p>
             </div>
             <div className="rounded-2xl border border-line bg-white p-4 text-sm text-muted">
               <p className="font-semibold text-foreground">
