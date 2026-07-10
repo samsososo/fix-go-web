@@ -14,8 +14,9 @@ describe("routing helpers", () => {
     ).toEqual(["/customer", "/customer/requests/new", "/customer/orders"]);
 
     expect(getProNav("zh-HK", "dashboard").map((item) => item.href)).toEqual([
-      "/pro/calendar",
+      "/pro",
       "/pro/leads",
+      "/pro/calendar",
       "/pro/jobs",
     ]);
 
@@ -31,11 +32,11 @@ describe("routing helpers", () => {
 
   it("separates locale-free and localized role home paths", () => {
     expect(roleHomePath("customer")).toBe("/customer");
-    expect(roleHomePath("pro")).toBe("/pro/calendar");
+    expect(roleHomePath("pro")).toBe("/pro");
     expect(roleHomePath("admin")).toBe("/admin");
 
     expect(localizedRoleHomePath("customer", "zh-HK")).toBe("/customer");
-    expect(localizedRoleHomePath("pro", "zh-HK")).toBe("/pro/calendar");
+    expect(localizedRoleHomePath("pro", "zh-HK")).toBe("/pro");
   });
 
   it("normalizes repeated locale segments", () => {

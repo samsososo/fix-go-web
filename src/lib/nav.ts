@@ -18,17 +18,27 @@ export function getCustomerNav(locale: string, current: string) {
   ];
 }
 
-export function getProNav(locale: string, current: string) {
+export function getProNav(locale: string, current: string, leadCount?: number) {
+  const leadLabel =
+    locale === "en"
+      ? `Leads${leadCount && leadCount > 0 ? ` · ${leadCount}` : ""}`
+      : `工作機會${leadCount && leadCount > 0 ? ` · ${leadCount}` : ""}`;
+
   return [
+    {
+      href: "/pro",
+      label: locale === "en" ? "Overview" : "總覽",
+      active: current === "dashboard",
+    },
+    {
+      href: "/pro/leads",
+      label: leadLabel,
+      active: current === "leads",
+    },
     {
       href: "/pro/calendar",
       label: locale === "en" ? "Schedule" : "日程",
       active: current === "calendar",
-    },
-    {
-      href: "/pro/leads",
-      label: locale === "en" ? "Leads" : "工作機會",
-      active: current === "leads",
     },
     {
       href: "/pro/jobs",

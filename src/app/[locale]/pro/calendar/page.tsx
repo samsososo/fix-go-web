@@ -68,7 +68,7 @@ export default async function ProCalendarPage({
             className={cn(
               "rounded-md px-4 py-2 text-sm font-semibold transition",
               view === option
-                ? "bg-primary text-primary-foreground"
+                ? "bg-primary !text-white"
                 : "text-muted hover:bg-surface-tint hover:text-primary",
             )}
           >

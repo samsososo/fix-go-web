@@ -173,7 +173,7 @@ export function BookingCalendar({
   return (
     <div className="space-y-6">
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="overflow-hidden bg-primary text-primary-foreground">
+        <Card className="overflow-hidden bg-primary text-white">
           <CardContent className="space-y-4">
             <Badge className="bg-white/16 text-white" variant="muted">
               {perspectiveLabel}

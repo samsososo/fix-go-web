@@ -1,11 +1,26 @@
-import { Menu } from "lucide-react";
+import { BriefcaseBusiness, CalendarDays, Menu } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 
 import { roleHomePath } from "@/lib/auth";
 import { Link } from "@/i18n/navigation";
 import { LocaleSwitcher } from "@/components/shared/locale-switcher";
+import { MobileMenuDetails } from "@/components/shared/mobile-menu-details";
 import { buttonVariants } from "@/components/ui/button";
+import { listRelevantLeads } from "@/lib/mock/repositories";
 import { User } from "@/types/domain";
+
+async function getProOpenLeadCount(user: User | null) {
+  if (user?.role !== "pro") {
+    return null;
+  }
+
+  try {
+    const leads = await listRelevantLeads(user.id);
+    return leads.filter((lead) => !lead.existingQuote).length;
+  } catch {
+    return null;
+  }
+}
 
 export async function SiteHeader({
   locale,
@@ -15,6 +30,11 @@ export async function SiteHeader({
   user: User | null;
 }) {
   const t = await getTranslations("common");
+  const proOpenLeadCount = await getProOpenLeadCount(user);
+  const proLeadLabel =
+    locale === "en"
+      ? `Job leads${proOpenLeadCount && proOpenLeadCount > 0 ? ` · ${proOpenLeadCount}` : ""}`
+      : `工作機會${proOpenLeadCount && proOpenLeadCount > 0 ? ` · ${proOpenLeadCount}` : ""}`;
 
   const navItems = [
     { href: "/", label: t("nav.home") },
@@ -58,17 +78,35 @@ export async function SiteHeader({
         <div className="flex items-center gap-3">
           <div className="hidden items-center gap-3 lg:flex">
             <LocaleSwitcher />
-            {user ? (
+            {user?.role === "pro" ? (
+              <>
+                <Link
+                  href="/pro/leads"
+                  locale={locale}
+                  className={buttonVariants({ size: "sm" })}
+                >
+                  <BriefcaseBusiness className="h-4 w-4" />
+                  {proLeadLabel}
+                </Link>
+                <Link
+                  href="/pro/calendar"
+                  locale={locale}
+                  className={buttonVariants({
+                    variant: "outline",
+                    size: "sm",
+                  })}
+                >
+                  <CalendarDays className="h-4 w-4" />
+                  {locale === "en" ? "Schedule" : "日程"}
+                </Link>
+              </>
+            ) : user ? (
               <Link
                 href={roleHomePath(user.role)}
                 locale={locale}
                 className={buttonVariants({ variant: "outline", size: "sm" })}
               >
-                {user.role === "customer"
-                  ? t("nav.customer")
-                  : user.role === "pro"
-                    ? t("nav.pro")
-                    : t("nav.admin")}
+                {user.role === "customer" ? t("nav.customer") : t("nav.admin")}
               </Link>
             ) : (
               <>
@@ -90,7 +128,7 @@ export async function SiteHeader({
             )}
           </div>
 
-          <details className="group relative lg:hidden [&_summary::-webkit-details-marker]:hidden">
+          <MobileMenuDetails className="group relative lg:hidden [&_summary::-webkit-details-marker]:hidden">
             <summary className="flex cursor-pointer list-none items-center justify-center rounded-full border border-white bg-card/90 p-3 text-foreground shadow-[0_10px_20px_rgba(24,36,51,0.05)] transition hover:border-primary/25 hover:text-primary">
               <span className="sr-only">
                 {locale === "en" ? "Open menu" : "開啟選單"}
@@ -113,7 +151,26 @@ export async function SiteHeader({
                   </Link>
                 ))}
                 <div className="mt-2 border-t border-line pt-3">
-                  {user ? (
+                  {user?.role === "pro" ? (
+                    <div className="space-y-2">
+                      <Link
+                        href="/pro/leads"
+                        locale={locale}
+                        className={`${buttonVariants({ size: "sm" })} w-full`}
+                      >
+                        <BriefcaseBusiness className="h-4 w-4" />
+                        {proLeadLabel}
+                      </Link>
+                      <Link
+                        href="/pro/calendar"
+                        locale={locale}
+                        className={`${buttonVariants({ variant: "outline", size: "sm" })} w-full`}
+                      >
+                        <CalendarDays className="h-4 w-4" />
+                        {locale === "en" ? "Schedule" : "日程"}
+                      </Link>
+                    </div>
+                  ) : user ? (
                     <Link
                       href={roleHomePath(user.role)}
                       locale={locale}
@@ -121,9 +178,7 @@ export async function SiteHeader({
                     >
                       {user.role === "customer"
                         ? t("nav.customer")
-                        : user.role === "pro"
-                          ? t("nav.pro")
-                          : t("nav.admin")}
+                        : t("nav.admin")}
                     </Link>
                   ) : (
                     <div className="space-y-2">
@@ -146,7 +201,7 @@ export async function SiteHeader({
                 </div>
               </div>
             </div>
-          </details>
+          </MobileMenuDetails>
         </div>
       </div>
     </header>

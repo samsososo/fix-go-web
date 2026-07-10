@@ -99,7 +99,7 @@ export async function requireRole(
 export function roleHomePath(role: UserRole) {
   return {
     customer: "/customer",
-    pro: "/pro/calendar",
+    pro: "/pro",
     admin: "/admin",
   }[role];
 }

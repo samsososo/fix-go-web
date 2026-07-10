@@ -28,9 +28,7 @@ export function DashboardShell({
               href={item.href}
               className={cn(
                 "rounded-full px-4 py-2 text-sm font-medium",
-                item.active
-                  ? "bg-primary text-primary-foreground"
-                  : "text-foreground/72",
+                item.active ? "bg-primary !text-white" : "text-foreground/72",
               )}
             >
               {item.label}
