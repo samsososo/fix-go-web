@@ -13,11 +13,9 @@ type HeroVisualCopy = {
   }[];
 };
 
-const plumbingPhoto =
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/Exterior_Plumbing_-_Hong_Kong.jpg/960px-Exterior_Plumbing_-_Hong_Kong.jpg";
+const plumbingPhoto = "/images/services/hong-kong-plumbing.jpg";
 
-const electricalPhoto =
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/HK_KTD_Sau_Mau_Ping_%E5%AE%89%E6%B3%B0%E9%82%A8_On_Tai_Estate_%E9%9B%BB%E5%99%A8%E7%B8%BD%E5%88%B6_Fuse_boxes_January_2023_Px3_01.jpg/960px-HK_KTD_Sau_Mau_Ping_%E5%AE%89%E6%B3%B0%E9%82%A8_On_Tai_Estate_%E9%9B%BB%E5%99%A8%E7%B8%BD%E5%88%B6_Fuse_boxes_January_2023_Px3_01.jpg";
+const electricalPhoto = "/images/services/hong-kong-fuse-boxes.jpg";
 
 export function HeroVisual({ locale }: { locale: "zh-HK" | "en" }) {
   const copy: HeroVisualCopy =

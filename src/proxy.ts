@@ -1,23 +1,20 @@
+import createMiddleware from "next-intl/middleware";
 import { NextRequest, NextResponse } from "next/server";
 
-import { defaultLocale } from "@/i18n/routing";
+import { routing } from "@/i18n/routing";
 
-const legacyLocalePattern = /^\/(?:en|zh-HK)(?=\/|$)/;
+const handleI18nRouting = createMiddleware(routing);
+const legacyEnglishPattern = /^\/en(?=\/|$)/;
 
-export function proxy(request: NextRequest) {
-  const url = request.nextUrl.clone();
-  const legacyLocaleMatch = url.pathname.match(legacyLocalePattern);
-
-  if (legacyLocaleMatch) {
-    url.pathname = url.pathname.replace(legacyLocalePattern, "") || "/";
+export default function proxy(request: NextRequest) {
+  if (legacyEnglishPattern.test(request.nextUrl.pathname)) {
+    const url = request.nextUrl.clone();
+    url.pathname = url.pathname.replace(legacyEnglishPattern, "") || "/";
     return NextResponse.redirect(url);
   }
 
-  url.pathname = `/${defaultLocale}${url.pathname === "/" ? "" : url.pathname}`;
-  return NextResponse.rewrite(url);
+  return handleI18nRouting(request);
 }
-
-export default proxy;
 
 export const config = {
   matcher: ["/((?!api|trpc|_next|_vercel|.*\\..*).*)"],

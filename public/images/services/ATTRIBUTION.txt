@@ -1,0 +1,34 @@
+Service image credits
+=====================
+
+hong-kong-plumbing.jpg
+"Exterior Plumbing - Hong Kong" by t!m.
+Source: https://commons.wikimedia.org/wiki/File:Exterior_Plumbing_-_Hong_Kong.jpg
+License: CC BY-SA 2.0 (https://creativecommons.org/licenses/by-sa/2.0/)
+
+hong-kong-fuse-boxes.jpg
+"HK KTD Sau Mau Ping On Tai Estate Fuse boxes January 2023 Px3 01" by BaINSCHAUW Lamidou.
+Source: https://commons.wikimedia.org/wiki/File:HK_KTD_Sau_Mau_Ping_%E5%AE%89%E6%B3%B0%E9%82%A8_On_Tai_Estate_%E9%9B%BB%E5%99%A8%E7%B8%BD%E5%88%B6_Fuse_boxes_January_2023_Px3_01.jpg
+License: CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)
+
+plumber-at-work.jpg
+"Plumber at work" by Flickr user rick.
+Source: https://commons.wikimedia.org/wiki/File:Plumber_at_work.jpg
+License: CC BY 2.0 (https://creativecommons.org/licenses/by/2.0/)
+
+electrician-at-panel.jpg
+"Electrician using screwdriver to install external panels for meters in NJ" by Tomwsulcer.
+Source: https://commons.wikimedia.org/wiki/File:Electrician_using_screwdriver_to_install_external_panels_for_meters_in_NJ.JPG
+License: CC0 1.0 (https://creativecommons.org/publicdomain/zero/1.0/)
+
+hong-kong-aircon-facade.jpg
+"Dense city living, Hong Kong (48429963527)" by Romain Pontida.
+Source: https://commons.wikimedia.org/wiki/File:Dense_city_living,_Hong_Kong_(48429963527).jpg
+License: CC BY-SA 2.0 (https://creativecommons.org/licenses/by-sa/2.0/)
+
+hong-kong-bamboo-scaffolding.jpg
+"Construction worker building a bamboo scaffolding in Hong Kong (1)" by Clément Bucco-Lechat.
+Source: https://commons.wikimedia.org/wiki/File:Construction_worker_building_a_bamboo_scaffolding_in_Hong_Kong_(1).JPG
+License: CC BY-SA 3.0 (https://creativecommons.org/licenses/by-sa/3.0/)
+
+The local files are 960px Wikimedia Commons thumbnails with no editorial changes.

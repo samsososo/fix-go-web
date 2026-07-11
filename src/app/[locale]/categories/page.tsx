@@ -23,8 +23,7 @@ type CategoryMedia = {
 
 const categoryMedia: Record<string, CategoryMedia> = {
   plumbing: {
-    image:
-      "https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/Exterior_Plumbing_-_Hong_Kong.jpg/960px-Exterior_Plumbing_-_Hong_Kong.jpg",
+    image: "/images/services/hong-kong-plumbing.jpg",
     alt: {
       "zh-HK": "香港住宅外牆水管及排水管",
       en: "Exterior plumbing pipes on a Hong Kong residential building",
@@ -35,8 +34,7 @@ const categoryMedia: Record<string, CategoryMedia> = {
     },
   },
   electrical: {
-    image:
-      "https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/HK_KTD_Sau_Mau_Ping_%E5%AE%89%E6%B3%B0%E9%82%A8_On_Tai_Estate_%E9%9B%BB%E5%99%A8%E7%B8%BD%E5%88%B6_Fuse_boxes_January_2023_Px3_01.jpg/960px-HK_KTD_Sau_Mau_Ping_%E5%AE%89%E6%B3%B0%E9%82%A8_On_Tai_Estate_%E9%9B%BB%E5%99%A8%E7%B8%BD%E5%88%B6_Fuse_boxes_January_2023_Px3_01.jpg",
+    image: "/images/services/hong-kong-fuse-boxes.jpg",
     alt: {
       "zh-HK": "香港住宅電器總制及漏電斷路器",
       en: "Fuse boxes and circuit breakers in a Hong Kong residence",
@@ -47,8 +45,7 @@ const categoryMedia: Record<string, CategoryMedia> = {
     },
   },
   aircon: {
-    image:
-      "https://upload.wikimedia.org/wikipedia/commons/thumb/1/13/Dense_city_living%2C_Hong_Kong_%2848429963527%29.jpg/960px-Dense_city_living%2C_Hong_Kong_%2848429963527%29.jpg",
+    image: "/images/services/hong-kong-aircon-facade.jpg",
     alt: {
       "zh-HK": "香港住宅外牆密集冷氣機",
       en: "Air-conditioning units on a Hong Kong residential facade",
@@ -59,8 +56,7 @@ const categoryMedia: Record<string, CategoryMedia> = {
     },
   },
   renovation: {
-    image:
-      "https://upload.wikimedia.org/wikipedia/commons/thumb/9/99/Construction_worker_building_a_bamboo_scaffolding_in_Hong_Kong_%281%29.JPG/960px-Construction_worker_building_a_bamboo_scaffolding_in_Hong_Kong_%281%29.JPG",
+    image: "/images/services/hong-kong-bamboo-scaffolding.jpg",
     objectPosition: "50% 42%",
     alt: {
       "zh-HK": "香港師傅搭建竹棚進行樓宇維修",

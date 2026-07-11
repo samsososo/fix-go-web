@@ -29,11 +29,9 @@ type WorkflowCopy = {
   }[];
 };
 
-const plumberPhoto =
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fa/Plumber_at_work.jpg/960px-Plumber_at_work.jpg";
+const plumberPhoto = "/images/services/plumber-at-work.jpg";
 
-const electricianPhoto =
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/Electrician_using_screwdriver_to_install_external_panels_for_meters_in_NJ.JPG/960px-Electrician_using_screwdriver_to_install_external_panels_for_meters_in_NJ.JPG";
+const electricianPhoto = "/images/services/electrician-at-panel.jpg";
 
 export function WorkflowShowcase({ locale }: { locale: "zh-HK" | "en" }) {
   const copy: WorkflowCopy =
