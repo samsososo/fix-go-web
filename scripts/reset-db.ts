@@ -1,7 +1,7 @@
-import { resetSqliteDb } from "../src/lib/mock/db";
+import { resetDb } from "../src/lib/mock/db";
 
 async function main() {
-  await resetSqliteDb();
+  await resetDb();
   console.log("Database reset to seeded state.");
 }
 

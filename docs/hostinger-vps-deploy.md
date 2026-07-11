@@ -51,7 +51,6 @@ Required values:
 ```bash
 DOMAIN=your-domain.com
 APP_URL=https://your-domain.com
-STORAGE_DRIVER=mongodb
 MONGODB_URI=mongodb+srv://...
 MONGODB_DATABASE=hotfix_prod
 ENABLE_DEMO_LOGIN=false

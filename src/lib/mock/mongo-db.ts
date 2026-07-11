@@ -1,11 +1,13 @@
 import { Db, Filter, MongoClient } from "mongodb";
 
-import { enableDatabaseSeeding, env } from "@/lib/env";
 import {
-  createOpaqueToken,
-  hashPassword,
-  verifyPassword,
-} from "@/lib/security";
+  normalizeSecurityAnswer,
+  type AccountRecoverySetup,
+  type PasswordResetRequest,
+  type SecurityQuestionId,
+} from "@/lib/account-recovery";
+import { enableDatabaseSeeding, env } from "@/lib/env";
+import { createOpaqueToken } from "@/lib/security";
 import { createSeedDb } from "@/mock/seed";
 import {
   AdminNote,
@@ -36,8 +38,23 @@ type MetaDoc = {
 type AuthCredentialDoc = {
   _id: string;
   userId: string;
-  passwordHash: string;
+  password: string;
   isDemo: boolean;
+};
+
+type PasswordRecoveryDoc = {
+  _id: string;
+  userId: string;
+  dateOfBirth: string;
+  securityQuestionId: SecurityQuestionId;
+  securityAnswer: string;
+  updatedAt: string;
+};
+
+type PasswordResetAttemptDoc = {
+  phone: string;
+  attemptedAt: string;
+  success: boolean;
 };
 
 type SessionDoc = {
@@ -68,7 +85,7 @@ let mongoSessionUserCache = new Map<
 
 function requireMongoUri() {
   if (!env.MONGODB_URI) {
-    throw new Error("MONGODB_URI is required when STORAGE_DRIVER=mongodb.");
+    throw new Error("MONGODB_URI is required.");
   }
 
   return env.MONGODB_URI;
@@ -85,6 +102,15 @@ async function getMongoClient() {
 }
 
 async function getMongoDb() {
+  if (
+    env.NODE_ENV === "test" &&
+    !env.MONGODB_DATABASE.startsWith("hotfix_test")
+  ) {
+    throw new Error(
+      "Tests may only connect to a MongoDB database prefixed with hotfix_test.",
+    );
+  }
+
   const client = await getMongoClient();
   const db = client.db(env.MONGODB_DATABASE);
 
@@ -113,6 +139,12 @@ async function initializeMongo(db: Db) {
     db
       .collection<AuthCredentialDoc>("authCredentials")
       .createIndex({ userId: 1 }, { unique: true }),
+    db
+      .collection<PasswordRecoveryDoc>("passwordRecovery")
+      .createIndex({ userId: 1 }, { unique: true }),
+    db
+      .collection<PasswordResetAttemptDoc>("passwordResetAttempts")
+      .createIndex({ phone: 1, attemptedAt: 1 }),
     db
       .collection<SessionDoc>("sessions")
       .createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
@@ -268,74 +300,66 @@ async function syncCollection<T extends object>(
 }
 
 async function writeState(db: Db, state: MockDb) {
-  await syncCollection<User>(db, "users", state.users, (row) => row.id);
-  await syncCollection<CustomerProfile>(
-    db,
-    "customerProfiles",
-    state.customerProfiles,
-    (row) => row.userId,
-  );
-  await syncCollection<ProProfile>(
-    db,
-    "proProfiles",
-    state.proProfiles,
-    (row) => row.userId,
-  );
-  await syncCollection<ServiceCategory>(
-    db,
-    "categories",
-    state.categories,
-    (row) => row.id,
-  );
-  await syncCollection<DistrictAreaSeed>(
-    db,
-    "districts",
-    state.districts,
-    (row) => row.district,
-  );
-  await syncCollection<Address>(
-    db,
-    "addresses",
-    state.addresses,
-    (row) => row.id,
-  );
-  await syncCollection<Attachment>(
-    db,
-    "attachments",
-    state.attachments,
-    (row) => row.id,
-  );
-  await syncCollection<ServiceRequest>(
-    db,
-    "requests",
-    state.requests,
-    (row) => row.id,
-  );
-  await syncCollection<Quote>(db, "quotes", state.quotes, (row) => row.id);
-  await syncCollection<Booking>(
-    db,
-    "bookings",
-    state.bookings,
-    (row) => row.id,
-  );
-  await syncCollection<BookingStatusEvent>(
-    db,
-    "bookingStatusEvents",
-    state.bookingStatusEvents,
-    (row) => row.id,
-  );
-  await syncCollection<NotificationItem>(
-    db,
-    "notifications",
-    state.notifications,
-    (row) => row.id,
-  );
-  await syncCollection<AdminNote>(
-    db,
-    "adminNotes",
-    state.adminNotes,
-    (row) => row.id,
-  );
+  await Promise.all([
+    syncCollection<User>(db, "users", state.users, (row) => row.id),
+    syncCollection<CustomerProfile>(
+      db,
+      "customerProfiles",
+      state.customerProfiles,
+      (row) => row.userId,
+    ),
+    syncCollection<ProProfile>(
+      db,
+      "proProfiles",
+      state.proProfiles,
+      (row) => row.userId,
+    ),
+    syncCollection<ServiceCategory>(
+      db,
+      "categories",
+      state.categories,
+      (row) => row.id,
+    ),
+    syncCollection<DistrictAreaSeed>(
+      db,
+      "districts",
+      state.districts,
+      (row) => row.district,
+    ),
+    syncCollection<Address>(db, "addresses", state.addresses, (row) => row.id),
+    syncCollection<Attachment>(
+      db,
+      "attachments",
+      state.attachments,
+      (row) => row.id,
+    ),
+    syncCollection<ServiceRequest>(
+      db,
+      "requests",
+      state.requests,
+      (row) => row.id,
+    ),
+    syncCollection<Quote>(db, "quotes", state.quotes, (row) => row.id),
+    syncCollection<Booking>(db, "bookings", state.bookings, (row) => row.id),
+    syncCollection<BookingStatusEvent>(
+      db,
+      "bookingStatusEvents",
+      state.bookingStatusEvents,
+      (row) => row.id,
+    ),
+    syncCollection<NotificationItem>(
+      db,
+      "notifications",
+      state.notifications,
+      (row) => row.id,
+    ),
+    syncCollection<AdminNote>(
+      db,
+      "adminNotes",
+      state.adminNotes,
+      (row) => row.id,
+    ),
+  ]);
 }
 
 async function bootstrapIfNeeded(db: Db) {
@@ -354,9 +378,8 @@ async function bootstrapIfNeeded(db: Db) {
   const credentials = initialState.users.map((user) => ({
     _id: user.id,
     userId: user.id,
-    passwordHash: hashPassword(
+    password:
       user.role === "admin" ? env.BOOTSTRAP_ADMIN_PASSWORD : env.DEMO_PASSWORD,
-    ),
     isDemo: true,
   }));
 
@@ -368,7 +391,7 @@ async function bootstrapIfNeeded(db: Db) {
           update: {
             $set: {
               userId: credential.userId,
-              passwordHash: credential.passwordHash,
+              password: credential.password,
               isDemo: credential.isDemo,
             },
           },
@@ -597,8 +620,27 @@ export async function findMongoCredentialByIdentifier(identifier: string) {
 
   return {
     user: stripMongoId<User>(user),
-    passwordHash: credential.passwordHash,
+    password: credential.password,
     isDemo: credential.isDemo,
+  };
+}
+
+export async function findMongoPasswordRecoveryByUserId(userId: string) {
+  const db = await getMongoDb();
+  const recovery = await db
+    .collection<PasswordRecoveryDoc>("passwordRecovery")
+    .findOne({ _id: userId });
+
+  if (!recovery) {
+    return null;
+  }
+
+  return {
+    userId: recovery.userId,
+    dateOfBirth: recovery.dateOfBirth,
+    securityQuestionId: recovery.securityQuestionId,
+    securityAnswer: recovery.securityAnswer,
+    updatedAt: recovery.updatedAt,
   };
 }
 
@@ -799,15 +841,110 @@ export async function createMongoCredential(
   userId: string,
   password: string,
   isDemo: boolean = false,
+  recovery?: AccountRecoverySetup,
 ) {
   const db = await getMongoDb();
   await db
     .collection<AuthCredentialDoc>("authCredentials")
     .updateOne(
       { _id: userId },
-      { $set: { userId, passwordHash: hashPassword(password), isDemo } },
+      { $set: { userId, password, isDemo } },
       { upsert: true },
     );
+
+  if (recovery) {
+    await db
+      .collection<PasswordRecoveryDoc>("passwordRecovery")
+      .updateOne(
+        { _id: userId },
+        {
+          $set: {
+            userId,
+            dateOfBirth: recovery.dateOfBirth,
+            securityQuestionId: recovery.securityQuestionId,
+            securityAnswer: recovery.securityAnswer,
+            updatedAt: new Date().toISOString(),
+          },
+        },
+        { upsert: true },
+      );
+  }
+}
+
+export async function resetMongoPasswordWithRecovery(
+  input: PasswordResetRequest,
+) {
+  const db = await getMongoDb();
+  const phone = input.phone.replace(/\D/g, "");
+  const resetWindowStart = new Date(
+    Date.now() - 15 * 60 * 1000,
+  ).toISOString();
+  const recentFailures = await db
+    .collection<PasswordResetAttemptDoc>("passwordResetAttempts")
+    .countDocuments({
+      phone,
+      success: false,
+      attemptedAt: { $gte: resetWindowStart },
+    });
+
+  if (recentFailures >= 5) {
+    return { ok: false as const, reason: "rate_limited" as const };
+  }
+
+  const user = await db.collection<MongoDoc<User>>("users").findOne({ phone });
+  const [credential, recovery] = user
+    ? await Promise.all([
+        db
+          .collection<AuthCredentialDoc>("authCredentials")
+          .findOne({ _id: user.id }),
+        db
+          .collection<PasswordRecoveryDoc>("passwordRecovery")
+          .findOne({ _id: user.id }),
+      ])
+    : [null, null];
+  const matches = Boolean(
+    user &&
+      credential &&
+      recovery &&
+      recovery.dateOfBirth === input.dateOfBirth &&
+      recovery.securityQuestionId === input.securityQuestionId &&
+      normalizeSecurityAnswer(recovery.securityAnswer) ===
+        normalizeSecurityAnswer(input.securityAnswer),
+  );
+
+  if (!user || !credential || !recovery || !matches) {
+    await db
+      .collection<PasswordResetAttemptDoc>("passwordResetAttempts")
+      .insertOne({
+        phone,
+        attemptedAt: new Date().toISOString(),
+        success: false,
+      });
+    return { ok: false as const, reason: "mismatch" as const };
+  }
+
+  await Promise.all([
+    db
+      .collection<AuthCredentialDoc>("authCredentials")
+      .updateOne(
+        { _id: user.id },
+        { $set: { password: input.newPassword } },
+      ),
+    db.collection<SessionDoc>("sessions").deleteMany({ userId: user.id }),
+    db
+      .collection<PasswordResetAttemptDoc>("passwordResetAttempts")
+      .deleteMany({ phone }),
+  ]);
+  await db
+    .collection<PasswordResetAttemptDoc>("passwordResetAttempts")
+    .insertOne({
+      phone,
+      attemptedAt: new Date().toISOString(),
+      success: true,
+    });
+  clearMongoSessionUserCache();
+
+  return { ok: true as const };
 }
 
 export async function verifyMongoUserCredentials(
@@ -833,7 +970,7 @@ export async function verifyMongoUserCredentials(
   }
 
   const credential = await findMongoCredentialByIdentifier(identifier);
-  if (!credential || !verifyPassword(password, credential.passwordHash)) {
+  if (!credential || password !== credential.password) {
     await db.collection<LoginAttemptDoc>("loginAttempts").insertOne({
       identifier: normalizedIdentifier,
       attemptedAt: new Date().toISOString(),
@@ -971,6 +1108,10 @@ export async function resetMongoDb() {
   await Promise.all([
     db.collection<SessionDoc>("sessions").deleteMany({}),
     db.collection<LoginAttemptDoc>("loginAttempts").deleteMany({}),
+    db
+      .collection<PasswordResetAttemptDoc>("passwordResetAttempts")
+      .deleteMany({}),
+    db.collection<PasswordRecoveryDoc>("passwordRecovery").deleteMany({}),
     db.collection<AuthCredentialDoc>("authCredentials").deleteMany({}),
   ]);
 
@@ -979,9 +1120,8 @@ export async function resetMongoDb() {
   const credentials = seed.users.map((user) => ({
     _id: user.id,
     userId: user.id,
-    passwordHash: hashPassword(
+    password:
       user.role === "admin" ? env.BOOTSTRAP_ADMIN_PASSWORD : env.DEMO_PASSWORD,
-    ),
     isDemo: true,
   }));
 
@@ -993,7 +1133,7 @@ export async function resetMongoDb() {
           update: {
             $set: {
               userId: credential.userId,
-              passwordHash: credential.passwordHash,
+              password: credential.password,
               isDemo: credential.isDemo,
             },
           },
@@ -1007,4 +1147,18 @@ export async function resetMongoDb() {
   await setMeta(db, "demo_calendar_seed_v1", "1");
   clearMongoReadCache();
   clearMongoSessionUserCache();
+}
+
+export async function closeMongoConnection() {
+  const pendingClient = clientPromise;
+
+  clientPromise = null;
+  initialized = false;
+  clearMongoReadCache();
+  clearMongoSessionUserCache();
+
+  if (pendingClient) {
+    const client = await pendingClient;
+    await client.close();
+  }
 }

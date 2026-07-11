@@ -1,11 +1,13 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { useForm, useWatch } from "react-hook-form";
 
 import { signUpAction } from "@/lib/actions";
+import { securityQuestions } from "@/lib/account-recovery";
 import { useHydrated } from "@/hooks/use-hydrated";
 import {
   signupSchema,
@@ -37,6 +39,9 @@ export function SignupForm({
       role: "customer",
       serviceCategoryIds: [],
       locale: "zh-HK",
+      dateOfBirth: "",
+      securityQuestionId: "childhood_nickname",
+      securityAnswer: "",
       password: "",
       confirmPassword: "",
     },
@@ -122,26 +127,81 @@ export function SignupForm({
           <option value="zh-HK">繁體中文</option>
         </Select>
       </Field>
-      <Field
-        label={locale === "en" ? "Password" : "密碼"}
-        error={form.formState.errors.password?.message}
-      >
-        <Input
-          {...form.register("password")}
-          type="password"
-          placeholder="Strong password"
-        />
-      </Field>
-      <Field
-        label={locale === "en" ? "Confirm password" : "確認密碼"}
-        error={form.formState.errors.confirmPassword?.message}
-      >
-        <Input
-          {...form.register("confirmPassword")}
-          type="password"
-          placeholder="Repeat password"
-        />
-      </Field>
+      <div className="space-y-5 border-t border-line/70 pt-5">
+        <div className="flex items-start gap-3">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary-soft text-primary">
+            <ShieldCheck aria-hidden="true" className="h-4 w-4" />
+          </span>
+          <div>
+            <p className="font-semibold text-ink">
+              {locale === "en" ? "Account recovery" : "重設密碼資料"}
+            </p>
+            <p className="mt-1 text-sm leading-6 text-muted">
+              {locale === "en"
+                ? "Keep these details memorable. You will need all of them if you forget your password."
+                : "請填你一定記得嘅資料，忘記密碼時三項都要答啱。"}
+            </p>
+          </div>
+        </div>
+        <Field
+          label={locale === "en" ? "Date of birth" : "出生日期"}
+          error={form.formState.errors.dateOfBirth?.message}
+        >
+          <Input
+            {...form.register("dateOfBirth")}
+            autoComplete="bday"
+            type="date"
+          />
+        </Field>
+        <Field
+          label={locale === "en" ? "Security question" : "保安問題"}
+          error={form.formState.errors.securityQuestionId?.message}
+        >
+          <Select {...form.register("securityQuestionId")}>
+            {securityQuestions.map((question) => (
+              <option key={question.id} value={question.id}>
+                {question.label[locale === "en" ? "en" : "zh-HK"]}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field
+          label={locale === "en" ? "Your answer" : "答案"}
+          hint={
+            locale === "en"
+              ? "Answers are not case-sensitive."
+              : "答案不分英文大小寫。"
+          }
+          error={form.formState.errors.securityAnswer?.message}
+        >
+          <Input
+            {...form.register("securityAnswer")}
+            autoComplete="off"
+          />
+        </Field>
+        <Field
+          label={locale === "en" ? "Password" : "密碼"}
+          error={form.formState.errors.password?.message}
+        >
+          <Input
+            {...form.register("password")}
+            autoComplete="new-password"
+            type="password"
+            placeholder="Strong password"
+          />
+        </Field>
+        <Field
+          label={locale === "en" ? "Confirm password" : "確認密碼"}
+          error={form.formState.errors.confirmPassword?.message}
+        >
+          <Input
+            {...form.register("confirmPassword")}
+            autoComplete="new-password"
+            type="password"
+            placeholder="Repeat password"
+          />
+        </Field>
+      </div>
       {serverError ? (
         <p className="text-sm text-danger">{serverError}</p>
       ) : null}

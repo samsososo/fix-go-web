@@ -1,4 +1,3 @@
-import { env } from "@/lib/env";
 import { listCredentialedDemoUsers, withDb, readDb } from "@/lib/mock/db";
 import {
   listMongoCategoryOptions,
@@ -53,10 +52,6 @@ function findProProfile(profiles: ProProfile[], userId: string) {
 
 function textForLocale(locale: string, en: string, zh: string) {
   return locale === "en" ? en : zh;
-}
-
-function shouldUseMongoStorage() {
-  return env.STORAGE_DRIVER === "mongodb";
 }
 
 function summarizeProfileCompletion(profile: ProProfile) {
@@ -532,28 +527,7 @@ export async function saveProProfile(userId: string, input: ProProfileInput) {
 }
 
 export async function listRelevantLeads(proId: string, categoryId?: string) {
-  if (shouldUseMongoStorage()) {
-    return listMongoRelevantLeads(proId, categoryId);
-  }
-
-  const db = await readDb();
-  return db.requests
-    .filter(
-      (request) =>
-        isOpenLead(request) &&
-        request.matchedProIds.includes(proId) &&
-        (!categoryId || request.categoryId === categoryId),
-    )
-    .map((request) => ({
-      ...request,
-      existingQuote: db.quotes.find(
-        (quote) => quote.requestId === request.id && quote.proId === proId,
-      ),
-      customer: findUser(db.users, request.customerId),
-      category:
-        db.categories.find((entry) => entry.id === request.categoryId) ?? null,
-    }))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return listMongoRelevantLeads(proId, categoryId);
 }
 
 export async function getLeadDetail(proId: string, requestId: string) {
@@ -647,23 +621,7 @@ export async function submitProQuote(
 }
 
 export async function listProJobs(proId: string) {
-  if (shouldUseMongoStorage()) {
-    return listMongoProJobs(proId);
-  }
-
-  const db = await readDb();
-  return db.bookings
-    .filter((booking) => booking.proId === proId)
-    .map((booking) =>
-      hydrateBooking(
-        booking,
-        db.requests,
-        db.users,
-        db.quotes,
-        db.bookingStatusEvents,
-      ),
-    )
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return listMongoProJobs(proId);
 }
 
 export async function getProJobDetail(proId: string, bookingId: string) {
@@ -685,29 +643,7 @@ export async function getProJobDetail(proId: string, bookingId: string) {
 }
 
 export async function listProCalendarBookings(proId: string) {
-  if (shouldUseMongoStorage()) {
-    return listMongoProCalendarBookings(proId);
-  }
-
-  const db = await readDb();
-  return db.bookings
-    .filter(
-      (booking) => booking.proId === proId && booking.status !== "cancelled",
-    )
-    .map((booking) =>
-      hydrateBooking(
-        booking,
-        db.requests,
-        db.users,
-        db.quotes,
-        db.bookingStatusEvents,
-      ),
-    )
-    .sort((a, b) =>
-      (a.scheduledDate ?? a.updatedAt).localeCompare(
-        b.scheduledDate ?? b.updatedAt,
-      ),
-    );
+  return listMongoProCalendarBookings(proId);
 }
 
 export async function getProEarningsSummary(proId: string) {
@@ -1124,17 +1060,5 @@ export async function toggleProVerification(userId: string, verified: boolean) {
 }
 
 export async function listCategoryOptions(locale: Locale) {
-  if (shouldUseMongoStorage()) {
-    return listMongoCategoryOptions(locale);
-  }
-
-  const categories = await listPublicCategories();
-  return categories.map((category) => ({
-    id: category.id,
-    label: category.name[locale],
-    subcategories: category.subcategories.map((subcategory) => ({
-      id: subcategory.id,
-      label: subcategory.name[locale],
-    })),
-  }));
+  return listMongoCategoryOptions(locale);
 }

@@ -1,5 +1,9 @@
-import { resetSqliteDb } from "@/lib/mock/db";
+import { closeDb, resetDb } from "@/lib/mock/db";
 
 export async function resetMockDb() {
-  await resetSqliteDb();
+  await resetDb();
+}
+
+export async function closeMockDb() {
+  await closeDb();
 }

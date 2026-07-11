@@ -5,8 +5,6 @@ const envSchema = z.object({
     .enum(["development", "test", "production"])
     .default("development"),
   APP_URL: z.url().default("http://localhost:3000"),
-  STORAGE_DRIVER: z.enum(["sqlite", "mongodb"]).default("mongodb"),
-  DATA_DIR: z.string().min(1).default("data"),
   MONGODB_URI: z.preprocess(
     (value) => (value === "" ? undefined : value),
     z.string().min(1).optional(),

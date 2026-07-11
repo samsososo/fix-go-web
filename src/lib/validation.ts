@@ -1,6 +1,30 @@
 import { z } from "zod";
 
+import { securityQuestionIds } from "@/lib/account-recovery";
+
 const hkPhoneRegex = /^(5|6|8|9)\d{7}$/;
+
+const strongPasswordSchema = z
+  .string()
+  .min(10, "Minimum 10 characters")
+  .regex(/[A-Z]/, "Must contain an uppercase letter")
+  .regex(/[a-z]/, "Must contain a lowercase letter")
+  .regex(/\d/, "Must contain a number");
+
+const dateOfBirthSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date of birth")
+  .refine((value) => {
+    const [year, month, day] = value.split("-").map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day));
+
+    return (
+      date.getUTCFullYear() === year &&
+      date.getUTCMonth() === month - 1 &&
+      date.getUTCDate() === day &&
+      date.getTime() <= Date.now()
+    );
+  }, "Invalid date of birth");
 
 export const loginSchema = z.object({
   identifier: z.string().min(4, "Required"),
@@ -15,12 +39,10 @@ export const signupSchema = z
     role: z.enum(["customer", "pro"]),
     serviceCategoryIds: z.array(z.string()).default([]),
     locale: z.enum(["zh-HK"]),
-    password: z
-      .string()
-      .min(10, "Minimum 10 characters")
-      .regex(/[A-Z]/, "Must contain an uppercase letter")
-      .regex(/[a-z]/, "Must contain a lowercase letter")
-      .regex(/\d/, "Must contain a number"),
+    dateOfBirth: dateOfBirthSchema,
+    securityQuestionId: z.enum(securityQuestionIds),
+    securityAnswer: z.string().trim().min(1, "Required").max(100),
+    password: strongPasswordSchema,
     confirmPassword: z.string().min(10, "Confirm your password"),
   })
   .refine(
@@ -31,6 +53,20 @@ export const signupSchema = z
     },
   )
   .refine((value) => value.password === value.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
+
+export const passwordResetSchema = z
+  .object({
+    phone: z.string().regex(hkPhoneRegex, "Invalid Hong Kong mobile number"),
+    dateOfBirth: dateOfBirthSchema,
+    securityQuestionId: z.enum(securityQuestionIds),
+    securityAnswer: z.string().trim().min(1, "Required").max(100),
+    newPassword: strongPasswordSchema,
+    confirmPassword: z.string().min(10, "Confirm your password"),
+  })
+  .refine((value) => value.newPassword === value.confirmPassword, {
     message: "Passwords do not match",
     path: ["confirmPassword"],
   });
@@ -101,6 +137,8 @@ export type LoginInput = z.infer<typeof loginSchema>;
 export type LoginFormValues = z.input<typeof loginSchema>;
 export type SignupFormValues = z.input<typeof signupSchema>;
 export type SignupInput = z.output<typeof signupSchema>;
+export type PasswordResetFormValues = z.input<typeof passwordResetSchema>;
+export type PasswordResetInput = z.output<typeof passwordResetSchema>;
 export type RequestFormValues = z.input<typeof requestFormSchema>;
 export type RequestFormInput = z.output<typeof requestFormSchema>;
 export type QuoteFormValues = z.input<typeof quoteFormSchema>;

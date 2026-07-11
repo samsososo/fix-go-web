@@ -1,21 +1,28 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
   createCredential,
   createSession,
+  findCredentialByIdentifier,
+  findPasswordRecoveryByUserId,
   getSessionUser,
   readDb,
+  resetPasswordWithRecovery,
   verifyUserCredentials,
 } from "@/lib/mock/db";
 import {
   createCustomerRequest,
   createUserAccount,
 } from "@/lib/mock/repositories";
-import { resetMockDb } from "./helpers/mock-db";
+import { closeMockDb, resetMockDb } from "./helpers/mock-db";
 
 describe("auth hardening", () => {
   beforeEach(async () => {
     await resetMockDb();
+  });
+
+  afterAll(async () => {
+    await closeMockDb();
   });
 
   it("verifies seeded credentials and resolves a session user", async () => {
@@ -34,7 +41,7 @@ describe("auth hardening", () => {
     expect(user?.role).toBe("customer");
   });
 
-  it("stores hashed credentials for newly created accounts", async () => {
+  it("stores plaintext credentials for newly created accounts", async () => {
     const user = await createUserAccount({
       fullName: "Tester",
       phone: "96781234",
@@ -42,16 +49,136 @@ describe("auth hardening", () => {
       role: "customer",
       serviceCategoryIds: [],
       locale: "zh-HK",
+      dateOfBirth: "1990-05-20",
+      securityQuestionId: "childhood_nickname",
+      securityAnswer: "小明",
       password: "NewPass123!",
       confirmPassword: "NewPass123!",
     });
-    await createCredential(user.id, "NewPass123!");
+    await createCredential(user.id, "NewPass123!", false, {
+      dateOfBirth: "1990-05-20",
+      securityQuestionId: "childhood_nickname",
+      securityAnswer: "小明",
+    });
+
+    const storedCredential = await findCredentialByIdentifier(
+      "tester@hotfix.hk",
+    );
+    const storedRecovery = await findPasswordRecoveryByUserId(user.id);
+    expect(storedCredential?.password).toBe("NewPass123!");
+    expect(storedRecovery?.securityAnswer).toBe("小明");
 
     const login = await verifyUserCredentials(
       "tester@hotfix.hk",
       "NewPass123!",
     );
     expect(login.ok).toBe(true);
+  });
+
+  it("requires every recovery detail and invalidates old sessions", async () => {
+    const user = await createUserAccount({
+      fullName: "Recovery Tester",
+      phone: "96782345",
+      email: "recovery@hotfix.hk",
+      role: "customer",
+      serviceCategoryIds: [],
+      locale: "zh-HK",
+      dateOfBirth: "1988-03-14",
+      securityQuestionId: "first_school",
+      securityAnswer: "  Happy School  ",
+      password: "OldPass123!",
+      confirmPassword: "OldPass123!",
+    });
+    await createCredential(user.id, "OldPass123!", false, {
+      dateOfBirth: "1988-03-14",
+      securityQuestionId: "first_school",
+      securityAnswer: "  Happy School  ",
+    });
+
+    const login = await verifyUserCredentials(
+      "recovery@hotfix.hk",
+      "OldPass123!",
+    );
+    expect(login.ok).toBe(true);
+    if (!login.ok) {
+      return;
+    }
+    const session = await createSession(login.user.id);
+
+    const wrongBirthDate = await resetPasswordWithRecovery({
+      phone: "96782345",
+      dateOfBirth: "1988-03-15",
+      securityQuestionId: "first_school",
+      securityAnswer: "Happy School",
+      newPassword: "NewPass456!",
+    });
+    expect(wrongBirthDate).toEqual({ ok: false, reason: "mismatch" });
+
+    const wrongQuestion = await resetPasswordWithRecovery({
+      phone: "96782345",
+      dateOfBirth: "1988-03-14",
+      securityQuestionId: "childhood_nickname",
+      securityAnswer: "Happy School",
+      newPassword: "NewPass456!",
+    });
+    expect(wrongQuestion).toEqual({ ok: false, reason: "mismatch" });
+
+    const wrongAnswer = await resetPasswordWithRecovery({
+      phone: "96782345",
+      dateOfBirth: "1988-03-14",
+      securityQuestionId: "first_school",
+      securityAnswer: "Wrong School",
+      newPassword: "NewPass456!",
+    });
+    expect(wrongAnswer).toEqual({ ok: false, reason: "mismatch" });
+
+    const wrongPhone = await resetPasswordWithRecovery({
+      phone: "96789999",
+      dateOfBirth: "1988-03-14",
+      securityQuestionId: "first_school",
+      securityAnswer: "Happy School",
+      newPassword: "NewPass456!",
+    });
+    expect(wrongPhone).toEqual({ ok: false, reason: "mismatch" });
+
+    const reset = await resetPasswordWithRecovery({
+      phone: "96782345",
+      dateOfBirth: "1988-03-14",
+      securityQuestionId: "first_school",
+      securityAnswer: "happy school",
+      newPassword: "NewPass456!",
+    });
+    expect(reset).toEqual({ ok: true });
+
+    expect(await getSessionUser(session.sessionId)).toBeNull();
+    expect(
+      await verifyUserCredentials("recovery@hotfix.hk", "OldPass123!"),
+    ).toMatchObject({ ok: false });
+    expect(
+      await verifyUserCredentials("recovery@hotfix.hk", "NewPass456!"),
+    ).toMatchObject({ ok: true });
+  });
+
+  it("rate limits repeated recovery failures", async () => {
+    const attempt = {
+      phone: "96783456",
+      dateOfBirth: "1991-07-12",
+      securityQuestionId: "first_school" as const,
+      securityAnswer: "Unknown School",
+      newPassword: "NewPass789!",
+    };
+
+    for (let index = 0; index < 5; index += 1) {
+      await expect(resetPasswordWithRecovery(attempt)).resolves.toEqual({
+        ok: false,
+        reason: "mismatch",
+      });
+    }
+
+    await expect(resetPasswordWithRecovery(attempt)).resolves.toEqual({
+      ok: false,
+      reason: "rate_limited",
+    });
   });
 
   it("stores specialties for newly created pro accounts", async () => {
@@ -62,6 +189,9 @@ describe("auth hardening", () => {
       role: "pro",
       serviceCategoryIds: ["aircon", "plumbing"],
       locale: "zh-HK",
+      dateOfBirth: "1985-08-09",
+      securityQuestionId: "childhood_character",
+      securityAnswer: "叮噹",
       password: "NewPass123!",
       confirmPassword: "NewPass123!",
     });

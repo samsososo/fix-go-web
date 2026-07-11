@@ -9,7 +9,10 @@ import {
   signInWithCredentials,
 } from "@/lib/auth";
 import { enableDemoLogin } from "@/lib/env";
-import { createCredential } from "@/lib/mock/db";
+import {
+  createCredential,
+  resetPasswordWithRecovery,
+} from "@/lib/mock/db";
 import {
   acceptCustomerQuote,
   createCustomerRequest,
@@ -23,10 +26,12 @@ import {
 import { BookingStatus, RequestStatus } from "@/types/domain";
 import {
   ProProfileInput,
+  PasswordResetInput,
   QuoteFormInput,
   RequestFormInput,
   SignupInput,
   loginSchema,
+  passwordResetSchema,
   proProfileSchema,
   quoteFormSchema,
   requestFormSchema,
@@ -75,7 +80,11 @@ export async function signUpAction(input: SignupInput) {
           : "Unable to create account at this time.",
     };
   }
-  await createCredential(user.id, parsed.data.password);
+  await createCredential(user.id, parsed.data.password, false, {
+    dateOfBirth: parsed.data.dateOfBirth,
+    securityQuestionId: parsed.data.securityQuestionId,
+    securityAnswer: parsed.data.securityAnswer,
+  });
   await signInAs(user.id);
 
   revalidatePath("/");
@@ -83,6 +92,50 @@ export async function signUpAction(input: SignupInput) {
     ok: true,
     target: localizedRoleHomePath(user.role, parsed.data.locale),
   };
+}
+
+export async function resetPasswordAction(
+  input: PasswordResetInput & { locale: string },
+) {
+  const parsed = passwordResetSchema.safeParse(input);
+  const isEnglish = input.locale === "en";
+
+  if (!parsed.success) {
+    return {
+      ok: false as const,
+      error: isEnglish
+        ? "Please check every field."
+        : "請檢查所有欄位。",
+    };
+  }
+
+  const result = await resetPasswordWithRecovery({
+    phone: parsed.data.phone,
+    dateOfBirth: parsed.data.dateOfBirth,
+    securityQuestionId: parsed.data.securityQuestionId,
+    securityAnswer: parsed.data.securityAnswer,
+    newPassword: parsed.data.newPassword,
+  });
+
+  if (!result.ok) {
+    if (result.reason === "rate_limited") {
+      return {
+        ok: false as const,
+        error: isEnglish
+          ? "Too many attempts. Please try again in 15 minutes."
+          : "嘗試次數太多，請 15 分鐘後再試。",
+      };
+    }
+
+    return {
+      ok: false as const,
+      error: isEnglish
+        ? "The recovery details do not match. Please check and try again."
+        : "資料不正確，請核對電話、出生日期、保安問題及答案。",
+    };
+  }
+
+  return { ok: true as const };
 }
 
 export async function signInDemoAction(input: {

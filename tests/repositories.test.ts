@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
   acceptCustomerQuote,
@@ -13,11 +13,15 @@ import {
   submitProQuote,
 } from "@/lib/mock/repositories";
 import { readDb } from "@/lib/mock/db";
-import { resetMockDb } from "./helpers/mock-db";
+import { closeMockDb, resetMockDb } from "./helpers/mock-db";
 
 describe("marketplace repositories", () => {
   beforeEach(async () => {
     await resetMockDb();
+  });
+
+  afterAll(async () => {
+    await closeMockDb();
   });
 
   it("creates a customer service request for pros with matching specialties without storing attachments", async () => {

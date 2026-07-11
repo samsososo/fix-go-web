@@ -11,6 +11,7 @@ import { loginSchema, type LoginInput } from "@/lib/validation";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Link } from "@/i18n/navigation";
 
 export function LoginForm({ locale }: { locale: string }) {
   const router = useRouter();
@@ -67,6 +68,15 @@ export function LoginForm({ locale }: { locale: string }) {
           placeholder="********"
         />
       </Field>
+      <div className="text-right">
+        <Link
+          className="text-sm font-semibold text-primary hover:underline"
+          href="/auth/forgot-password"
+          locale={locale}
+        >
+          {locale === "en" ? "Forgot password?" : "忘記密碼？"}
+        </Link>
+      </div>
       <Button
         className="w-full"
         type="submit"
