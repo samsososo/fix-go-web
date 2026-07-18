@@ -5,5 +5,22 @@
     Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
   }
 
-  reverse_proxy web:3000
+  reverse_proxy hotfix-web:3000
+}
+
+www.wonderwall.tech {
+  redir https://wonderwall.tech{uri} permanent
+}
+
+wonderwall.tech {
+  encode zstd gzip
+
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Permissions-Policy "camera=(), microphone=(), geolocation=()"
+  }
+
+  reverse_proxy wonderwall-web:3000
 }
