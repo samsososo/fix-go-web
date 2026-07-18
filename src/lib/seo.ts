@@ -16,6 +16,14 @@ export const publicRoutes = [
   "/auth/signup",
 ] as const;
 
+export const sitemapRoutes = [
+  "/",
+  "/how-it-works",
+  "/categories",
+  "/become-a-pro",
+  "/faq",
+] as const satisfies readonly (typeof publicRoutes)[number][];
+
 const siteName = "Hotfix";
 const ogImagePath = "/images/customer-request-ai.png";
 
