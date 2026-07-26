@@ -25,7 +25,7 @@ export const sitemapRoutes = [
 ] as const satisfies readonly (typeof publicRoutes)[number][];
 
 const siteName = "快修24";
-const ogImagePath = "/images/customer-request-ai.png";
+const logoPath = "/hotfix24_chinese_logo.png";
 
 const pageSeo = {
   "zh-HK": {
@@ -106,7 +106,7 @@ export function createPageMetadata(
 ): Metadata {
   const publicLocale = normalizePublicLocale(locale);
   const seo = pageSeo[publicLocale][path];
-  const images = [`${getBaseUrl()}${ogImagePath}`];
+  const logoUrl = `${getBaseUrl()}${logoPath}`;
 
   return {
     title: seo.title,
@@ -130,13 +130,20 @@ export function createPageMetadata(
       siteName,
       locale: publicLocale,
       type: "website",
-      images,
+      images: [
+        {
+          url: logoUrl,
+          width: 1254,
+          height: 1254,
+          alt: `${siteName} logo`,
+        },
+      ],
     },
     twitter: {
       card: "summary_large_image",
       title: seo.title,
       description: seo.description,
-      images,
+      images: [{ url: logoUrl, alt: `${siteName} logo` }],
     },
   };
 }
@@ -154,6 +161,7 @@ export function buildSiteStructuredData(locale: string) {
         "@id": `${baseUrl}/#organization`,
         name: siteName,
         url: baseUrl,
+        logo: `${baseUrl}${logoPath}`,
         description,
         areaServed: {
           "@type": "AdministrativeArea",
