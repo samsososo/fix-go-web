@@ -7,7 +7,7 @@ export function getMarketingContent(locale: Locale) {
         eyebrow: "Free quote arrangement for Hong Kong home repairs",
         title: "Arrange free repair quotes, then compare before you confirm.",
         description:
-          "Post the address and repair details once. Hotfix helps arrange structured quotes so you can compare price, timing, and scope before booking.",
+          "Post the address and repair details once. 快修24 helps arrange structured quotes so you can compare price, timing, and scope before booking.",
       },
       valuePoints: [
         "Free quote arrangement before you decide",
@@ -50,7 +50,7 @@ export function getMarketingContent(locale: Locale) {
       eyebrow: "免費安排香港家居維修報價",
       title: "免費安排報價，先講清楚再比較。",
       description:
-        "一次提交地址及維修要求，Hotfix 幫你安排師傅報價。確認前先比較價錢、時間及工程範圍。",
+        "一次提交地址及維修要求，快修24 幫你安排師傅報價。確認前先比較價錢、時間及工程範圍。",
     },
     valuePoints: [
       "免費安排報價，確認前不需付款",

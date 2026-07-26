@@ -24,48 +24,48 @@ export const sitemapRoutes = [
   "/faq",
 ] as const satisfies readonly (typeof publicRoutes)[number][];
 
-const siteName = "Hotfix";
+const siteName = "快修24";
 const ogImagePath = "/images/customer-request-ai.png";
 
 const pageSeo = {
   "zh-HK": {
     "/": {
-      title: "Hotfix | 香港家居維修報價平台",
+      title: "快修24 | 香港家居維修報價平台",
       description:
-        "Hotfix 幫香港住戶免費安排家居維修報價，提交地址及需求後比較師傅報價，涵蓋水喉、電力、冷氣及裝修雜項。",
+        "快修24 幫香港住戶免費安排家居維修報價，提交地址及需求後比較師傅報價，涵蓋水喉、電力、冷氣及裝修雜項。",
     },
     "/how-it-works": {
-      title: "Hotfix 如何運作 | 由家居維修需求到確認報價",
+      title: "快修24 如何運作 | 由家居維修需求到確認報價",
       description:
-        "了解 Hotfix 如何讓住戶提交維修需求、師傅接收合適工作機會、客戶比較報價並追蹤訂單狀態。",
+        "了解快修24如何讓住戶提交維修需求、師傅接收合適工作機會、客戶比較報價並追蹤訂單狀態。",
     },
     "/categories": {
       title: "香港家居服務分類 | 水喉、電力、冷氣、裝修",
       description:
-        "瀏覽 Hotfix 支援的香港家居服務分類，包括水喉維修、電力工程、冷氣清洗維修及裝修雜項。",
+        "瀏覽快修24支援的香港家居服務分類，包括水喉維修、電力工程、冷氣清洗維修及裝修雜項。",
     },
     "/become-a-pro": {
-      title: "成為 Hotfix 師傅 | 接收香港家居維修工作機會",
+      title: "成為快修24師傅 | 接收香港家居維修工作機會",
       description:
-        "師傅可在 Hotfix 查看開放家居維修需求、按分類篩選工作機會，並向客戶提交清晰報價。",
+        "師傅可在快修24查看開放家居維修需求、按分類篩選工作機會，並向客戶提交清晰報價。",
     },
     "/faq": {
-      title: "Hotfix 常見問題 | 家居維修報價與師傅驗證",
+      title: "快修24常見問題 | 家居維修報價與師傅驗證",
       description:
-        "了解 Hotfix 家居維修平台的報價、訂單狀態、師傅驗證、訊息中心及營運覆核安排。",
+        "了解快修24家居維修平台的報價、訂單狀態、師傅驗證、訊息中心及營運覆核安排。",
     },
     "/auth": {
-      title: "登入或註冊 Hotfix | 客戶及師傅入口",
-      description: "使用同一 Hotfix 帳戶系統，按身份進入客戶或師傅工作台。",
+      title: "登入或註冊快修24 | 客戶及師傅入口",
+      description: "使用同一快修24帳戶系統，按身份進入客戶或師傅工作台。",
     },
     "/auth/login": {
-      title: "登入 Hotfix | 香港家居服務平台",
-      description: "登入 Hotfix 客戶或師傅帳戶，管理家居維修請求、報價及訂單。",
+      title: "登入快修24 | 香港家居服務平台",
+      description: "登入快修24客戶或師傅帳戶，管理家居維修請求、報價及訂單。",
     },
     "/auth/signup": {
-      title: "註冊 Hotfix | 建立客戶或師傅帳戶",
+      title: "註冊快修24 | 建立客戶或師傅帳戶",
       description:
-        "註冊 Hotfix，客戶可提交家居維修需求，師傅可查看開放需求並提交報價。",
+        "註冊快修24，客戶可提交家居維修需求，師傅可查看開放需求並提交報價。",
     },
   },
 } satisfies Record<

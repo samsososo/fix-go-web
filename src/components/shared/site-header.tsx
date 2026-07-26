@@ -1,4 +1,5 @@
 import { BriefcaseBusiness, CalendarDays, Menu } from "lucide-react";
+import Image from "next/image";
 import { getTranslations } from "next-intl/server";
 
 import { roleHomePath } from "@/lib/auth";
@@ -48,17 +49,19 @@ export async function SiteHeader({
     <header className="sticky top-0 z-50 border-b border-white/60 bg-[#f5efe4]/78 backdrop-blur-xl">
       <div className="content-wrap flex min-h-20 items-center justify-between gap-4 py-4">
         <Link href="/" locale={locale} className="flex items-center gap-3">
-          <span className="relative flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-surface-strong text-sm font-display font-extrabold text-white shadow-[0_12px_30px_rgba(18,37,58,0.22)]">
-            <span className="absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,_rgba(217,147,45,0.64),transparent_42%)]" />
-            <span className="relative">HF</span>
+          <span className="relative h-12 w-40 shrink-0 overflow-hidden" aria-hidden="true">
+            <Image
+              src="/hotfix24_chinese_logo.png"
+              alt=""
+              fill
+              priority
+              sizes="160px"
+              className="object-cover"
+            />
           </span>
-          <span className="flex flex-col">
-            <span className="font-display text-2xl font-extrabold tracking-tight text-primary">
-              {t("brand")}
-            </span>
-            <span className="text-[11px] uppercase tracking-[0.25em] text-muted">
-              {locale === "en" ? "Hong Kong Home Services" : "香港家居服務"}
-            </span>
+          <span className="sr-only">{t("brand")}</span>
+          <span className="hidden text-[11px] uppercase tracking-[0.25em] text-muted sm:block">
+            {locale === "en" ? "Hong Kong Home Services" : "香港家居服務"}
           </span>
         </Link>
 

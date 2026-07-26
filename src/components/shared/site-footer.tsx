@@ -4,7 +4,7 @@ export function SiteFooter({ locale }: { locale: string }) {
       <div className="content-wrap flex flex-col gap-5 text-sm text-muted sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="font-display text-xl font-extrabold text-foreground">
-            Hotfix
+            快修24
           </p>
           <p className="mt-2 max-w-xl leading-7">
             {locale === "en"

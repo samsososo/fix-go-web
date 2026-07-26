@@ -15,7 +15,7 @@ const displayFont = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: "Hotfix",
+  title: "快修24",
   description: "Hong Kong home-services marketplace web platform",
 };
 

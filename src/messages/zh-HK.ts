@@ -1,6 +1,6 @@
 const zhHK = {
   common: {
-    brand: "Hotfix",
+    brand: "快修24",
     localeLabel: "語言",
     nav: {
       home: "主頁",

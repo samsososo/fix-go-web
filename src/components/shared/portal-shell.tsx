@@ -4,6 +4,7 @@ import {
   CheckSquare,
   Grid2X2,
 } from "lucide-react";
+import Image from "next/image";
 
 import { Link } from "@/i18n/navigation";
 import { LogoutButton } from "@/components/shared/logout-button";
@@ -60,14 +61,17 @@ export function PortalShell({
               locale={locale}
               className="flex items-center gap-3"
             >
-              <span className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-surface-strong text-xs font-display font-extrabold text-white shadow-[0_12px_30px_rgba(18,37,58,0.18)]">
-                <span className="absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,_rgba(217,147,45,0.64),transparent_42%)]" />
-                <span className="relative">HF</span>
+              <span className="relative h-10 w-32 shrink-0 overflow-hidden" aria-hidden="true">
+                <Image
+                  src="/hotfix24_chinese_logo.png"
+                  alt=""
+                  fill
+                  sizes="128px"
+                  className="object-cover"
+                />
               </span>
               <span className="min-w-0">
-                <span className="block font-display text-xl font-extrabold text-primary">
-                  Hotfix
-                </span>
+                <span className="sr-only">快修24</span>
                 <span className="block text-xs font-semibold text-muted">
                   {locale === "en" ? "Pro workbench" : "師傅工作台"}
                 </span>

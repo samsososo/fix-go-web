@@ -20,8 +20,8 @@ export default async function HowItWorksPage() {
         <p className="eyebrow">{locale === "en" ? "Process" : "流程"}</p>
         <h1 className="section-title">
           {locale === "en"
-            ? "How Hotfix turns repair requests into clear quotes"
-            : "Hotfix 點樣將維修需求變成清楚報價"}
+            ? "How 快修24 turns repair requests into clear quotes"
+            : "快修24 點樣將維修需求變成清楚報價"}
         </h1>
         <p className="text-lg leading-8 text-muted">
           {locale === "en"

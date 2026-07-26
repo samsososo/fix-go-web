@@ -11,7 +11,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     title:
-      locale === "en" ? "Reset password | Hotfix" : "重設密碼 | Hotfix",
+      locale === "en" ? "Reset password | 快修24" : "重設密碼 | 快修24",
     robots: { index: false, follow: false },
   };
 }

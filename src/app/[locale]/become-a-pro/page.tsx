@@ -39,8 +39,8 @@ export default async function BecomeAProPage() {
           </h1>
           <p className="text-lg leading-8 text-muted">
             {locale === "en"
-              ? "Hotfix helps tradespeople spend less time chasing vague enquiries and more time quoting clear customer requests."
-              : "Hotfix 幫師傅減少處理模糊查詢，把時間集中在清楚列明的客戶需求。"}
+              ? "快修24 helps tradespeople spend less time chasing vague enquiries and more time quoting clear customer requests."
+              : "快修24 幫師傅減少處理模糊查詢，把時間集中在清楚列明的客戶需求。"}
           </p>
           <ul className="space-y-3 text-sm text-muted">
             {bullets.map((bullet) => (

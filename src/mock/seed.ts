@@ -48,7 +48,7 @@ export function createSeedDb(): MockDb {
       {
         id: "user_admin",
         role: "admin",
-        fullName: "Hotfix Ops",
+        fullName: "快修24 營運",
         email: "ops@hotfix.hk",
         phone: "90000000",
         locale: "zh-HK",
