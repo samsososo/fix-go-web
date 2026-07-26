@@ -1,11 +1,11 @@
+import { BrandLogo } from "@/components/shared/brand-logo";
+
 export function SiteFooter({ locale }: { locale: string }) {
   return (
     <footer className="mt-auto border-t border-white/70 bg-white/55 py-10">
       <div className="content-wrap flex flex-col gap-5 text-sm text-muted sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="font-display text-xl font-extrabold text-foreground">
-            Hotfix
-          </p>
+          <BrandLogo className="h-12 max-w-[13rem]" />
           <p className="mt-2 max-w-xl leading-7">
             {locale === "en"
               ? "Hong Kong home repair quote platform for customers and service professionals."

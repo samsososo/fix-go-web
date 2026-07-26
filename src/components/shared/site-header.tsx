@@ -3,6 +3,7 @@ import { getTranslations } from "next-intl/server";
 
 import { roleHomePath } from "@/lib/auth";
 import { Link } from "@/i18n/navigation";
+import { BrandLogo } from "@/components/shared/brand-logo";
 import { LocaleSwitcher } from "@/components/shared/locale-switcher";
 import { MobileMenuDetails } from "@/components/shared/mobile-menu-details";
 import { buttonVariants } from "@/components/ui/button";
@@ -47,18 +48,17 @@ export async function SiteHeader({
   return (
     <header className="sticky top-0 z-50 border-b border-white/60 bg-[#f5efe4]/78 backdrop-blur-xl">
       <div className="content-wrap flex min-h-20 items-center justify-between gap-4 py-4">
-        <Link href="/" locale={locale} className="flex items-center gap-3">
-          <span className="relative flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-surface-strong text-sm font-display font-extrabold text-white shadow-[0_12px_30px_rgba(18,37,58,0.22)]">
-            <span className="absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,_rgba(217,147,45,0.64),transparent_42%)]" />
-            <span className="relative">HF</span>
-          </span>
-          <span className="flex flex-col">
-            <span className="font-display text-2xl font-extrabold tracking-tight text-primary">
-              {t("brand")}
-            </span>
-            <span className="text-[11px] uppercase tracking-[0.25em] text-muted">
-              {locale === "en" ? "Hong Kong Home Services" : "香港家居服務"}
-            </span>
+        <Link
+          href="/"
+          locale={locale}
+          className="flex min-w-0 items-center gap-3"
+        >
+          <BrandLogo
+            className="h-10 max-w-[9rem] shrink sm:h-12 sm:max-w-[11rem]"
+            priority
+          />
+          <span className="hidden text-[11px] uppercase tracking-[0.2em] text-muted sm:block">
+            {locale === "en" ? "Hong Kong Home Services" : "香港家居服務"}
           </span>
         </Link>
 
