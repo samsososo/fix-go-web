@@ -12,6 +12,7 @@
     "db:reset": "tsx scripts/reset-db.ts",
     "qa:flows": "tsx scripts/qa-role-flows.ts",
     "qa:ui": "tsx scripts/qa-deep-ui.ts",
+    "deploy:dev": "bash scripts/deploy-dev.sh",
     "lint": "eslint",
     "test": "NODE_ENV=test MONGODB_DATABASE=hotfix_test ENABLE_DATABASE_SEEDING=true node --env-file-if-exists=.env.local ./node_modules/vitest/vitest.mjs run",
     "test:watch": "NODE_ENV=test MONGODB_DATABASE=hotfix_test ENABLE_DATABASE_SEEDING=true node --env-file-if-exists=.env.local ./node_modules/vitest/vitest.mjs",
