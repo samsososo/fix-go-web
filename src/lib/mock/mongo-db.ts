@@ -9,6 +9,13 @@ import {
 } from "@/lib/account-recovery";
 import { enableDatabaseSeeding, env } from "@/lib/env";
 import { createOpaqueToken } from "@/lib/security";
+import {
+  PRO_SUBSCRIPTION_AMOUNT_MINOR,
+  PRO_SUBSCRIPTION_CURRENCY,
+  PRO_SUBSCRIPTION_INTERVAL,
+  PRO_SUBSCRIPTION_PLAN_CODE,
+  type ProSubscription,
+} from "@/lib/subscription-policy";
 import { createSeedDb } from "@/mock/seed";
 import {
   AdminNote,
@@ -132,6 +139,23 @@ type ServiceCaseDoc = MongoDoc<ServiceRequest> & {
   attachments: Attachment[];
 };
 
+type ProSubscriptionDoc = MongoDoc<ProSubscription>;
+
+type StripeWebhookEventStatus = "processing" | "processed" | "failed";
+
+type StripeWebhookEventDoc = {
+  _id: string;
+  eventType: string;
+  objectId?: string;
+  status: StripeWebhookEventStatus;
+  attempts: number;
+  leaseId?: string;
+  leaseExpiresAt?: Date;
+  receivedAt: Date;
+  processedAt?: Date;
+  lastErrorCode?: string;
+};
+
 export const mongoSchemaCollections = [
   "profile",
   "adminProfiles",
@@ -144,6 +168,8 @@ export const mongoSchemaCollections = [
   "userNotifications",
   "adminNotes",
   "systemMetadata",
+  "proSubscriptions",
+  "stripeWebhookEvents",
 ] as const;
 
 const legacyCollectionNames = [
@@ -213,6 +239,7 @@ async function getMongoDb() {
     await initializeMongo(db);
     await bootstrapIfNeeded(db);
     await applyDataPatches(db);
+    await migrateSubscriptionSchema(db);
     initialized = true;
   }
 
@@ -470,6 +497,49 @@ function buildServiceCaseDocs(state: MockDb): ServiceCaseDoc[] {
   });
 }
 
+function buildInitialProSubscription(
+  proId: string,
+  createdAt = new Date().toISOString(),
+): ProSubscriptionDoc {
+  return {
+    _id: proId,
+    proId,
+    planCode: PRO_SUBSCRIPTION_PLAN_CODE,
+    amountMinor: PRO_SUBSCRIPTION_AMOUNT_MINOR,
+    currency: PRO_SUBSCRIPTION_CURRENCY,
+    interval: PRO_SUBSCRIPTION_INTERVAL,
+    accessStatus: "setup_required",
+    cancelAtPeriodEnd: false,
+    createdAt,
+    updatedAt: createdAt,
+  };
+}
+
+async function backfillProSubscriptions(db: Db) {
+  const pros = await db
+    .collection<ProfileDoc>("profile")
+    .find({ role: "pro", status: { $ne: "deleted" } })
+    .project<{ _id: string }>({ _id: 1 })
+    .toArray();
+  if (pros.length === 0) {
+    return;
+  }
+
+  const createdAt = new Date().toISOString();
+  await db.collection<ProSubscriptionDoc>("proSubscriptions").bulkWrite(
+    pros.map((pro) => {
+      const subscription = buildInitialProSubscription(pro._id, createdAt);
+      return {
+        updateOne: {
+          filter: { _id: pro._id },
+          update: { $setOnInsert: subscription },
+          upsert: true,
+        },
+      };
+    }),
+  );
+}
+
 async function writeState(db: Db, state: MockDb) {
   const { profiles, admins } = buildProfileDocs(state);
   const appConfig = buildAppConfigDocs(state);
@@ -571,7 +641,7 @@ async function migrateLegacySchema(db: Db) {
   const currentVersion = await db
     .collection<SystemMetadataDoc>("systemMetadata")
     .findOne({ _id: "schemaVersion" });
-  if (currentVersion?.value === "2") {
+  if (Number(currentVersion?.value ?? 0) >= 2) {
     return;
   }
 
@@ -716,6 +786,27 @@ async function migrateLegacySchema(db: Db) {
   await setMetadata(db, "legacyMigrationCompletedAt", new Date().toISOString());
 }
 
+async function migrateSubscriptionSchema(db: Db) {
+  const currentVersion = await getMetadata(db, "schemaVersion");
+  const version = Number(currentVersion?.value ?? 0);
+  if (version >= 3) {
+    return;
+  }
+  if (version !== 2) {
+    throw new Error(
+      `Subscription schema migration requires schema version 2; received ${currentVersion?.value ?? "missing"}.`,
+    );
+  }
+
+  await backfillProSubscriptions(db);
+  await setMetadata(db, "schemaVersion", "3");
+  await setMetadata(
+    db,
+    "subscriptionMigrationCompletedAt",
+    new Date().toISOString(),
+  );
+}
+
 async function initializeMongo(db: Db) {
   await Promise.all([
     db
@@ -787,6 +878,23 @@ async function initializeMongo(db: Db) {
     db
       .collection<MongoDoc<AdminNote>>("adminNotes")
       .createIndex({ entityType: 1, entityId: 1, createdAt: -1 }),
+    db
+      .collection<ProSubscriptionDoc>("proSubscriptions")
+      .createIndex({ stripeCustomerId: 1 }, { unique: true, sparse: true }),
+    db
+      .collection<ProSubscriptionDoc>("proSubscriptions")
+      .createIndex({ stripeSubscriptionId: 1 }, { unique: true, sparse: true }),
+    db
+      .collection<ProSubscriptionDoc>("proSubscriptions")
+      .createIndex({ checkoutSessionId: 1 }, { unique: true, sparse: true }),
+    db.collection<ProSubscriptionDoc>("proSubscriptions").createIndex({
+      accessStatus: 1,
+      gracePeriodEndsAt: 1,
+    }),
+    db.collection<StripeWebhookEventDoc>("stripeWebhookEvents").createIndex({
+      status: 1,
+      leaseExpiresAt: 1,
+    }),
   ]);
 }
 
@@ -941,6 +1049,185 @@ export async function withMongoDb<T>(updater: (db: MockDb) => Promise<T> | T) {
   const result = await updater(dbState);
   await writeMongoDb(dbState);
   return result;
+}
+
+export async function ensureMongoProSubscription(proId: string) {
+  const db = await getMongoDb();
+  const pro = await db.collection<ProfileDoc>("profile").findOne({
+    _id: proId,
+    role: "pro",
+    status: { $ne: "deleted" },
+  });
+  if (!pro) {
+    throw new Error("A valid pro account is required for a subscription.");
+  }
+
+  const initial = buildInitialProSubscription(proId);
+  await db
+    .collection<ProSubscriptionDoc>("proSubscriptions")
+    .updateOne({ _id: proId }, { $setOnInsert: initial }, { upsert: true });
+  const subscription = await db
+    .collection<ProSubscriptionDoc>("proSubscriptions")
+    .findOne({ _id: proId });
+  if (!subscription) {
+    throw new Error("Unable to initialize the pro subscription.");
+  }
+
+  return stripMongoId<ProSubscription>(subscription);
+}
+
+export async function findMongoProSubscription(proId: string) {
+  const db = await getMongoDb();
+  const subscription = await db
+    .collection<ProSubscriptionDoc>("proSubscriptions")
+    .findOne({ _id: proId });
+  return subscription ? stripMongoId<ProSubscription>(subscription) : null;
+}
+
+export async function listMongoProSubscriptions() {
+  const db = await getMongoDb();
+  const subscriptions = await db
+    .collection<ProSubscriptionDoc>("proSubscriptions")
+    .find({})
+    .sort({ createdAt: 1, proId: 1 })
+    .toArray();
+  return subscriptions.map((subscription) =>
+    stripMongoId<ProSubscription>(subscription),
+  );
+}
+
+function isDuplicateMongoKey(error: unknown) {
+  return Boolean(
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    error.code === 11000,
+  );
+}
+
+export type StripeWebhookClaimResult =
+  | { status: "claimed"; leaseId: string }
+  | { status: "processed" }
+  | { status: "busy" };
+
+/**
+ * Coordinates at-least-once Stripe delivery. Claiming does not make later
+ * business writes exactly-once: every handler must still re-fetch canonical
+ * Stripe state and apply an idempotent conditional update before completing
+ * the event.
+ */
+export async function claimMongoStripeWebhookEvent(input: {
+  eventId: string;
+  eventType: string;
+  objectId?: string;
+  leaseId: string;
+  leaseDurationMs?: number;
+}): Promise<StripeWebhookClaimResult> {
+  const db = await getMongoDb();
+  const collection = db.collection<StripeWebhookEventDoc>(
+    "stripeWebhookEvents",
+  );
+  const now = new Date();
+  const leaseExpiresAt = new Date(
+    now.getTime() + (input.leaseDurationMs ?? 5 * 60 * 1000),
+  );
+  const event: StripeWebhookEventDoc = {
+    _id: input.eventId,
+    eventType: input.eventType,
+    objectId: input.objectId,
+    status: "processing",
+    attempts: 1,
+    leaseId: input.leaseId,
+    leaseExpiresAt,
+    receivedAt: now,
+  };
+
+  try {
+    await collection.insertOne(event);
+    return { status: "claimed", leaseId: input.leaseId };
+  } catch (error) {
+    if (!isDuplicateMongoKey(error)) {
+      throw error;
+    }
+  }
+
+  const existing = await collection.findOne({ _id: input.eventId });
+  if (existing?.status === "processed") {
+    return { status: "processed" };
+  }
+  if (
+    existing?.status === "processing" &&
+    existing.leaseExpiresAt &&
+    existing.leaseExpiresAt.getTime() > now.getTime()
+  ) {
+    return { status: "busy" };
+  }
+
+  const reclaimed = await collection.findOneAndUpdate(
+    {
+      _id: input.eventId,
+      status: { $ne: "processed" },
+      $or: [
+        { status: "failed" },
+        { leaseExpiresAt: { $lte: now } },
+        { leaseExpiresAt: { $exists: false } },
+      ],
+    },
+    {
+      $set: {
+        eventType: input.eventType,
+        objectId: input.objectId,
+        status: "processing",
+        leaseId: input.leaseId,
+        leaseExpiresAt,
+      },
+      $inc: { attempts: 1 },
+      $unset: { lastErrorCode: "", processedAt: "" },
+    },
+    { returnDocument: "after" },
+  );
+
+  return reclaimed
+    ? { status: "claimed", leaseId: input.leaseId }
+    : { status: "busy" };
+}
+
+export async function completeMongoStripeWebhookEvent(
+  eventId: string,
+  leaseId: string,
+) {
+  const db = await getMongoDb();
+  const result = await db
+    .collection<StripeWebhookEventDoc>("stripeWebhookEvents")
+    .updateOne(
+      { _id: eventId, status: "processing", leaseId },
+      {
+        $set: { status: "processed", processedAt: new Date() },
+        $unset: { leaseId: "", leaseExpiresAt: "", lastErrorCode: "" },
+      },
+    );
+  return result.modifiedCount === 1;
+}
+
+export async function failMongoStripeWebhookEvent(
+  eventId: string,
+  leaseId: string,
+  errorCode: string,
+) {
+  const db = await getMongoDb();
+  const safeErrorCode = errorCode
+    .replace(/[^A-Za-z0-9_.:-]/g, "_")
+    .slice(0, 80);
+  const result = await db
+    .collection<StripeWebhookEventDoc>("stripeWebhookEvents")
+    .updateOne(
+      { _id: eventId, status: "processing", leaseId },
+      {
+        $set: { status: "failed", lastErrorCode: safeErrorCode },
+        $unset: { leaseId: "", leaseExpiresAt: "", processedAt: "" },
+      },
+    );
+  return result.modifiedCount === 1;
 }
 
 async function findProfileByIdentifier(db: Db, identifier: string) {
@@ -1465,8 +1752,11 @@ export async function resetMongoDb() {
     db.collection<SecurityAttemptDoc>("securityAttempts").deleteMany({}),
     db.collection<AccountRecoveryDoc>("accountRecovery").deleteMany({}),
     db.collection<AuthCredentialDoc>("authCredentials").deleteMany({}),
+    db.collection<ProSubscriptionDoc>("proSubscriptions").deleteMany({}),
+    db.collection<StripeWebhookEventDoc>("stripeWebhookEvents").deleteMany({}),
   ]);
   await writeState(db, seed);
+  await backfillProSubscriptions(db);
 
   const credentials = seed.users.map((user) => ({
     _id: user.id,
@@ -1487,6 +1777,7 @@ export async function resetMongoDb() {
     );
   }
   await setMetadata(db, "bootstrapped", "1");
+  await setMetadata(db, "schemaVersion", "3");
   await setMetadata(db, "demo_calendar_seed_v1", "1");
   await setMetadata(db, "demo_duration_seed_v1", "1");
   clearMongoReadCache();
@@ -1506,6 +1797,18 @@ export async function inspectMongoSchema() {
     ),
   );
   return { names, counts };
+}
+
+export async function migrateMongoSubscriptionSchema() {
+  const db = await getMongoDb();
+  await migrateSubscriptionSchema(db);
+  const version = await getMetadata(db, "schemaVersion");
+  return {
+    version: version?.value,
+    subscriptions: await db
+      .collection<ProSubscriptionDoc>("proSubscriptions")
+      .countDocuments(),
+  };
 }
 
 export async function initializeMongoProductionDb() {
@@ -1572,7 +1875,7 @@ export async function initializeMongoProductionDb() {
 export async function finalizeMongoSchemaMigration() {
   const db = await getMongoDb();
   const version = await getMetadata(db, "schemaVersion");
-  if (version?.value !== "2") {
+  if (version?.value !== "3") {
     throw new Error("Schema migration has not completed.");
   }
   const state = await loadMongoDbStateFromDb(db);

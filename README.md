@@ -116,6 +116,9 @@ Supported environment variables:
 - `TWILIO_API_KEY`
 - `TWILIO_API_SECRET`
 - `TWILIO_VERIFY_SERVICE_SID`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_PRO_MONTHLY_PRICE_ID`
 
 MongoDB is required. Set `MONGODB_URI` before running the app locally or in deployment. In production, set explicit secrets, disable demo login, and leave database seeding disabled unless you are intentionally resetting a non-production environment.
 
@@ -137,6 +140,19 @@ TWILIO_API_KEY=SK...
 TWILIO_API_SECRET=...
 TWILIO_VERIFY_SERVICE_SID=VA...
 ```
+
+Stripe Billing configuration is environment-specific. Use sandbox values in
+`.env.dev`; never commit the real values:
+
+```bash
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRO_MONTHLY_PRICE_ID=price_...
+```
+
+The monthly price must be a reusable HKD 100 recurring monthly Price. The
+three-calendar-month trial is granted by application policy when a pro first
+binds a card, not configured on the Stripe Price itself.
 
 For production MongoDB, use a separate database and keep mock data disabled:
 
@@ -160,7 +176,7 @@ service category and service area configuration, and never creates demo users.
 
 ### MongoDB Collections
 
-The application uses 11 camelCase collections:
+The application uses 13 camelCase collections:
 
 - `profile`
 - `adminProfiles`
@@ -173,10 +189,14 @@ The application uses 11 camelCase collections:
 - `userNotifications`
 - `adminNotes`
 - `systemMetadata`
+- `proSubscriptions`
+- `stripeWebhookEvents`
 
 `serviceCases` stores each request together with its quotes, accepted job,
 attachments, and job status history. `appConfig` stores service categories and
-service areas, separated by `configType`.
+service areas, separated by `configType`. Billing state is kept out of profile
+documents: `proSubscriptions` stores one subscription record per pro and
+`stripeWebhookEvents` provides idempotent Stripe event processing.
 
 After taking a MongoDB backup, migrate a development database and remove the
 legacy collections with:
@@ -281,7 +301,8 @@ These parts are intentionally not fully production-complete yet:
 
 - File uploads are still represented by local file references
 - Messaging remains a reserved shell for a later release
-- Payments / payouts are not implemented
+- Customer payments and marketplace payouts are not implemented
+- Pro subscription persistence is present, while Checkout and live billing remain pending
 - Verification workflow is basic and admin-driven
 - Notifications are stored locally and not delivered externally
 - Lead matching logic is rule-based, not marketplace-optimized

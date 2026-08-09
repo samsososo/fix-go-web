@@ -43,6 +43,27 @@ const envSchema = z.object({
       .regex(/^VA[0-9a-fA-F]{32}$/)
       .optional(),
   ),
+  STRIPE_SECRET_KEY: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z
+      .string()
+      .regex(/^sk_(?:test|live)_[A-Za-z0-9]+$/)
+      .optional(),
+  ),
+  STRIPE_WEBHOOK_SECRET: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z
+      .string()
+      .regex(/^whsec_[A-Za-z0-9]+$/)
+      .optional(),
+  ),
+  STRIPE_PRO_MONTHLY_PRICE_ID: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z
+      .string()
+      .regex(/^price_[A-Za-z0-9]+$/)
+      .optional(),
+  ),
 });
 
 const parsed = envSchema.safeParse(process.env);
