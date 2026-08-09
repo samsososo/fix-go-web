@@ -9,21 +9,21 @@ import { getCurrentUser } from "@/lib/auth";
 import { formatDistrictName } from "@/lib/hk-locale";
 import { listProCalendarBookings } from "@/lib/mock/repositories";
 import { getProNav } from "@/lib/nav";
-import { cn } from "@/lib/utils";
 
 export default async function ProCalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: string }>;
+  searchParams: Promise<{ view?: string; date?: string }>;
 }) {
   const locale = await getLocale();
-  const { view: viewParam } = await searchParams;
+  const { view: viewParam, date } = await searchParams;
   const user = await getCurrentUser();
   if (!user) {
     return null;
   }
 
-  const view = viewParam === "month" ? "month" : "week";
+  const view = viewParam === "week" ? "week" : "month";
+  const referenceDate = new Date().toISOString();
   const bookings = await listProCalendarBookings(user.id);
   const events: CalendarEvent[] = bookings.map((booking) => ({
     id: booking.id,
@@ -60,33 +60,12 @@ export default async function ProCalendarPage({
       }
       navItems={getProNav(locale, "calendar")}
     >
-      <div className="mb-5 inline-flex rounded-lg border border-line bg-card p-1">
-        {(["week", "month"] as const).map((option) => (
-          <a
-            key={option}
-            href={`/pro/calendar?view=${option}`}
-            className={cn(
-              "rounded-md px-4 py-2 text-sm font-semibold transition",
-              view === option
-                ? "bg-primary !text-white"
-                : "text-muted hover:bg-surface-tint hover:text-primary",
-            )}
-          >
-            {option === "week"
-              ? locale === "en"
-                ? "Week"
-                : "星期"
-              : locale === "en"
-                ? "Month"
-                : "月份"}
-          </a>
-        ))}
-      </div>
-
       <BookingCalendar
         locale={locale}
         events={events}
         view={view}
+        initialDate={date}
+        referenceDate={referenceDate}
         perspectiveLabel={locale === "en" ? "My timetable" : "我的日程"}
         emptyTitle={locale === "en" ? "No scheduled jobs yet" : "未有日程"}
         emptyDescription={
