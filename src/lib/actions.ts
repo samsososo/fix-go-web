@@ -1,19 +1,28 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 
 import {
   clearSession,
   localizedRoleHomePath,
+  requireRole,
   signInAs,
   signInWithCredentials,
 } from "@/lib/auth";
-import { enableDemoLogin } from "@/lib/env";
+import { enableDemoLogin, env } from "@/lib/env";
 import {
+  clearProSubscriptionCheckoutSession,
+  completeProSubscriptionCheckoutReservation,
   createCredential,
+  ensureProSubscription,
+  findProSubscription,
+  releaseProSubscriptionCheckout,
+  reserveProSubscriptionCheckout,
   resetPasswordWithRecovery,
   reserveSmsVerificationAttempt,
+  setProStripeCustomer,
 } from "@/lib/mock/db";
 import {
   acceptCustomerQuote,
@@ -46,6 +55,185 @@ import {
   signupSmsRequestSchema,
   signupWithVerificationSchema,
 } from "@/lib/validation";
+import {
+  createCardSetupCheckoutSession,
+  getOrCreateStripeCustomerForPro,
+  inspectOwnedCardSetupCheckoutSession,
+} from "@/lib/stripe-billing";
+import { hasConsumedLifetimeTrial } from "@/lib/subscription-policy";
+
+const CHECKOUT_RESERVATION_MS = 5 * 60 * 1000;
+
+function billingPath(locale: string) {
+  void locale;
+  return "/pro/billing";
+}
+
+function localizedBillingError(locale: string) {
+  return locale === "en"
+    ? "Unable to open the secure card setup. Please try again."
+    : "暫時未能開啟安全綁卡頁面，請再試一次。";
+}
+
+function pendingCheckoutError(locale: string) {
+  return locale === "en"
+    ? "Stripe is confirming your completed card setup. Please wait a moment."
+    : "Stripe 正在確認已完成嘅綁卡，請稍等片刻。";
+}
+
+async function reusableCheckout(input: {
+  proId: string;
+  stripeCustomerId?: string;
+  checkoutSessionId?: string;
+}) {
+  if (!input.stripeCustomerId || !input.checkoutSessionId) {
+    return { status: "none" as const };
+  }
+
+  const state = await inspectOwnedCardSetupCheckoutSession({
+    proId: input.proId,
+    customerId: input.stripeCustomerId,
+    checkoutSessionId: input.checkoutSessionId,
+  });
+  if (state.status === "expired") {
+    await clearProSubscriptionCheckoutSession(input.checkoutSessionId);
+    return { status: "none" as const };
+  }
+  if (state.status === "complete") {
+    return { status: "pending" as const };
+  }
+
+  return { status: "open" as const, url: state.url };
+}
+
+export async function startProSubscriptionCheckoutAction(input: {
+  locale: string;
+}) {
+  const locale = input.locale === "en" ? "en" : "zh-HK";
+  const user = await requireRole("pro", locale);
+  let reservationId: string | undefined;
+
+  try {
+    let subscription = await ensureProSubscription(user.id);
+    if (
+      hasConsumedLifetimeTrial(subscription) &&
+      !subscription.stripeSubscriptionId
+    ) {
+      return {
+        ok: false as const,
+        error: pendingCheckoutError(locale),
+      };
+    }
+    if (subscription.stripeSubscriptionId) {
+      return {
+        ok: false as const,
+        error:
+          locale === "en"
+            ? "Your card setup has already been completed."
+            : "你已經完成綁卡設定。",
+      };
+    }
+
+    const existingCheckout = await reusableCheckout({
+      proId: user.id,
+      stripeCustomerId: subscription.stripeCustomerId,
+      checkoutSessionId: subscription.checkoutSessionId,
+    });
+    if (existingCheckout.status === "open") {
+      return { ok: true as const, url: existingCheckout.url };
+    }
+    if (existingCheckout.status === "pending") {
+      return {
+        ok: false as const,
+        error: pendingCheckoutError(locale),
+      };
+    }
+
+    const customer = await getOrCreateStripeCustomerForPro({
+      proId: user.id,
+      existingCustomerId: subscription.stripeCustomerId,
+      email: user.email,
+      name: user.fullName,
+      idempotencyKey: `pro-customer:${user.id}`,
+    });
+    subscription = await setProStripeCustomer(user.id, customer.id);
+    const customerId = subscription.stripeCustomerId;
+    if (!customerId) {
+      throw new Error("Stripe Customer persistence failed.");
+    }
+
+    reservationId = randomUUID();
+    const reserved = await reserveProSubscriptionCheckout({
+      proId: user.id,
+      reservationId,
+      reservationExpiresAt: new Date(
+        Date.now() + CHECKOUT_RESERVATION_MS,
+      ).toISOString(),
+    });
+
+    if (!reserved) {
+      const latest = await findProSubscription(user.id);
+      const concurrentCheckout = latest
+        ? await reusableCheckout({
+            proId: user.id,
+            stripeCustomerId: latest.stripeCustomerId,
+            checkoutSessionId: latest.checkoutSessionId,
+          })
+        : { status: "none" as const };
+      if (concurrentCheckout.status === "open") {
+        return { ok: true as const, url: concurrentCheckout.url };
+      }
+      if (concurrentCheckout.status === "pending") {
+        return {
+          ok: false as const,
+          error: pendingCheckoutError(locale),
+        };
+      }
+      throw new Error("A checkout setup is already being created.");
+    }
+
+    const returnUrl = new URL(billingPath(locale), env.APP_URL);
+    returnUrl.searchParams.set("checkout", "success");
+    const cancelUrl = new URL(billingPath(locale), env.APP_URL);
+    cancelUrl.searchParams.set("checkout", "cancelled");
+    const checkout = await createCardSetupCheckoutSession({
+      proId: user.id,
+      customerId,
+      successUrl: returnUrl.toString(),
+      cancelUrl: cancelUrl.toString(),
+      idempotencyKey: `pro-card-setup:${user.id}:${reservationId}`,
+    });
+    if (!checkout.url || !checkout.expires_at) {
+      throw new Error("Stripe Checkout did not return a usable session.");
+    }
+
+    const saved = await completeProSubscriptionCheckoutReservation({
+      proId: user.id,
+      reservationId,
+      checkoutSessionId: checkout.id,
+      checkoutSessionExpiresAt: new Date(
+        checkout.expires_at * 1000,
+      ).toISOString(),
+      stripeCustomerId: customerId,
+    });
+    if (!saved) {
+      throw new Error("Stripe Checkout persistence failed.");
+    }
+
+    revalidatePath(billingPath(locale));
+    return { ok: true as const, url: checkout.url };
+  } catch {
+    if (reservationId) {
+      await releaseProSubscriptionCheckout(user.id, reservationId).catch(
+        () => undefined,
+      );
+    }
+    return {
+      ok: false as const,
+      error: localizedBillingError(locale),
+    };
+  }
+}
 
 export async function startLoginAction(input: {
   identifier: string;
@@ -65,9 +253,17 @@ export async function startLoginAction(input: {
     return result;
   }
 
+  const subscription =
+    result.user.role === "pro"
+      ? await ensureProSubscription(result.user.id)
+      : null;
+
   return {
     ok: true,
-    target: localizedRoleHomePath(result.user.role, input.locale),
+    target:
+      subscription?.accessStatus === "setup_required"
+        ? billingPath(input.locale)
+        : localizedRoleHomePath(result.user.role, input.locale),
   };
 }
 
@@ -218,7 +414,10 @@ export async function signUpAction(
   revalidatePath("/");
   return {
     ok: true,
-    target: localizedRoleHomePath(user.role, signupData.locale),
+    target:
+      user.role === "pro"
+        ? billingPath(signupData.locale)
+        : localizedRoleHomePath(user.role, signupData.locale),
   };
 }
 
@@ -273,7 +472,15 @@ export async function signInDemoAction(input: {
   }
 
   const user = await signInAs(input.userId);
-  return { ok: true, target: localizedRoleHomePath(user.role, input.locale) };
+  const subscription =
+    user.role === "pro" ? await ensureProSubscription(user.id) : null;
+  return {
+    ok: true,
+    target:
+      subscription?.accessStatus === "setup_required"
+        ? billingPath(input.locale)
+        : localizedRoleHomePath(user.role, input.locale),
+  };
 }
 
 export async function logoutAction(input: { locale: string }) {

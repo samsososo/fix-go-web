@@ -2,6 +2,7 @@ import {
   BriefcaseBusiness,
   CalendarDays,
   CheckSquare,
+  CreditCard,
   Grid2X2,
 } from "lucide-react";
 
@@ -33,6 +34,10 @@ function NavIcon({ href, className }: { href: string; className?: string }) {
 
   if (href === "/pro/jobs") {
     return <CheckSquare className={iconClass} aria-hidden="true" />;
+  }
+
+  if (href === "/pro/billing") {
+    return <CreditCard className={iconClass} aria-hidden="true" />;
   }
 
   return null;

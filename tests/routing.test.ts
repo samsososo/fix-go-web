@@ -18,6 +18,7 @@ describe("routing helpers", () => {
       "/pro/leads",
       "/pro/calendar",
       "/pro/jobs",
+      "/pro/billing",
     ]);
 
     expect(getAdminNav("zh-HK", "dashboard").map((item) => item.href)).toEqual([

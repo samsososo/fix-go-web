@@ -45,6 +45,11 @@ export function getProNav(locale: string, current: string, leadCount?: number) {
       label: locale === "en" ? "Jobs" : "已接訂單",
       active: current === "jobs",
     },
+    {
+      href: "/pro/billing",
+      label: locale === "en" ? "Billing" : "月費",
+      active: current === "billing",
+    },
   ];
 }
 

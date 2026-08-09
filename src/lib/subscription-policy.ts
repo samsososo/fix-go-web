@@ -55,8 +55,12 @@ export interface ProSubscription {
   stripePriceId?: string;
   stripeStatus?: StripeSubscriptionStatus;
   stripeLivemode?: boolean;
+  stripeSetupIntentId?: string;
+  stripePaymentMethodId?: string;
   checkoutSessionId?: string;
   checkoutSessionExpiresAt?: IsoDateTime;
+  checkoutReservationId?: string;
+  checkoutReservationExpiresAt?: IsoDateTime;
   cardBoundAt?: IsoDateTime;
   trialConsumedAt?: IsoDateTime;
   trialGrantedAt?: IsoDateTime;

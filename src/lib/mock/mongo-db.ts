@@ -14,7 +14,9 @@ import {
   PRO_SUBSCRIPTION_CURRENCY,
   PRO_SUBSCRIPTION_INTERVAL,
   PRO_SUBSCRIPTION_PLAN_CODE,
+  addThreeHongKongCalendarMonths,
   type ProSubscription,
+  type StripeSubscriptionStatus,
 } from "@/lib/subscription-policy";
 import { createSeedDb } from "@/mock/seed";
 import {
@@ -887,6 +889,9 @@ async function initializeMongo(db: Db) {
     db
       .collection<ProSubscriptionDoc>("proSubscriptions")
       .createIndex({ checkoutSessionId: 1 }, { unique: true, sparse: true }),
+    db
+      .collection<ProSubscriptionDoc>("proSubscriptions")
+      .createIndex({ stripeSetupIntentId: 1 }, { unique: true, sparse: true }),
     db.collection<ProSubscriptionDoc>("proSubscriptions").createIndex({
       accessStatus: 1,
       gracePeriodEndsAt: 1,
@@ -1094,6 +1099,332 @@ export async function listMongoProSubscriptions() {
   return subscriptions.map((subscription) =>
     stripMongoId<ProSubscription>(subscription),
   );
+}
+
+export async function reserveMongoProSubscriptionCheckout(input: {
+  proId: string;
+  reservationId: string;
+  reservationExpiresAt: string;
+}) {
+  const expiresAt = new Date(input.reservationExpiresAt);
+  if (!Number.isFinite(expiresAt.getTime()) || expiresAt <= new Date()) {
+    throw new TypeError("Checkout reservation expiry must be in the future.");
+  }
+
+  const db = await getMongoDb();
+  const now = new Date().toISOString();
+  const subscription = await db
+    .collection<ProSubscriptionDoc>("proSubscriptions")
+    .findOneAndUpdate(
+      {
+        _id: input.proId,
+        accessStatus: "setup_required",
+        checkoutSessionId: { $exists: false },
+        stripeSubscriptionId: { $exists: false },
+        cardBoundAt: { $exists: false },
+        trialConsumedAt: { $exists: false },
+        trialGrantedAt: { $exists: false },
+        trialStartedAt: { $exists: false },
+        trialEndsAt: { $exists: false },
+        $or: [
+          { checkoutReservationId: { $exists: false } },
+          { checkoutReservationExpiresAt: { $lte: now } },
+          { checkoutReservationId: input.reservationId },
+        ],
+      },
+      {
+        $set: {
+          checkoutReservationId: input.reservationId,
+          checkoutReservationExpiresAt: expiresAt.toISOString(),
+          updatedAt: now,
+        },
+      },
+      { returnDocument: "after" },
+    );
+
+  return subscription ? stripMongoId<ProSubscription>(subscription) : null;
+}
+
+export async function releaseMongoProSubscriptionCheckout(
+  proId: string,
+  reservationId: string,
+) {
+  const db = await getMongoDb();
+  const result = await db
+    .collection<ProSubscriptionDoc>("proSubscriptions")
+    .updateOne(
+      { _id: proId, checkoutReservationId: reservationId },
+      {
+        $set: { updatedAt: new Date().toISOString() },
+        $unset: {
+          checkoutReservationId: "",
+          checkoutReservationExpiresAt: "",
+        },
+      },
+    );
+  return result.modifiedCount === 1;
+}
+
+export async function setMongoProStripeCustomer(
+  proId: string,
+  stripeCustomerId: string,
+) {
+  const db = await getMongoDb();
+  const collection = db.collection<ProSubscriptionDoc>("proSubscriptions");
+  const subscription = await collection.findOneAndUpdate(
+    {
+      _id: proId,
+      $or: [{ stripeCustomerId: { $exists: false } }, { stripeCustomerId }],
+    },
+    {
+      $set: {
+        stripeCustomerId,
+        updatedAt: new Date().toISOString(),
+      },
+    },
+    { returnDocument: "after" },
+  );
+
+  if (subscription) {
+    return stripMongoId<ProSubscription>(subscription);
+  }
+
+  const existing = await collection.findOne({ _id: proId });
+  if (!existing) {
+    throw new Error("The pro subscription does not exist.");
+  }
+
+  return stripMongoId<ProSubscription>(existing);
+}
+
+export async function completeMongoProSubscriptionCheckoutReservation(input: {
+  proId: string;
+  reservationId: string;
+  checkoutSessionId: string;
+  checkoutSessionExpiresAt: string;
+  stripeCustomerId: string;
+}) {
+  const checkoutExpiresAt = new Date(input.checkoutSessionExpiresAt);
+  if (!Number.isFinite(checkoutExpiresAt.getTime())) {
+    throw new TypeError("Checkout session expiry must be a valid date-time.");
+  }
+
+  const db = await getMongoDb();
+  const subscription = await db
+    .collection<ProSubscriptionDoc>("proSubscriptions")
+    .findOneAndUpdate(
+      {
+        _id: input.proId,
+        accessStatus: "setup_required",
+        checkoutReservationId: input.reservationId,
+        cardBoundAt: { $exists: false },
+        trialConsumedAt: { $exists: false },
+        trialGrantedAt: { $exists: false },
+        trialStartedAt: { $exists: false },
+        trialEndsAt: { $exists: false },
+        stripeSubscriptionId: { $exists: false },
+        $or: [
+          { stripeCustomerId: { $exists: false } },
+          { stripeCustomerId: input.stripeCustomerId },
+        ],
+      },
+      {
+        $set: {
+          stripeCustomerId: input.stripeCustomerId,
+          checkoutSessionId: input.checkoutSessionId,
+          checkoutSessionExpiresAt: checkoutExpiresAt.toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        $unset: {
+          checkoutReservationId: "",
+          checkoutReservationExpiresAt: "",
+        },
+      },
+      { returnDocument: "after" },
+    );
+
+  return subscription ? stripMongoId<ProSubscription>(subscription) : null;
+}
+
+export async function clearMongoProSubscriptionCheckoutSession(
+  checkoutSessionId: string,
+) {
+  const db = await getMongoDb();
+  const result = await db
+    .collection<ProSubscriptionDoc>("proSubscriptions")
+    .updateOne(
+      {
+        checkoutSessionId,
+        cardBoundAt: { $exists: false },
+        trialConsumedAt: { $exists: false },
+        trialGrantedAt: { $exists: false },
+        trialStartedAt: { $exists: false },
+        trialEndsAt: { $exists: false },
+        stripeSubscriptionId: { $exists: false },
+      },
+      {
+        $set: { updatedAt: new Date().toISOString() },
+        $unset: {
+          checkoutSessionId: "",
+          checkoutSessionExpiresAt: "",
+          checkoutReservationId: "",
+          checkoutReservationExpiresAt: "",
+        },
+      },
+    );
+  return result.modifiedCount === 1;
+}
+
+export type ConsumeProLifetimeTrialResult = {
+  status: "consumed" | "existing";
+  subscription: ProSubscription;
+};
+
+/**
+ * Atomically consumes the one lifetime trial before the Stripe subscription is
+ * created. If Stripe creation is interrupted, a webhook retry resumes from the
+ * persisted trial dates instead of granting a fresh trial.
+ */
+export async function consumeMongoProLifetimeTrial(input: {
+  proId: string;
+  checkoutSessionId: string;
+  stripeCustomerId: string;
+  stripeSetupIntentId: string;
+  stripePaymentMethodId: string;
+  cardBoundAt: string;
+  trialEndsAt: string;
+}): Promise<ConsumeProLifetimeTrialResult> {
+  const cardBoundAt = new Date(input.cardBoundAt);
+  if (!Number.isFinite(cardBoundAt.getTime())) {
+    throw new TypeError("Card binding time must be a valid date-time.");
+  }
+  const normalizedCardBoundAt = cardBoundAt.toISOString();
+  const expectedTrialEndsAt = addThreeHongKongCalendarMonths(
+    normalizedCardBoundAt,
+  );
+  if (new Date(input.trialEndsAt).toISOString() !== expectedTrialEndsAt) {
+    throw new Error(
+      "Trial end must be exactly three Hong Kong calendar months.",
+    );
+  }
+
+  const db = await getMongoDb();
+  const collection = db.collection<ProSubscriptionDoc>("proSubscriptions");
+  const subscription = await collection.findOneAndUpdate(
+    {
+      _id: input.proId,
+      accessStatus: "setup_required",
+      checkoutSessionId: input.checkoutSessionId,
+      stripeCustomerId: input.stripeCustomerId,
+      cardBoundAt: { $exists: false },
+      trialConsumedAt: { $exists: false },
+      trialGrantedAt: { $exists: false },
+      trialStartedAt: { $exists: false },
+      trialEndsAt: { $exists: false },
+      stripeSubscriptionId: { $exists: false },
+    },
+    {
+      $set: {
+        stripeSetupIntentId: input.stripeSetupIntentId,
+        stripePaymentMethodId: input.stripePaymentMethodId,
+        cardBoundAt: normalizedCardBoundAt,
+        trialConsumedAt: normalizedCardBoundAt,
+        trialGrantedAt: normalizedCardBoundAt,
+        trialStartedAt: normalizedCardBoundAt,
+        trialEndsAt: expectedTrialEndsAt,
+        updatedAt: normalizedCardBoundAt,
+      },
+      $unset: {
+        checkoutReservationId: "",
+        checkoutReservationExpiresAt: "",
+      },
+    },
+    { returnDocument: "after" },
+  );
+
+  if (subscription) {
+    return {
+      status: "consumed",
+      subscription: stripMongoId<ProSubscription>(subscription),
+    };
+  }
+
+  const existing = await collection.findOne({ _id: input.proId });
+  if (!existing) {
+    throw new Error("The pro subscription does not exist.");
+  }
+  if (
+    !existing.trialConsumedAt ||
+    !existing.trialEndsAt ||
+    existing.checkoutSessionId !== input.checkoutSessionId ||
+    existing.stripeCustomerId !== input.stripeCustomerId ||
+    existing.stripeSetupIntentId !== input.stripeSetupIntentId ||
+    existing.stripePaymentMethodId !== input.stripePaymentMethodId
+  ) {
+    throw new Error("The checkout session does not match this subscription.");
+  }
+
+  return {
+    status: "existing",
+    subscription: stripMongoId<ProSubscription>(existing),
+  };
+}
+
+export async function activateMongoProTrialSubscription(input: {
+  proId: string;
+  stripeSubscriptionId: string;
+  stripePriceId: string;
+  stripeStatus: StripeSubscriptionStatus;
+  stripeLivemode: boolean;
+  currentPeriodStartedAt?: string;
+  currentPeriodEndsAt?: string;
+  lastStripeEventId: string;
+  lastStripeSyncedAt: string;
+}) {
+  if (input.stripeStatus !== "trialing" && input.stripeStatus !== "active") {
+    throw new Error("The new Stripe subscription is not active or trialing.");
+  }
+  const accessStatus = input.stripeStatus;
+
+  const db = await getMongoDb();
+  const collection = db.collection<ProSubscriptionDoc>("proSubscriptions");
+  const subscription = await collection.findOneAndUpdate(
+    {
+      _id: input.proId,
+      accessStatus: "setup_required",
+      trialConsumedAt: { $exists: true },
+      stripeSubscriptionId: { $exists: false },
+    },
+    {
+      $set: {
+        stripeSubscriptionId: input.stripeSubscriptionId,
+        stripePriceId: input.stripePriceId,
+        stripeStatus: input.stripeStatus,
+        stripeLivemode: input.stripeLivemode,
+        accessStatus,
+        currentPeriodStartedAt: input.currentPeriodStartedAt,
+        currentPeriodEndsAt: input.currentPeriodEndsAt,
+        cancelAtPeriodEnd: false,
+        lastStripeEventId: input.lastStripeEventId,
+        lastStripeSyncedAt: input.lastStripeSyncedAt,
+        updatedAt: input.lastStripeSyncedAt,
+      },
+      $unset: {
+        checkoutReservationId: "",
+        checkoutReservationExpiresAt: "",
+      },
+    },
+    { returnDocument: "after" },
+  );
+
+  if (subscription) {
+    return stripMongoId<ProSubscription>(subscription);
+  }
+
+  const existing = await collection.findOne({ _id: input.proId });
+  return existing?.stripeSubscriptionId === input.stripeSubscriptionId
+    ? stripMongoId<ProSubscription>(existing)
+    : null;
 }
 
 function isDuplicateMongoKey(error: unknown) {
