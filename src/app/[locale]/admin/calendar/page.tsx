@@ -9,8 +9,15 @@ import { formatDistrictName } from "@/lib/hk-locale";
 import { listAdminCalendarBookings } from "@/lib/mock/repositories";
 import { getAdminNav } from "@/lib/nav";
 
-export default async function AdminCalendarPage() {
+export default async function AdminCalendarPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string; date?: string }>;
+}) {
   const locale = await getLocale();
+  const { view: viewParam, date } = await searchParams;
+  const view = viewParam === "week" ? "week" : "month";
+  const referenceDate = new Date().toISOString();
   const bookings = await listAdminCalendarBookings();
   const events: CalendarEvent[] = bookings.map((booking) => ({
     id: booking.id,
@@ -52,6 +59,9 @@ export default async function AdminCalendarPage() {
       <BookingCalendar
         locale={locale}
         events={events}
+        view={view}
+        initialDate={date}
+        referenceDate={referenceDate}
         perspectiveLabel={locale === "en" ? "Ops schedule" : "營運排程"}
         emptyTitle={
           locale === "en" ? "No bookings to schedule" : "未有需排程訂單"
