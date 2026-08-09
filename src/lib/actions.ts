@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 
 import {
   clearSession,
@@ -12,30 +13,38 @@ import { enableDemoLogin } from "@/lib/env";
 import {
   createCredential,
   resetPasswordWithRecovery,
+  reserveSmsVerificationAttempt,
 } from "@/lib/mock/db";
 import {
   acceptCustomerQuote,
   createCustomerRequest,
   createUserAccount,
+  findUserByIdentifier,
   saveProProfile,
   submitProQuote,
   toggleProVerification,
   updateAdminRequestStatus,
   updateProBookingStatus,
 } from "@/lib/mock/repositories";
+import {
+  checkSmsVerificationCode,
+  sendSmsVerificationCode,
+  SmsVerificationError,
+} from "@/lib/sms-verification";
 import { BookingStatus, RequestStatus } from "@/types/domain";
 import {
   ProProfileInput,
   PasswordResetInput,
   QuoteFormInput,
   RequestFormInput,
-  SignupInput,
+  SignupWithVerificationInput,
   loginSchema,
   passwordResetSchema,
   proProfileSchema,
   quoteFormSchema,
   requestFormSchema,
-  signupSchema,
+  signupSmsRequestSchema,
+  signupWithVerificationSchema,
 } from "@/lib/validation";
 
 export async function startLoginAction(input: {
@@ -62,15 +71,134 @@ export async function startLoginAction(input: {
   };
 }
 
-export async function signUpAction(input: SignupInput) {
-  const parsed = signupSchema.safeParse(input);
+export async function requestSignupSmsCodeAction(input: {
+  phone: string;
+  locale: string;
+}) {
+  const parsed = signupSmsRequestSchema.safeParse(input);
+  const isEnglish = input.locale === "en";
+
+  if (!parsed.success) {
+    return {
+      ok: false as const,
+      error: isEnglish
+        ? "Enter a valid Hong Kong mobile number."
+        : "請輸入有效香港手提電話。",
+    };
+  }
+
+  if (await findUserByIdentifier(parsed.data.phone)) {
+    return {
+      ok: false as const,
+      error: isEnglish
+        ? "This phone number already has an account. Please log in instead."
+        : "呢個電話號碼已經有帳戶，請直接登入。",
+    };
+  }
+
+  const requestHeaders = await headers();
+  const forwardedFor = requestHeaders.get("x-forwarded-for");
+  const ipAddress =
+    forwardedFor?.split(",")[0]?.trim() ||
+    requestHeaders.get("x-real-ip") ||
+    undefined;
+  const reservation = await reserveSmsVerificationAttempt({
+    phone: parsed.data.phone,
+    ipAddress,
+  });
+
+  if (!reservation.ok) {
+    return {
+      ok: false as const,
+      retryAfterSeconds: reservation.retryAfterSeconds,
+      error:
+        reservation.reason === "cooldown"
+          ? isEnglish
+            ? `Please wait ${reservation.retryAfterSeconds} seconds before resending.`
+            : `請等 ${reservation.retryAfterSeconds} 秒先重新發送。`
+          : isEnglish
+            ? "Too many SMS requests. Please try again later."
+            : "SMS 請求次數太多，請稍後再試。",
+    };
+  }
+
+  try {
+    await sendSmsVerificationCode(parsed.data.phone, parsed.data.locale);
+  } catch (error) {
+    const notConfigured =
+      error instanceof SmsVerificationError &&
+      error.reason === "not_configured";
+    return {
+      ok: false as const,
+      retryAfterSeconds: reservation.retryAfterSeconds,
+      error: notConfigured
+        ? isEnglish
+          ? "SMS verification has not been configured yet."
+          : "SMS 驗證尚未完成系統設定。"
+        : isEnglish
+          ? "The SMS could not be sent. Please try again later."
+          : "暫時未能發送 SMS，請稍後再試。",
+    };
+  }
+
+  return {
+    ok: true as const,
+    retryAfterSeconds: reservation.retryAfterSeconds,
+  };
+}
+
+export async function signUpAction(
+  input: SignupWithVerificationInput & { interfaceLocale?: string },
+) {
+  const parsed = signupWithVerificationSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: "Please check the form fields." };
   }
 
+  const { verificationCode, ...signupData } = parsed.data;
+  const isEnglish = input.interfaceLocale === "en";
+  const [phoneAccount, emailAccount] = await Promise.all([
+    findUserByIdentifier(signupData.phone),
+    signupData.email ? findUserByIdentifier(signupData.email) : null,
+  ]);
+  if (phoneAccount || emailAccount) {
+    return {
+      ok: false as const,
+      error: isEnglish
+        ? "An account with this email or phone already exists."
+        : "呢個電郵或電話已經有帳戶。",
+    };
+  }
+
+  let phoneApproved = false;
+  try {
+    phoneApproved = await checkSmsVerificationCode(
+      signupData.phone,
+      verificationCode,
+    );
+  } catch {
+    return {
+      ok: false as const,
+      error: isEnglish
+        ? "The SMS verification service is temporarily unavailable."
+        : "SMS 驗證服務暫時未能使用，請稍後再試。",
+    };
+  }
+
+  if (!phoneApproved) {
+    return {
+      ok: false as const,
+      error: isEnglish
+        ? "The verification code is incorrect or has expired."
+        : "驗證碼錯誤或已過期，請重新輸入或發送。",
+    };
+  }
+
   let user;
   try {
-    user = await createUserAccount(parsed.data);
+    user = await createUserAccount(signupData, {
+      phoneVerifiedAt: new Date().toISOString(),
+    });
   } catch (error) {
     return {
       ok: false,
@@ -80,17 +208,17 @@ export async function signUpAction(input: SignupInput) {
           : "Unable to create account at this time.",
     };
   }
-  await createCredential(user.id, parsed.data.password, false, {
-    dateOfBirth: parsed.data.dateOfBirth,
-    securityQuestionId: parsed.data.securityQuestionId,
-    securityAnswer: parsed.data.securityAnswer,
+  await createCredential(user.id, signupData.password, false, {
+    dateOfBirth: signupData.dateOfBirth,
+    securityQuestionId: signupData.securityQuestionId,
+    securityAnswer: signupData.securityAnswer,
   });
   await signInAs(user.id);
 
   revalidatePath("/");
   return {
     ok: true,
-    target: localizedRoleHomePath(user.role, parsed.data.locale),
+    target: localizedRoleHomePath(user.role, signupData.locale),
   };
 }
 
@@ -103,9 +231,7 @@ export async function resetPasswordAction(
   if (!parsed.success) {
     return {
       ok: false as const,
-      error: isEnglish
-        ? "Please check every field."
-        : "請檢查所有欄位。",
+      error: isEnglish ? "Please check every field." : "請檢查所有欄位。",
     };
   }
 

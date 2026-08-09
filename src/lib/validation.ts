@@ -57,6 +57,18 @@ export const signupSchema = z
     path: ["confirmPassword"],
   });
 
+export const signupSmsRequestSchema = z.object({
+  phone: z.string().regex(hkPhoneRegex, "Invalid Hong Kong mobile number"),
+  locale: z.enum(["zh-HK", "en"]),
+});
+
+export const signupWithVerificationSchema = signupSchema.safeExtend({
+  verificationCode: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, "Enter the 6-digit verification code"),
+});
+
 export const passwordResetSchema = z
   .object({
     phone: z.string().regex(hkPhoneRegex, "Invalid Hong Kong mobile number"),
@@ -137,6 +149,12 @@ export type LoginInput = z.infer<typeof loginSchema>;
 export type LoginFormValues = z.input<typeof loginSchema>;
 export type SignupFormValues = z.input<typeof signupSchema>;
 export type SignupInput = z.output<typeof signupSchema>;
+export type SignupWithVerificationFormValues = z.input<
+  typeof signupWithVerificationSchema
+>;
+export type SignupWithVerificationInput = z.output<
+  typeof signupWithVerificationSchema
+>;
 export type PasswordResetFormValues = z.input<typeof passwordResetSchema>;
 export type PasswordResetInput = z.output<typeof passwordResetSchema>;
 export type RequestFormValues = z.input<typeof requestFormSchema>;

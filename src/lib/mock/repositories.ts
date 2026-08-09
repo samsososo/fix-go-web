@@ -173,7 +173,10 @@ export async function findUserByIdentifier(identifier: string) {
   );
 }
 
-export async function createUserAccount(input: SignupInput) {
+export async function createUserAccount(
+  input: SignupInput,
+  options: { phoneVerifiedAt?: string } = {},
+) {
   return withDb((db) => {
     const normalizedEmail = input.email?.trim().toLowerCase() || "";
     const existing = db.users.find(
@@ -195,6 +198,7 @@ export async function createUserAccount(input: SignupInput) {
       locale: input.locale,
       createdAt: nowIso(),
       lastLoginAt: nowIso(),
+      phoneVerifiedAt: options.phoneVerifiedAt,
     };
 
     db.users.push(user);

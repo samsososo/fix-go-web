@@ -6,16 +6,18 @@
     "node": "24.x"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/run-with-env.mjs .env.dev ./node_modules/.bin/next dev",
     "build": "next build && node scripts/prepare-standalone.mjs",
-    "start": "HOSTNAME=0.0.0.0 node .next/standalone/server.js",
-    "db:reset": "tsx scripts/reset-db.ts",
-    "qa:flows": "tsx scripts/qa-role-flows.ts",
-    "qa:ui": "tsx scripts/qa-deep-ui.ts",
+    "start": "HOSTNAME=0.0.0.0 node --env-file=.env.production .next/standalone/server.js",
+    "db:reset": "node --env-file=.env.dev ./node_modules/tsx/dist/cli.mjs scripts/reset-db.ts",
+    "db:migrate-schema": "node --env-file=.env.dev ./node_modules/tsx/dist/cli.mjs scripts/migrate-db-schema.ts",
+    "db:init:production": "NODE_ENV=production node --env-file=.env.production ./node_modules/tsx/dist/cli.mjs scripts/init-production-db.ts",
+    "qa:flows": "node --env-file=.env.dev ./node_modules/tsx/dist/cli.mjs scripts/qa-role-flows.ts",
+    "qa:ui": "node --env-file=.env.dev ./node_modules/tsx/dist/cli.mjs scripts/qa-deep-ui.ts",
     "deploy:dev": "bash scripts/deploy-dev.sh",
     "lint": "eslint",
-    "test": "NODE_ENV=test MONGODB_DATABASE=hotfix_test ENABLE_DATABASE_SEEDING=true node --env-file-if-exists=.env.local ./node_modules/vitest/vitest.mjs run",
-    "test:watch": "NODE_ENV=test MONGODB_DATABASE=hotfix_test ENABLE_DATABASE_SEEDING=true node --env-file-if-exists=.env.local ./node_modules/vitest/vitest.mjs",
+    "test": "NODE_ENV=test MONGODB_DATABASE=hotfix_test ENABLE_DATABASE_SEEDING=true node --env-file=.env.dev ./node_modules/vitest/vitest.mjs run",
+    "test:watch": "NODE_ENV=test MONGODB_DATABASE=hotfix_test ENABLE_DATABASE_SEEDING=true node --env-file=.env.dev ./node_modules/vitest/vitest.mjs",
     "format:check": "node ./node_modules/prettier/bin/prettier.cjs --check ."
   },
   "dependencies": {

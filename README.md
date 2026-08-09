@@ -21,7 +21,7 @@ This is still not a finished enterprise marketplace, but it is now materially cl
 Implemented sections:
 
 - Public marketing pages: home, how it works, service categories, become a pro, FAQ / trust
-- Shared auth: email or Hong Kong phone plus password, signup, role-based session handling
+- Shared auth: verified Hong Kong phone plus password, SMS OTP signup, email/phone login, role-based session handling
 - Customer portal: dashboard, create request, request detail, incoming quotes, accept quote, booking history, booking calendar, message centre shell, profile / saved addresses
 - Pro portal: dashboard, profile completion, lead list/detail, send quote, accepted jobs, work calendar, booking status updates, earnings shell
 - Admin area: overview, customers, pros, requests, quotes, operations calendar, manual request status updates, pro verification toggle
@@ -73,11 +73,14 @@ Install:
 npm install
 ```
 
-Optional environment overrides:
+Create the local/development environment file:
 
 ```bash
-cp .env.example .env.local
+cp .env.dev.example .env.dev
 ```
+
+Local commands and the dev deployment always load `.env.dev`. Production
+runtime commands and Docker Compose use `.env.production`.
 
 Run locally:
 
@@ -110,17 +113,29 @@ Supported environment variables:
 - `ENABLE_DATABASE_SEEDING`
 - `DEMO_PASSWORD`
 - `BOOTSTRAP_ADMIN_PASSWORD`
+- `TWILIO_API_KEY`
+- `TWILIO_API_SECRET`
+- `TWILIO_VERIFY_SERVICE_SID`
 
 MongoDB is required. Set `MONGODB_URI` before running the app locally or in deployment. In production, set explicit secrets, disable demo login, and leave database seeding disabled unless you are intentionally resetting a non-production environment.
 
 ### MongoDB Development
 
-For MongoDB development, set these values in `.env.local`:
+For MongoDB development, set these values in `.env.dev`:
 
 ```bash
 MONGODB_URI=mongodb+srv://...
 MONGODB_DATABASE=hotfix_dev
 ENABLE_DATABASE_SEEDING=true
+```
+
+Twilio Verify is required for public signup. Put development credentials in
+`.env.dev` and use a separate restricted API key in `.env.production`:
+
+```bash
+TWILIO_API_KEY=SK...
+TWILIO_API_SECRET=...
+TWILIO_VERIFY_SERVICE_SID=VA...
 ```
 
 For production MongoDB, use a separate database and keep mock data disabled:
@@ -130,6 +145,44 @@ MONGODB_URI=mongodb+srv://...
 MONGODB_DATABASE=hotfix_prod
 ENABLE_DEMO_LOGIN=false
 ENABLE_DATABASE_SEEDING=false
+```
+
+Initialize a new, empty production database before the first deployment:
+
+```bash
+npm run db:init:production
+```
+
+The initializer is idempotent and refuses to run unless `NODE_ENV=production`,
+database seeding is disabled, and the database name contains `prod` or
+`production`. It creates the production collections and indexes, inserts only
+service category and service area configuration, and never creates demo users.
+
+### MongoDB Collections
+
+The application uses 11 camelCase collections:
+
+- `profile`
+- `adminProfiles`
+- `authCredentials`
+- `accountRecovery`
+- `userSessions`
+- `securityAttempts`
+- `appConfig`
+- `serviceCases`
+- `userNotifications`
+- `adminNotes`
+- `systemMetadata`
+
+`serviceCases` stores each request together with its quotes, accepted job,
+attachments, and job status history. `appConfig` stores service categories and
+service areas, separated by `configType`.
+
+After taking a MongoDB backup, migrate a development database and remove the
+legacy collections with:
+
+```bash
+npm run db:migrate-schema
 ```
 
 ## Railway Deployment
@@ -217,7 +270,7 @@ Change them through environment variables before deploying.
 Production-readiness assumptions used for this pass:
 
 - Public signup remains limited to `customer` and `pro`; `admin` stays internal
-- Email / phone + password is a valid first production auth baseline, replacing the earlier OTP mock step
+- Public signup verifies Hong Kong mobile numbers with Twilio Verify before creating an account
 - MongoDB is the only supported persistence layer
 - File uploads, messaging, earnings, document verification depth and payouts remain intentionally simplified
 - Matching stays category + district based for now
@@ -263,7 +316,7 @@ The app is now much closer to a deployable baseline, but “production-ready” 
 ## Remaining Gaps Before Wider Production Rollout
 
 - Replace bootstrap/demo credentials with proper onboarding and password reset flows
-- Add MFA or OTP if the business decides phone-first identity is required
+- Add optional MFA for returning users if the business requires a second login factor
 - Move file uploads to object storage with signed URLs and moderation controls
 - Add structured auditing for admin changes and security-sensitive events
 - Add external notification delivery, monitoring, backups and operational dashboards

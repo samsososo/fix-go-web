@@ -11,6 +11,7 @@ export {
   readMongoDb as readDb,
   resetMongoDb as resetDb,
   resetMongoPasswordWithRecovery as resetPasswordWithRecovery,
+  reserveMongoSmsVerificationAttempt as reserveSmsVerificationAttempt,
   verifyMongoUserCredentials as verifyUserCredentials,
   withMongoDb as withDb,
 } from "@/lib/mock/mongo-db";
