@@ -119,7 +119,6 @@ export default async function ProJobDetailPage({
             </h2>
             <BookingStatusForm
               locale={locale}
-              proId={user.id}
               bookingId={job.id}
               currentStatus={job.status}
             />

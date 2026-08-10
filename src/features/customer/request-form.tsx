@@ -23,13 +23,11 @@ import { Textarea } from "@/components/ui/textarea";
 
 export function RequestForm({
   locale,
-  customerId,
   customerPhone,
   categoryOptions,
   districts,
 }: {
   locale: string;
-  customerId: string;
   customerPhone: string;
   categoryOptions: {
     id: string;
@@ -91,7 +89,7 @@ export function RequestForm({
   const onSubmit = (values: RequestFormInput) => {
     setServerError(null);
     startTransition(async () => {
-      const result = await createRequestAction({ customerId, locale, values });
+      const result = await createRequestAction({ locale, values });
       if (!result.ok) {
         setServerError(result.error ?? "Unable to create request.");
         return;

@@ -30,12 +30,10 @@ const durationOptions = [
 
 export function QuoteForm({
   locale,
-  proId,
   requestId,
   initialValues,
 }: {
   locale: string;
-  proId: string;
   requestId: string;
   initialValues?: Partial<QuoteFormInput>;
 }) {
@@ -63,7 +61,6 @@ export function QuoteForm({
     setServerError(null);
     startTransition(async () => {
       const result = await submitQuoteAction({
-        proId,
         locale,
         requestId,
         values,

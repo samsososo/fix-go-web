@@ -19,11 +19,9 @@ import { Textarea } from "@/components/ui/textarea";
 
 export function ProProfileForm({
   locale,
-  userId,
   profile,
 }: {
   locale: string;
-  userId: string;
   profile: ProProfile;
 }) {
   const isHydrated = useHydrated();
@@ -50,7 +48,7 @@ export function ProProfileForm({
   const onSubmit = (values: ProProfileInput) => {
     setServerMessage(null);
     startTransition(async () => {
-      const result = await saveProProfileAction({ userId, locale, values });
+      const result = await saveProProfileAction({ locale, values });
       setServerMessage(
         result.ok
           ? locale === "en"

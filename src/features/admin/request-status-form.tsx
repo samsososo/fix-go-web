@@ -14,12 +14,10 @@ import { Select } from "@/components/ui/select";
 
 export function AdminRequestStatusForm({
   locale,
-  adminId,
   requestId,
   currentStatus,
 }: {
   locale: string;
-  adminId: string;
   requestId: string;
   currentStatus: RequestStatus;
 }) {
@@ -63,7 +61,6 @@ export function AdminRequestStatusForm({
             setError(null);
             const result = await updateAdminRequestStatusAction({
               locale,
-              adminId,
               requestId,
               status,
               note,

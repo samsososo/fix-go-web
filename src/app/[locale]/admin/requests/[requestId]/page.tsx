@@ -88,7 +88,6 @@ export default async function AdminRequestDetailPage({
             </h2>
             <AdminRequestStatusForm
               locale={locale}
-              adminId={admin.id}
               requestId={request.id}
               currentStatus={request.status}
             />

@@ -9,12 +9,10 @@ import { Button } from "@/components/ui/button";
 
 export function AcceptQuoteButton({
   locale,
-  customerId,
   requestId,
   quoteId,
 }: {
   locale: string;
-  customerId: string;
   requestId: string;
   quoteId: string;
 }) {
@@ -33,7 +31,6 @@ export function AcceptQuoteButton({
             setError(null);
             const result = await acceptQuoteAction({
               locale,
-              customerId,
               requestId,
               quoteId,
             });

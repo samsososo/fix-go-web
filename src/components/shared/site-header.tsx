@@ -1,4 +1,9 @@
-import { BriefcaseBusiness, CalendarDays, Menu } from "lucide-react";
+import {
+  BriefcaseBusiness,
+  CalendarDays,
+  CreditCard,
+  Menu,
+} from "lucide-react";
 import { getTranslations } from "next-intl/server";
 
 import { roleHomePath } from "@/lib/auth";
@@ -8,18 +13,27 @@ import { LocaleSwitcher } from "@/components/shared/locale-switcher";
 import { MobileMenuDetails } from "@/components/shared/mobile-menu-details";
 import { buttonVariants } from "@/components/ui/button";
 import { listRelevantLeads } from "@/lib/mock/repositories";
+import { getProSubscriptionEntitlement } from "@/lib/pro-subscription-entitlement";
 import { User } from "@/types/domain";
 
-async function getProOpenLeadCount(user: User | null) {
+async function getProHeaderState(user: User | null) {
   if (user?.role !== "pro") {
     return null;
   }
 
   try {
+    const snapshot = await getProSubscriptionEntitlement(user.id);
+    if (!snapshot.entitlement.canCreateQuotes) {
+      return { canCreateQuotes: false, openLeadCount: 0 };
+    }
+
     const leads = await listRelevantLeads(user.id);
-    return leads.filter((lead) => !lead.existingQuote).length;
+    return {
+      canCreateQuotes: true,
+      openLeadCount: leads.filter((lead) => !lead.existingQuote).length,
+    };
   } catch {
-    return null;
+    return { canCreateQuotes: false, openLeadCount: 0 };
   }
 }
 
@@ -31,11 +45,18 @@ export async function SiteHeader({
   user: User | null;
 }) {
   const t = await getTranslations("common");
-  const proOpenLeadCount = await getProOpenLeadCount(user);
+  const proHeaderState = await getProHeaderState(user);
+  const canCreateQuotes = proHeaderState?.canCreateQuotes ?? false;
+  const proOpenLeadCount = proHeaderState?.openLeadCount ?? 0;
   const proLeadLabel =
     locale === "en"
       ? `Job leads${proOpenLeadCount && proOpenLeadCount > 0 ? ` · ${proOpenLeadCount}` : ""}`
       : `工作機會${proOpenLeadCount && proOpenLeadCount > 0 ? ` · ${proOpenLeadCount}` : ""}`;
+  const proPrimaryLabel = canCreateQuotes
+    ? proLeadLabel
+    : locale === "en"
+      ? "Manage billing"
+      : "管理月費";
 
   const navItems = [
     { href: "/", label: t("nav.home") },
@@ -81,12 +102,16 @@ export async function SiteHeader({
             {user?.role === "pro" ? (
               <>
                 <Link
-                  href="/pro/leads"
+                  href={canCreateQuotes ? "/pro/leads" : "/pro/billing"}
                   locale={locale}
                   className={buttonVariants({ size: "sm" })}
                 >
-                  <BriefcaseBusiness className="h-4 w-4" />
-                  {proLeadLabel}
+                  {canCreateQuotes ? (
+                    <BriefcaseBusiness className="h-4 w-4" />
+                  ) : (
+                    <CreditCard className="h-4 w-4" />
+                  )}
+                  {proPrimaryLabel}
                 </Link>
                 <Link
                   href="/pro/calendar"
@@ -154,12 +179,16 @@ export async function SiteHeader({
                   {user?.role === "pro" ? (
                     <div className="space-y-2">
                       <Link
-                        href="/pro/leads"
+                        href={canCreateQuotes ? "/pro/leads" : "/pro/billing"}
                         locale={locale}
                         className={`${buttonVariants({ size: "sm" })} w-full`}
                       >
-                        <BriefcaseBusiness className="h-4 w-4" />
-                        {proLeadLabel}
+                        {canCreateQuotes ? (
+                          <BriefcaseBusiness className="h-4 w-4" />
+                        ) : (
+                          <CreditCard className="h-4 w-4" />
+                        )}
+                        {proPrimaryLabel}
                       </Link>
                       <Link
                         href="/pro/calendar"

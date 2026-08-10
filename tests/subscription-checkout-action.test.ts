@@ -21,11 +21,15 @@ vi.mock("@/lib/mock/db", async (importOriginal) => {
   return {
     ...actual,
     clearProSubscriptionCheckoutSession: vi.fn(),
+    clearProSubscriptionReactivationCheckoutSession: vi.fn(),
     completeProSubscriptionCheckoutReservation: vi.fn(),
+    completeProSubscriptionReactivationCheckoutReservation: vi.fn(),
     ensureProSubscription: vi.fn(),
     findProSubscription: vi.fn(),
     releaseProSubscriptionCheckout: vi.fn(),
+    releaseProSubscriptionReactivationCheckout: vi.fn(),
     reserveProSubscriptionCheckout: vi.fn(),
+    reserveProSubscriptionReactivationCheckout: vi.fn(),
     setProStripeCustomer: vi.fn(),
   };
 });
@@ -35,27 +39,41 @@ vi.mock("@/lib/stripe-billing", async (importOriginal) => {
   return {
     ...actual,
     createCardSetupCheckoutSession: vi.fn(),
+    createPaidProSubscriptionCheckoutSession: vi.fn(),
+    createProPaymentMethodPortalSession: vi.fn(),
+    getOwnedProSubscriptionInvoicePaymentUrl: vi.fn(),
     getOrCreateStripeCustomerForPro: vi.fn(),
     inspectOwnedCardSetupCheckoutSession: vi.fn(),
+    inspectOwnedPaidProSubscriptionCheckoutSession: vi.fn(),
     retrieveOpenCardSetupCheckoutSession: vi.fn(),
+    setProSubscriptionAutoRenewal: vi.fn(),
   };
 });
 
 import { requireRole, signInAs, signInWithCredentials } from "@/lib/auth";
 import {
   completeProSubscriptionCheckoutReservation,
+  completeProSubscriptionReactivationCheckoutReservation,
   clearProSubscriptionCheckoutSession,
   ensureProSubscription,
   reserveProSubscriptionCheckout,
+  reserveProSubscriptionReactivationCheckout,
   setProStripeCustomer,
 } from "@/lib/mock/db";
 import {
   createCardSetupCheckoutSession,
+  createPaidProSubscriptionCheckoutSession,
+  createProPaymentMethodPortalSession,
+  getOwnedProSubscriptionInvoicePaymentUrl,
   getOrCreateStripeCustomerForPro,
   inspectOwnedCardSetupCheckoutSession,
+  setProSubscriptionAutoRenewal,
 } from "@/lib/stripe-billing";
 import {
+  setProSubscriptionAutoRenewalAction,
   signInDemoAction,
+  startProOutstandingInvoicePaymentAction,
+  startProPaymentMethodUpdateAction,
   startLoginAction,
   startProSubscriptionCheckoutAction,
 } from "@/lib/actions";
@@ -89,6 +107,35 @@ function setupRequired(
     updatedAt: "2026-08-09T10:00:00.000Z",
     ...overrides,
   };
+}
+
+function activeSubscription(
+  overrides: Partial<ProSubscription> = {},
+): ProSubscription {
+  return setupRequired({
+    accessStatus: "active",
+    stripeCustomerId: "cus_action_test",
+    stripeSubscriptionId: "sub_action_test",
+    stripePriceId: "price_action_test",
+    stripeStatus: "active",
+    stripeLivemode: false,
+    trialConsumedAt: "2026-08-09T10:00:00.000Z",
+    trialEndsAt: "2026-11-09T10:00:00.000Z",
+    currentPeriodStartedAt: "2026-11-09T10:00:00.000Z",
+    currentPeriodEndsAt: "2026-12-09T10:00:00.000Z",
+    ...overrides,
+  });
+}
+
+function terminatedSubscription(
+  overrides: Partial<ProSubscription> = {},
+): ProSubscription {
+  return activeSubscription({
+    accessStatus: "terminated",
+    stripeStatus: "canceled",
+    currentPeriodEndsAt: "2026-08-09T10:00:00.000Z",
+    ...overrides,
+  });
 }
 
 describe("pro card setup action", () => {
@@ -200,7 +247,7 @@ describe("pro card setup action", () => {
       startProSubscriptionCheckoutAction({ locale: "zh-HK" }),
     ).resolves.toEqual({
       ok: false,
-      error: "Stripe 正在確認已完成嘅綁卡，請稍等片刻。",
+      error: "Stripe 正在確認已完成嘅付款設定，請稍等片刻。",
     });
     expect(clearProSubscriptionCheckoutSession).not.toHaveBeenCalled();
     expect(createCardSetupCheckoutSession).not.toHaveBeenCalled();
@@ -220,10 +267,51 @@ describe("pro card setup action", () => {
       startProSubscriptionCheckoutAction({ locale: "zh-HK" }),
     ).resolves.toEqual({
       ok: false,
-      error: "Stripe 正在確認已完成嘅綁卡，請稍等片刻。",
+      error: "Stripe 正在確認已完成嘅付款設定，請稍等片刻。",
     });
     expect(inspectOwnedCardSetupCheckoutSession).not.toHaveBeenCalled();
     expect(createCardSetupCheckoutSession).not.toHaveBeenCalled();
+  });
+
+  it("starts an immediate HK$100 no-trial Checkout after a clean termination", async () => {
+    const terminated = terminatedSubscription();
+    vi.mocked(ensureProSubscription).mockResolvedValue(terminated);
+    vi.mocked(reserveProSubscriptionReactivationCheckout).mockResolvedValue({
+      ...terminated,
+      reactivationCheckoutReservationId: "reservation_reactivation",
+    });
+    vi.mocked(createPaidProSubscriptionCheckoutSession).mockResolvedValue({
+      id: "cs_paid_reactivation_action",
+      url: "https://checkout.stripe.test/reactivation",
+      expires_at: 2_000_000_000,
+    } as never);
+    vi.mocked(
+      completeProSubscriptionReactivationCheckoutReservation,
+    ).mockResolvedValue({
+      ...terminated,
+      reactivationCheckoutSessionId: "cs_paid_reactivation_action",
+    });
+
+    await expect(
+      startProSubscriptionCheckoutAction({ locale: "en" }),
+    ).resolves.toEqual({
+      ok: true,
+      url: "https://checkout.stripe.test/reactivation",
+    });
+
+    expect(createPaidProSubscriptionCheckoutSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        proId: pro.id,
+        customerId: "cus_action_test",
+        previousSubscriptionId: "sub_action_test",
+        successUrl: new URL(
+          "/pro/billing?checkout=reactivated",
+          env.APP_URL,
+        ).toString(),
+      }),
+    );
+    expect(createCardSetupCheckoutSession).not.toHaveBeenCalled();
+    expect(getOrCreateStripeCustomerForPro).not.toHaveBeenCalled();
   });
 
   it("sends a pro who still needs a card to billing after login", async () => {
@@ -254,5 +342,96 @@ describe("pro card setup action", () => {
       ok: true,
       target: "/pro/billing",
     });
+  });
+});
+
+describe("pro subscription lifecycle actions", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(requireRole).mockResolvedValue(pro);
+    vi.mocked(ensureProSubscription).mockResolvedValue(activeSubscription());
+  });
+
+  it("opens only the owned Stripe payment-method update flow", async () => {
+    vi.mocked(createProPaymentMethodPortalSession).mockResolvedValue({
+      url: "https://billing.stripe.test/payment-method-update",
+    } as never);
+
+    await expect(
+      startProPaymentMethodUpdateAction({ locale: "zh-HK" }),
+    ).resolves.toEqual({
+      ok: true,
+      url: "https://billing.stripe.test/payment-method-update",
+    });
+    expect(createProPaymentMethodPortalSession).toHaveBeenCalledWith({
+      proId: pro.id,
+      customerId: "cus_action_test",
+      locale: "zh-HK",
+      returnUrl: new URL(
+        "/pro/billing?billing=updated",
+        env.APP_URL,
+      ).toString(),
+    });
+  });
+
+  it("exposes only the locally-recorded owned invoice payment page", async () => {
+    vi.mocked(ensureProSubscription).mockResolvedValue(
+      activeSubscription({
+        accessStatus: "grace_period",
+        stripeStatus: "past_due",
+        pastDueInvoiceId: "in_action_due",
+      }),
+    );
+    vi.mocked(getOwnedProSubscriptionInvoicePaymentUrl).mockResolvedValue({
+      url: "https://invoice.stripe.test/in_action_due",
+    } as never);
+
+    await expect(
+      startProOutstandingInvoicePaymentAction({ locale: "zh-HK" }),
+    ).resolves.toEqual({
+      ok: true,
+      url: "https://invoice.stripe.test/in_action_due",
+    });
+    expect(getOwnedProSubscriptionInvoicePaymentUrl).toHaveBeenCalledWith({
+      proId: pro.id,
+      customerId: "cus_action_test",
+      subscriptionId: "sub_action_test",
+      invoiceId: "in_action_due",
+      expectedLivemode: false,
+    });
+  });
+
+  it("schedules cancellation at period end without local optimistic state", async () => {
+    vi.mocked(setProSubscriptionAutoRenewal).mockResolvedValue({} as never);
+
+    await expect(
+      setProSubscriptionAutoRenewalAction({
+        locale: "zh-HK",
+        cancelAtPeriodEnd: true,
+      }),
+    ).resolves.toMatchObject({ ok: true });
+    expect(setProSubscriptionAutoRenewal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        proId: pro.id,
+        customerId: "cus_action_test",
+        subscriptionId: "sub_action_test",
+        expectedPriceId: "price_action_test",
+        expectedTrialEndsAt: "2026-11-09T10:00:00.000Z",
+        expectedLivemode: false,
+        allowHistoricalPriceId: true,
+        cancelAtPeriodEnd: true,
+      }),
+    );
+  });
+
+  it("fails closed when no owned outstanding invoice exists", async () => {
+    await expect(
+      startProOutstandingInvoicePaymentAction({ locale: "en" }),
+    ).resolves.toEqual({
+      ok: false,
+      error:
+        "Unable to retry the outstanding payment. Update your card first, then try again.",
+    });
+    expect(getOwnedProSubscriptionInvoicePaymentUrl).not.toHaveBeenCalled();
   });
 });

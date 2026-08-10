@@ -99,11 +99,7 @@ export default async function CustomerRequestDetailPage({
             <h2 className="font-display text-2xl font-bold">
               {locale === "en" ? "Incoming quotes" : "收到的報價"}
             </h2>
-            <LiveQuotesPanel
-              requestId={request.id}
-              locale={locale}
-              customerId={user.id}
-            />
+            <LiveQuotesPanel requestId={request.id} locale={locale} />
           </CardContent>
         </Card>
       </div>

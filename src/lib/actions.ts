@@ -14,12 +14,16 @@ import {
 import { enableDemoLogin, env } from "@/lib/env";
 import {
   clearProSubscriptionCheckoutSession,
+  clearProSubscriptionReactivationCheckoutSession,
   completeProSubscriptionCheckoutReservation,
+  completeProSubscriptionReactivationCheckoutReservation,
   createCredential,
   ensureProSubscription,
   findProSubscription,
   releaseProSubscriptionCheckout,
+  releaseProSubscriptionReactivationCheckout,
   reserveProSubscriptionCheckout,
+  reserveProSubscriptionReactivationCheckout,
   resetPasswordWithRecovery,
   reserveSmsVerificationAttempt,
   setProStripeCustomer,
@@ -57,9 +61,18 @@ import {
 } from "@/lib/validation";
 import {
   createCardSetupCheckoutSession,
+  createPaidProSubscriptionCheckoutSession,
+  createProPaymentMethodPortalSession,
+  getOwnedProSubscriptionInvoicePaymentUrl,
   getOrCreateStripeCustomerForPro,
   inspectOwnedCardSetupCheckoutSession,
+  inspectOwnedPaidProSubscriptionCheckoutSession,
+  setProSubscriptionAutoRenewal,
 } from "@/lib/stripe-billing";
+import {
+  evaluateProSubscriptionEntitlement,
+  isProNewWorkRestrictedError,
+} from "@/lib/pro-subscription-entitlement";
 import { hasConsumedLifetimeTrial } from "@/lib/subscription-policy";
 
 const CHECKOUT_RESERVATION_MS = 5 * 60 * 1000;
@@ -77,8 +90,8 @@ function localizedBillingError(locale: string) {
 
 function pendingCheckoutError(locale: string) {
   return locale === "en"
-    ? "Stripe is confirming your completed card setup. Please wait a moment."
-    : "Stripe 正在確認已完成嘅綁卡，請稍等片刻。";
+    ? "Stripe is confirming your completed billing checkout. Please wait a moment."
+    : "Stripe 正在確認已完成嘅付款設定，請稍等片刻。";
 }
 
 async function reusableCheckout(input: {
@@ -106,6 +119,131 @@ async function reusableCheckout(input: {
   return { status: "open" as const, url: state.url };
 }
 
+async function reusablePaidReactivationCheckout(input: {
+  proId: string;
+  stripeCustomerId?: string;
+  previousStripeSubscriptionId?: string;
+  checkoutSessionId?: string;
+}) {
+  if (
+    !input.stripeCustomerId ||
+    !input.previousStripeSubscriptionId ||
+    !input.checkoutSessionId
+  ) {
+    return { status: "none" as const };
+  }
+  const state = await inspectOwnedPaidProSubscriptionCheckoutSession({
+    proId: input.proId,
+    customerId: input.stripeCustomerId,
+    previousSubscriptionId: input.previousStripeSubscriptionId,
+    checkoutSessionId: input.checkoutSessionId,
+  });
+  if (state.status === "expired") {
+    await clearProSubscriptionReactivationCheckoutSession(
+      input.checkoutSessionId,
+    );
+    return { status: "none" as const };
+  }
+  if (state.status === "complete") {
+    return { status: "pending" as const };
+  }
+  return { status: "open" as const, url: state.url };
+}
+
+async function startPaidReactivationCheckout(input: {
+  locale: "en" | "zh-HK";
+  proId: string;
+  subscription: Awaited<ReturnType<typeof ensureProSubscription>>;
+}) {
+  const { locale, proId, subscription } = input;
+  if (
+    !subscription.stripeCustomerId ||
+    !subscription.stripeSubscriptionId ||
+    subscription.stripeStatus !== "canceled" ||
+    subscription.pastDueInvoiceId
+  ) {
+    throw new Error("The previous subscription is not ready for reactivation.");
+  }
+  const existingCheckout = await reusablePaidReactivationCheckout({
+    proId,
+    stripeCustomerId: subscription.stripeCustomerId,
+    previousStripeSubscriptionId: subscription.stripeSubscriptionId,
+    checkoutSessionId: subscription.reactivationCheckoutSessionId,
+  });
+  if (existingCheckout.status === "open") {
+    return { ok: true as const, url: existingCheckout.url };
+  }
+  if (existingCheckout.status === "pending") {
+    return { ok: false as const, error: pendingCheckoutError(locale) };
+  }
+
+  const reservationId = randomUUID();
+  try {
+    const reserved = await reserveProSubscriptionReactivationCheckout({
+      proId,
+      reservationId,
+      reservationExpiresAt: new Date(
+        Date.now() + CHECKOUT_RESERVATION_MS,
+      ).toISOString(),
+    });
+    if (!reserved) {
+      const latest = await findProSubscription(proId);
+      const concurrentCheckout = latest
+        ? await reusablePaidReactivationCheckout({
+            proId,
+            stripeCustomerId: latest.stripeCustomerId,
+            previousStripeSubscriptionId: latest.stripeSubscriptionId,
+            checkoutSessionId: latest.reactivationCheckoutSessionId,
+          })
+        : { status: "none" as const };
+      if (concurrentCheckout.status === "open") {
+        return { ok: true as const, url: concurrentCheckout.url };
+      }
+      if (concurrentCheckout.status === "pending") {
+        return { ok: false as const, error: pendingCheckoutError(locale) };
+      }
+      throw new Error("A reactivation Checkout is already being created.");
+    }
+
+    const successUrl = new URL(billingPath(locale), env.APP_URL);
+    successUrl.searchParams.set("checkout", "reactivated");
+    const cancelUrl = new URL(billingPath(locale), env.APP_URL);
+    cancelUrl.searchParams.set("checkout", "cancelled");
+    const checkout = await createPaidProSubscriptionCheckoutSession({
+      proId,
+      customerId: subscription.stripeCustomerId,
+      previousSubscriptionId: subscription.stripeSubscriptionId,
+      successUrl: successUrl.toString(),
+      cancelUrl: cancelUrl.toString(),
+      idempotencyKey: `pro-paid-reactivation:${proId}:${subscription.stripeSubscriptionId}:${reservationId}`,
+    });
+    if (!checkout.url || !checkout.expires_at) {
+      throw new Error("Stripe Checkout did not return a usable session.");
+    }
+    const saved = await completeProSubscriptionReactivationCheckoutReservation({
+      proId,
+      reservationId,
+      checkoutSessionId: checkout.id,
+      checkoutSessionExpiresAt: new Date(
+        checkout.expires_at * 1_000,
+      ).toISOString(),
+      stripeCustomerId: subscription.stripeCustomerId,
+      previousStripeSubscriptionId: subscription.stripeSubscriptionId,
+    });
+    if (!saved) {
+      throw new Error("Reactivation Checkout persistence failed.");
+    }
+    revalidatePath(billingPath(locale));
+    return { ok: true as const, url: checkout.url };
+  } catch (error) {
+    await releaseProSubscriptionReactivationCheckout(
+      proId,
+      reservationId,
+    ).catch(() => undefined);
+    throw error;
+  }
+}
+
 export async function startProSubscriptionCheckoutAction(input: {
   locale: string;
 }) {
@@ -115,6 +253,22 @@ export async function startProSubscriptionCheckoutAction(input: {
 
   try {
     let subscription = await ensureProSubscription(user.id);
+    const currentStatus = evaluateProSubscriptionEntitlement(
+      subscription,
+      new Date().toISOString(),
+    ).entitlement.status;
+    if (
+      currentStatus === "terminated" &&
+      hasConsumedLifetimeTrial(subscription) &&
+      subscription.stripeStatus === "canceled" &&
+      !subscription.pastDueInvoiceId
+    ) {
+      return await startPaidReactivationCheckout({
+        locale,
+        proId: user.id,
+        subscription,
+      });
+    }
     if (
       hasConsumedLifetimeTrial(subscription) &&
       !subscription.stripeSubscriptionId
@@ -231,6 +385,142 @@ export async function startProSubscriptionCheckoutAction(input: {
     return {
       ok: false as const,
       error: localizedBillingError(locale),
+    };
+  }
+}
+
+function lifecycleBillingError(
+  locale: string,
+  action: "portal" | "retry" | "cancel",
+) {
+  const isEnglish = locale === "en";
+  if (action === "portal") {
+    return isEnglish
+      ? "Unable to open Stripe's secure card update. Please try again."
+      : "暫時未能開啟 Stripe 安全更新付款卡，請再試一次。";
+  }
+  if (action === "retry") {
+    return isEnglish
+      ? "Unable to retry the outstanding payment. Update your card first, then try again."
+      : "暫時未能重新嘗試欠款，請先更新付款卡後再試。";
+  }
+  return isEnglish
+    ? "Unable to update automatic renewal. Please try again."
+    : "暫時未能更新自動續訂設定，請再試一次。";
+}
+
+function requireStripeLifecycleIdentity(
+  subscription: Awaited<ReturnType<typeof ensureProSubscription>>,
+) {
+  if (
+    !subscription.stripeCustomerId ||
+    !subscription.stripeSubscriptionId ||
+    !subscription.stripePriceId
+  ) {
+    throw new Error("The Stripe subscription is not ready.");
+  }
+  return {
+    customerId: subscription.stripeCustomerId,
+    subscriptionId: subscription.stripeSubscriptionId,
+    priceId: subscription.stripePriceId,
+  };
+}
+
+/** Opens only Stripe's hosted payment-method update flow. */
+export async function startProPaymentMethodUpdateAction(input: {
+  locale: string;
+}) {
+  const locale = input.locale === "en" ? "en" : "zh-HK";
+  const user = await requireRole("pro", locale);
+  try {
+    const subscription = await ensureProSubscription(user.id);
+    const identity = requireStripeLifecycleIdentity(subscription);
+    const returnUrl = new URL(billingPath(locale), env.APP_URL);
+    returnUrl.searchParams.set("billing", "updated");
+    const portal = await createProPaymentMethodPortalSession({
+      proId: user.id,
+      customerId: identity.customerId,
+      returnUrl: returnUrl.toString(),
+      locale,
+    });
+    return { ok: true as const, url: portal.url };
+  } catch {
+    return {
+      ok: false as const,
+      error: lifecycleBillingError(locale, "portal"),
+    };
+  }
+}
+
+/** Opens the owned Stripe-hosted invoice page, including any required 3DS. */
+export async function startProOutstandingInvoicePaymentAction(input: {
+  locale: string;
+}) {
+  const locale = input.locale === "en" ? "en" : "zh-HK";
+  const user = await requireRole("pro", locale);
+  try {
+    const subscription = await ensureProSubscription(user.id);
+    const identity = requireStripeLifecycleIdentity(subscription);
+    if (!subscription.pastDueInvoiceId) {
+      throw new Error("There is no outstanding invoice to pay.");
+    }
+    const paymentPage = await getOwnedProSubscriptionInvoicePaymentUrl({
+      proId: user.id,
+      customerId: identity.customerId,
+      subscriptionId: identity.subscriptionId,
+      invoiceId: subscription.pastDueInvoiceId,
+      expectedLivemode: subscription.stripeLivemode,
+    });
+    return { ok: true as const, url: paymentPage.url };
+  } catch {
+    return {
+      ok: false as const,
+      error: lifecycleBillingError(locale, "retry"),
+    };
+  }
+}
+
+/**
+ * Changes renewal only at period end. Stripe is authoritative; the signed
+ * subscription.updated webhook performs the local lifecycle write.
+ */
+export async function setProSubscriptionAutoRenewalAction(input: {
+  locale: string;
+  cancelAtPeriodEnd: boolean;
+}) {
+  const locale = input.locale === "en" ? "en" : "zh-HK";
+  const user = await requireRole("pro", locale);
+  try {
+    const subscription = await ensureProSubscription(user.id);
+    const identity = requireStripeLifecycleIdentity(subscription);
+    await setProSubscriptionAutoRenewal({
+      proId: user.id,
+      customerId: identity.customerId,
+      subscriptionId: identity.subscriptionId,
+      expectedPriceId: identity.priceId,
+      ...(subscription.stripeSubscriptionHasTrial === false
+        ? { expectedNoTrial: true }
+        : { expectedTrialEndsAt: subscription.trialEndsAt }),
+      expectedLivemode: subscription.stripeLivemode,
+      allowHistoricalPriceId: true,
+      cancelAtPeriodEnd: input.cancelAtPeriodEnd,
+      idempotencyKey: `pro-renewal:${user.id}:${input.cancelAtPeriodEnd ? "cancel" : "resume"}:${randomUUID()}`,
+    });
+    revalidatePath(billingPath(locale));
+    return {
+      ok: true as const,
+      message: input.cancelAtPeriodEnd
+        ? locale === "en"
+          ? "Cancellation requested. Access continues until the current period ends."
+          : "已要求取消；你仍可使用至目前週期完結。"
+        : locale === "en"
+          ? "Automatic renewal restored."
+          : "已恢復自動續訂。",
+    };
+  } catch {
+    return {
+      ok: false as const,
+      error: lifecycleBillingError(locale, "cancel"),
     };
   }
 }
@@ -490,17 +780,17 @@ export async function logoutAction(input: { locale: string }) {
 }
 
 export async function createRequestAction(input: {
-  customerId: string;
   locale: string;
   values: RequestFormInput;
 }) {
+  const customer = await requireRole("customer", input.locale);
   const parsed = requestFormSchema.safeParse(input.values);
   if (!parsed.success) {
     return { ok: false, error: "Please review the request details." };
   }
 
   const request = await createCustomerRequest(
-    input.customerId,
+    customer.id,
     parsed.data,
     input.locale,
   );
@@ -513,14 +803,14 @@ export async function createRequestAction(input: {
 }
 
 export async function acceptQuoteAction(input: {
-  customerId: string;
   locale: string;
   requestId: string;
   quoteId: string;
 }) {
+  const customer = await requireRole("customer", input.locale);
   try {
     const quote = await acceptCustomerQuote(
-      input.customerId,
+      customer.id,
       input.requestId,
       input.quoteId,
       input.locale,
@@ -534,6 +824,16 @@ export async function acceptQuoteAction(input: {
     }
     return { ok: true };
   } catch (error) {
+    if (isProNewWorkRestrictedError(error)) {
+      return {
+        ok: false as const,
+        code: error.code,
+        error:
+          input.locale === "en"
+            ? "This pro is temporarily unavailable for new work. Please choose another quote or try again later."
+            : "呢位師傅暫時未能接受新工作，請選擇其他報價或者稍後再試。",
+      };
+    }
     return {
       ok: false,
       error: error instanceof Error ? error.message : "Unable to accept quote.",
@@ -542,49 +842,66 @@ export async function acceptQuoteAction(input: {
 }
 
 export async function saveProProfileAction(input: {
-  userId: string;
   locale: string;
   values: ProProfileInput;
 }) {
+  const pro = await requireRole("pro", input.locale);
   const parsed = proProfileSchema.safeParse(input.values);
   if (!parsed.success) {
     return { ok: false, error: "Please complete the required profile fields." };
   }
 
-  await saveProProfile(input.userId, parsed.data);
+  await saveProProfile(pro.id, parsed.data);
   revalidatePath("/pro");
   revalidatePath("/pro/profile");
   return { ok: true };
 }
 
 export async function submitQuoteAction(input: {
-  proId: string;
   locale: string;
   requestId: string;
   values: QuoteFormInput;
 }) {
+  const pro = await requireRole("pro", input.locale);
   const parsed = quoteFormSchema.safeParse(input.values);
   if (!parsed.success) {
     return { ok: false, error: "Please review the quote details." };
   }
 
-  await submitProQuote(input.proId, input.requestId, parsed.data, input.locale);
-  revalidatePath("/pro/leads");
-  revalidatePath(`/pro/leads/${input.requestId}`);
-  revalidatePath("/pro/calendar");
-  revalidatePath(`/customer/requests/${input.requestId}`);
-  return { ok: true };
+  try {
+    await submitProQuote(pro.id, input.requestId, parsed.data, input.locale);
+    revalidatePath("/pro/leads");
+    revalidatePath(`/pro/leads/${input.requestId}`);
+    revalidatePath("/pro/calendar");
+    revalidatePath(`/customer/requests/${input.requestId}`);
+    return { ok: true as const };
+  } catch (error) {
+    if (isProNewWorkRestrictedError(error)) {
+      return {
+        ok: false as const,
+        code: error.code,
+        error:
+          input.locale === "en"
+            ? "New quotes are paused. Manage billing to restore new-work access."
+            : "新報價功能已暫停；請到月費頁處理並恢復新工作功能。",
+      };
+    }
+    return {
+      ok: false as const,
+      error: error instanceof Error ? error.message : "Unable to submit quote.",
+    };
+  }
 }
 
 export async function updateBookingStatusAction(input: {
-  proId: string;
   locale: string;
   bookingId: string;
   status: BookingStatus;
 }) {
+  const pro = await requireRole("pro", input.locale);
   try {
     const booking = await updateProBookingStatus(
-      input.proId,
+      pro.id,
       input.bookingId,
       input.status,
       input.locale,
@@ -612,14 +929,14 @@ export async function updateAdminRequestStatusAction(input: {
   locale: string;
   requestId: string;
   status: RequestStatus;
-  adminId: string;
   note?: string;
 }) {
+  const admin = await requireRole("admin", input.locale);
   try {
     const request = await updateAdminRequestStatus(
       input.requestId,
       input.status,
-      input.adminId,
+      admin.id,
       input.note,
       input.locale,
     );
@@ -647,6 +964,7 @@ export async function toggleProVerificationAction(input: {
   userId: string;
   verified: boolean;
 }) {
+  await requireRole("admin", input.locale);
   await toggleProVerification(input.userId, input.verified);
   revalidatePath("/admin/pros");
   revalidatePath(`/admin/pros/${input.userId}`);

@@ -15,6 +15,7 @@ import {
 import { formatDistrictName } from "@/lib/hk-locale";
 import { getLeadDetail } from "@/lib/mock/repositories";
 import { getProNav } from "@/lib/nav";
+import { getProSubscriptionEntitlement } from "@/lib/pro-subscription-entitlement";
 
 export default async function ProLeadDetailPage({
   params,
@@ -28,15 +29,27 @@ export default async function ProLeadDetailPage({
     return null;
   }
 
-  const lead = await getLeadDetail(user.id, requestId);
+  const [lead, subscriptionSnapshot] = await Promise.all([
+    getLeadDetail(user.id, requestId),
+    getProSubscriptionEntitlement(user.id),
+  ]);
   if (!lead) {
     redirect(`/pro/leads`);
   }
+  const canCreateQuotes = subscriptionSnapshot.entitlement.canCreateQuotes;
 
   return (
     <PortalShell
       locale={locale}
-      title={locale === "en" ? "Lead detail" : "工作機會詳情"}
+      title={
+        canCreateQuotes
+          ? locale === "en"
+            ? "Lead detail"
+            : "工作機會詳情"
+          : locale === "en"
+            ? "Quote record"
+            : "報價紀錄"
+      }
       subtitle={lead.title}
       navItems={getProNav(locale, "leads")}
     >
@@ -119,13 +132,20 @@ export default async function ProLeadDetailPage({
                 </div>
               ) : null}
             </div>
-            <QuoteForm
-              key={lead.existingQuote?.id ?? "new"}
-              locale={locale}
-              proId={user.id}
-              requestId={lead.id}
-              initialValues={lead.existingQuote ?? undefined}
-            />
+            {canCreateQuotes ? (
+              <QuoteForm
+                key={lead.existingQuote?.id ?? "new"}
+                locale={locale}
+                requestId={lead.id}
+                initialValues={lead.existingQuote ?? undefined}
+              />
+            ) : (
+              <div className="rounded-2xl border border-line bg-surface-tint/60 p-4 text-sm leading-7 text-muted">
+                {locale === "en"
+                  ? "This is a read-only record. Creating or updating a quote is unavailable until new-work access is restored."
+                  : "呢個係唯讀紀錄；新工作功能恢復之前，暫時唔可以建立或更新報價。"}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

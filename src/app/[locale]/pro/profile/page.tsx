@@ -86,11 +86,7 @@ export default async function ProProfilePage() {
         </Card>
         <Card>
           <CardContent>
-            <ProProfileForm
-              locale={locale}
-              userId={user.id}
-              profile={profile}
-            />
+            <ProProfileForm locale={locale} profile={profile} />
           </CardContent>
         </Card>
       </div>

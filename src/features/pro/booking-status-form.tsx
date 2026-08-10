@@ -12,12 +12,10 @@ import { Select } from "@/components/ui/select";
 
 export function BookingStatusForm({
   locale,
-  proId,
   bookingId,
   currentStatus,
 }: {
   locale: string;
-  proId: string;
   bookingId: string;
   currentStatus: BookingStatus;
 }) {
@@ -41,7 +39,6 @@ export function BookingStatusForm({
             setError(null);
             const result = await updateBookingStatusAction({
               locale,
-              proId,
               bookingId,
               status: event.target.value as BookingStatus,
             });

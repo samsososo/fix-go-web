@@ -34,7 +34,6 @@ export default async function NewRequestPage() {
         <CardContent>
           <RequestForm
             locale={locale}
-            customerId={user.id}
             customerPhone={user.phone}
             categoryOptions={categoryOptions}
             districts={districts}

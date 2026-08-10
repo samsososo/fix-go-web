@@ -3,9 +3,11 @@ import { MongoClient } from "mongodb";
 
 import { env } from "@/lib/env";
 import {
+  activatePaidProSubscription,
   activateProTrialSubscription,
   claimStripeWebhookEvent,
   completeProSubscriptionCheckoutReservation,
+  completeProSubscriptionReactivationCheckoutReservation,
   completeStripeWebhookEvent,
   consumeProLifetimeTrial,
   ensureProSubscription,
@@ -13,11 +15,78 @@ import {
   findProSubscription,
   listProSubscriptions,
   reserveProSubscriptionCheckout,
+  reserveProSubscriptionReactivationCheckout,
   setProStripeCustomer,
+  syncProSubscriptionLifecycle,
   withDb,
 } from "@/lib/mock/db";
 import { createUserAccount } from "@/lib/mock/repositories";
 import { closeMockDb, resetMockDb } from "./helpers/mock-db";
+
+async function activateLifecycleTestSubscription() {
+  const proId = "user_pro_chan";
+  await ensureProSubscription(proId);
+  await setProStripeCustomer(proId, "cus_lifecycle_test");
+  await reserveProSubscriptionCheckout({
+    proId,
+    reservationId: "reservation_lifecycle",
+    reservationExpiresAt: "2099-08-09T13:00:00.000Z",
+  });
+  await completeProSubscriptionCheckoutReservation({
+    proId,
+    reservationId: "reservation_lifecycle",
+    checkoutSessionId: "cs_lifecycle_test",
+    checkoutSessionExpiresAt: "2099-08-09T14:00:00.000Z",
+    stripeCustomerId: "cus_lifecycle_test",
+  });
+  await consumeProLifetimeTrial({
+    proId,
+    checkoutSessionId: "cs_lifecycle_test",
+    stripeCustomerId: "cus_lifecycle_test",
+    stripeSetupIntentId: "seti_lifecycle_test",
+    stripePaymentMethodId: "pm_lifecycle_test",
+    cardBoundAt: "2026-01-31T02:30:00.000Z",
+    trialEndsAt: "2026-04-30T02:30:00.000Z",
+  });
+  await activateProTrialSubscription({
+    proId,
+    stripeSubscriptionId: "sub_lifecycle_test",
+    stripePriceId: "price_lifecycle_test",
+    stripeStatus: "active",
+    stripeLivemode: false,
+    currentPeriodStartedAt: "2026-08-01T00:00:00.000Z",
+    currentPeriodEndsAt: "2026-09-01T00:00:00.000Z",
+    lastStripeEventId: "evt_lifecycle_activation",
+    lastStripeEventCreatedAt: "2026-04-30T02:30:00.000Z",
+    lastStripeSyncedAt: "2026-08-01T00:00:01.000Z",
+  });
+  return proId;
+}
+
+function lifecycleSyncInput(
+  overrides: Partial<Parameters<typeof syncProSubscriptionLifecycle>[0]> = {},
+): Parameters<typeof syncProSubscriptionLifecycle>[0] {
+  return {
+    proId: "user_pro_chan",
+    stripeCustomerId: "cus_lifecycle_test",
+    stripeSubscriptionId: "sub_lifecycle_test",
+    stripePriceId: "price_lifecycle_test",
+    stripeStatus: "past_due",
+    stripeLivemode: false,
+    currentPeriodStartedAt: "2026-08-01T00:00:00.000Z",
+    currentPeriodEndsAt: "2026-09-01T00:00:00.000Z",
+    cancelAtPeriodEnd: false,
+    paymentUpdate: {
+      type: "failed",
+      invoiceId: "in_lifecycle_due",
+      failedAt: "2026-08-10T00:00:00.000Z",
+    },
+    lastStripeEventId: "evt_lifecycle_failed",
+    lastStripeEventCreatedAt: "2026-08-10T00:00:00.000Z",
+    lastStripeSyncedAt: "2026-08-10T00:00:01.000Z",
+    ...overrides,
+  };
+}
 
 describe("pro subscription persistence", () => {
   beforeEach(async () => {
@@ -53,6 +122,77 @@ describe("pro subscription persistence", () => {
       expect(subscription.trialEndsAt).toBeUndefined();
       expect(subscription.stripeCustomerId).toBeUndefined();
     });
+  });
+
+  it("reactivates a terminated subscription only after a paid no-trial Checkout", async () => {
+    const proId = await activateLifecycleTestSubscription();
+    await syncProSubscriptionLifecycle(
+      lifecycleSyncInput({
+        stripeStatus: "canceled",
+        cancelAtPeriodEnd: true,
+        terminatedAt: "2026-09-01T00:00:00.000Z",
+        paymentUpdate: { type: "none" },
+        lastStripeEventId: "evt_clean_termination",
+        lastStripeEventCreatedAt: "2026-09-01T00:00:00.000Z",
+        lastStripeSyncedAt: "2026-09-01T00:00:01.000Z",
+      }),
+    );
+    const before = await findProSubscription(proId);
+    const trialConsumedAt = before?.trialConsumedAt;
+    expect(before).toMatchObject({
+      accessStatus: "terminated",
+      stripeStatus: "canceled",
+      stripeSubscriptionHasTrial: true,
+    });
+
+    await expect(
+      reserveProSubscriptionReactivationCheckout({
+        proId,
+        reservationId: "reservation_reactivation",
+        reservationExpiresAt: "2099-08-09T13:00:00.000Z",
+      }),
+    ).resolves.toMatchObject({
+      reactivationCheckoutReservationId: "reservation_reactivation",
+    });
+    await expect(
+      completeProSubscriptionReactivationCheckoutReservation({
+        proId,
+        reservationId: "reservation_reactivation",
+        checkoutSessionId: "cs_reactivation_repository",
+        checkoutSessionExpiresAt: "2099-08-09T14:00:00.000Z",
+        stripeCustomerId: "cus_lifecycle_test",
+        previousStripeSubscriptionId: "sub_lifecycle_test",
+      }),
+    ).resolves.toMatchObject({
+      reactivationCheckoutSessionId: "cs_reactivation_repository",
+    });
+
+    const reactivated = await activatePaidProSubscription({
+      proId,
+      stripeCustomerId: "cus_lifecycle_test",
+      previousStripeSubscriptionId: "sub_lifecycle_test",
+      reactivationCheckoutSessionId: "cs_reactivation_repository",
+      stripeSubscriptionId: "sub_reactivated_repository",
+      stripePriceId: "price_lifecycle_test",
+      stripeLivemode: false,
+      currentPeriodStartedAt: "2026-09-01T00:00:00.000Z",
+      currentPeriodEndsAt: "2026-10-01T00:00:00.000Z",
+      latestInvoiceId: "in_reactivated_repository",
+      paidAt: "2026-09-01T00:00:00.000Z",
+      lastStripeEventId: "evt_reactivated_repository",
+      lastStripeEventCreatedAt: "2026-09-01T00:00:00.000Z",
+      lastStripeSyncedAt: "2026-09-01T00:00:01.000Z",
+    });
+
+    expect(reactivated).toMatchObject({
+      accessStatus: "active",
+      stripeStatus: "active",
+      stripeSubscriptionId: "sub_reactivated_repository",
+      stripeSubscriptionHasTrial: false,
+      trialConsumedAt,
+      lastPaymentSucceededAt: "2026-09-01T00:00:00.000Z",
+    });
+    expect(reactivated?.reactivationCheckoutSessionId).toBeUndefined();
   });
 
   it("idempotently creates setup-required billing state for a new pro", async () => {
@@ -284,6 +424,313 @@ describe("pro subscription persistence", () => {
     });
     expect(persisted?.trialConsumedAt).toBeUndefined();
     expect(persisted?.trialEndsAt).toBeUndefined();
+  });
+
+  it("starts one 14-day grace window that invoice retries cannot extend", async () => {
+    await activateLifecycleTestSubscription();
+
+    await expect(
+      syncProSubscriptionLifecycle(lifecycleSyncInput()),
+    ).resolves.toMatchObject({
+      accessStatus: "grace_period",
+      stripeStatus: "past_due",
+      pastDueInvoiceId: "in_lifecycle_due",
+      firstPaymentFailedAt: "2026-08-10T00:00:00.000Z",
+      gracePeriodEndsAt: "2026-08-24T00:00:00.000Z",
+    });
+
+    await expect(
+      syncProSubscriptionLifecycle(
+        lifecycleSyncInput({
+          paymentUpdate: {
+            type: "failed",
+            invoiceId: "in_lifecycle_due",
+            failedAt: "2026-08-18T00:00:00.000Z",
+          },
+          lastStripeEventId: "evt_lifecycle_retry_failed",
+          lastStripeEventCreatedAt: "2026-08-18T00:00:00.000Z",
+          lastStripeSyncedAt: "2026-08-18T00:00:01.000Z",
+        }),
+      ),
+    ).resolves.toMatchObject({
+      accessStatus: "grace_period",
+      firstPaymentFailedAt: "2026-08-10T00:00:00.000Z",
+      gracePeriodEndsAt: "2026-08-24T00:00:00.000Z",
+    });
+
+    await expect(
+      syncProSubscriptionLifecycle(
+        lifecycleSyncInput({
+          stripeStatus: "unpaid",
+          paymentUpdate: {
+            type: "failed",
+            invoiceId: "in_lifecycle_due",
+            failedAt: "2026-08-24T00:00:00.000Z",
+          },
+          lastStripeEventId: "evt_lifecycle_day_14",
+          lastStripeEventCreatedAt: "2026-08-24T00:00:00.000Z",
+          lastStripeSyncedAt: "2026-08-24T00:00:00.000Z",
+        }),
+      ),
+    ).resolves.toMatchObject({
+      accessStatus: "suspended",
+      stripeStatus: "unpaid",
+      firstPaymentFailedAt: "2026-08-10T00:00:00.000Z",
+      gracePeriodEndsAt: "2026-08-24T00:00:00.000Z",
+    });
+  });
+
+  it("merges an older invoice failure into an already-started grace window", async () => {
+    await activateLifecycleTestSubscription();
+
+    await expect(
+      syncProSubscriptionLifecycle(
+        lifecycleSyncInput({
+          paymentUpdate: {
+            type: "failed",
+            invoiceId: "in_lifecycle_due",
+            failedAt: "2026-08-10T00:00:02.000Z",
+          },
+          lastStripeEventId: "evt_subscription_past_due_newer",
+          lastStripeEventCreatedAt: "2026-08-10T00:00:02.000Z",
+          lastStripeSyncedAt: "2026-08-10T00:00:03.000Z",
+        }),
+      ),
+    ).resolves.toMatchObject({
+      accessStatus: "grace_period",
+      lastStripeEventId: "evt_subscription_past_due_newer",
+    });
+
+    await expect(
+      syncProSubscriptionLifecycle(
+        lifecycleSyncInput({
+          lastStripeEventId: "evt_invoice_failure_older",
+          lastStripeEventCreatedAt: "2026-08-10T00:00:01.000Z",
+          lastStripeSyncedAt: "2026-08-10T00:00:04.000Z",
+        }),
+      ),
+    ).resolves.toMatchObject({
+      accessStatus: "grace_period",
+      firstPaymentFailedAt: "2026-08-10T00:00:00.000Z",
+      gracePeriodEndsAt: "2026-08-24T00:00:00.000Z",
+      lastStripeEventId: "evt_subscription_past_due_newer",
+      lastStripeEventCreatedAt: "2026-08-10T00:00:02.000Z",
+    });
+  });
+
+  it("replaces a provisional invoice time with the signed first failure time", async () => {
+    await activateLifecycleTestSubscription();
+    await syncProSubscriptionLifecycle(
+      lifecycleSyncInput({
+        paymentUpdate: {
+          type: "failed",
+          invoiceId: "in_lifecycle_due",
+          failedAt: "2026-08-09T23:59:50.000Z",
+          confirmed: false,
+        },
+      }),
+    );
+
+    const confirmed = await syncProSubscriptionLifecycle(
+      lifecycleSyncInput({
+        paymentUpdate: {
+          type: "failed",
+          invoiceId: "in_lifecycle_due",
+          failedAt: "2026-08-10T00:00:05.000Z",
+          confirmed: true,
+        },
+        lastStripeEventId: "evt_confirmed_failure",
+        lastStripeEventCreatedAt: "2026-08-10T00:00:05.000Z",
+        lastStripeSyncedAt: "2026-08-10T00:00:06.000Z",
+      }),
+    );
+
+    expect(confirmed).toMatchObject({
+      firstPaymentFailedAt: "2026-08-10T00:00:05.000Z",
+      paymentFailureConfirmed: true,
+      gracePeriodEndsAt: "2026-08-24T00:00:05.000Z",
+    });
+
+    const afterLaterRetry = await syncProSubscriptionLifecycle(
+      lifecycleSyncInput({
+        paymentUpdate: {
+          type: "failed",
+          invoiceId: "in_lifecycle_due",
+          failedAt: "2026-08-09T23:59:50.000Z",
+          confirmed: false,
+        },
+        lastStripeEventId: "evt_later_retry_delivered_after_confirmation",
+        lastStripeEventCreatedAt: "2026-08-12T00:00:00.000Z",
+        lastStripeSyncedAt: "2026-08-12T00:00:01.000Z",
+      }),
+    );
+
+    expect(afterLaterRetry).toMatchObject({
+      firstPaymentFailedAt: "2026-08-10T00:00:05.000Z",
+      paymentFailureConfirmed: true,
+      gracePeriodEndsAt: "2026-08-24T00:00:05.000Z",
+    });
+  });
+
+  it("does not let an old paid invoice clear a different outstanding invoice", async () => {
+    await activateLifecycleTestSubscription();
+    await syncProSubscriptionLifecycle(lifecycleSyncInput());
+
+    await expect(
+      syncProSubscriptionLifecycle(
+        lifecycleSyncInput({
+          paymentUpdate: {
+            type: "paid",
+            invoiceId: "in_older_already_paid",
+            paidAt: "2026-08-11T00:00:00.000Z",
+          },
+          lastStripeEventId: "evt_old_invoice_paid",
+          lastStripeEventCreatedAt: "2026-08-11T00:00:00.000Z",
+          lastStripeSyncedAt: "2026-08-11T00:00:01.000Z",
+        }),
+      ),
+    ).resolves.toMatchObject({
+      accessStatus: "grace_period",
+      pastDueInvoiceId: "in_lifecycle_due",
+      firstPaymentFailedAt: "2026-08-10T00:00:00.000Z",
+      gracePeriodEndsAt: "2026-08-24T00:00:00.000Z",
+    });
+  });
+
+  it("does not let an older failed event reopen debt after a newer payment", async () => {
+    await activateLifecycleTestSubscription();
+    await syncProSubscriptionLifecycle(lifecycleSyncInput());
+    await syncProSubscriptionLifecycle(
+      lifecycleSyncInput({
+        stripeStatus: "active",
+        paymentUpdate: {
+          type: "paid",
+          invoiceId: "in_lifecycle_due",
+          paidAt: "2026-08-12T00:00:00.000Z",
+        },
+        lastStripeEventId: "evt_paid_newer",
+        lastStripeEventCreatedAt: "2026-08-12T00:00:00.000Z",
+        lastStripeSyncedAt: "2026-08-12T00:00:01.000Z",
+      }),
+    );
+
+    const afterStaleFailure = await syncProSubscriptionLifecycle(
+      lifecycleSyncInput({
+        paymentUpdate: {
+          type: "failed",
+          invoiceId: "in_lifecycle_due",
+          failedAt: "2026-08-10T00:00:00.000Z",
+          confirmed: true,
+        },
+        lastStripeEventId: "evt_failed_older_delivery",
+        lastStripeEventCreatedAt: "2026-08-10T00:00:00.000Z",
+        lastStripeSyncedAt: "2026-08-12T00:00:02.000Z",
+      }),
+    );
+
+    expect(afterStaleFailure).toMatchObject({
+      accessStatus: "active",
+      stripeStatus: "active",
+      lastStripeEventId: "evt_paid_newer",
+    });
+    expect(afterStaleFailure.pastDueInvoiceId).toBeUndefined();
+    expect(afterStaleFailure.firstPaymentFailedAt).toBeUndefined();
+    expect(afterStaleFailure.gracePeriodEndsAt).toBeUndefined();
+  });
+
+  it("restores active state only when canonical Stripe confirms payment", async () => {
+    await activateLifecycleTestSubscription();
+    await syncProSubscriptionLifecycle(lifecycleSyncInput());
+
+    const restored = await syncProSubscriptionLifecycle(
+      lifecycleSyncInput({
+        stripeStatus: "active",
+        currentPeriodStartedAt: "2026-08-10T00:00:00.000Z",
+        currentPeriodEndsAt: "2026-09-10T00:00:00.000Z",
+        paymentUpdate: {
+          type: "paid",
+          invoiceId: "in_lifecycle_due",
+          paidAt: "2026-08-12T00:00:00.000Z",
+        },
+        lastStripeEventId: "evt_lifecycle_paid",
+        lastStripeEventCreatedAt: "2026-08-12T00:00:00.000Z",
+        lastStripeSyncedAt: "2026-08-12T00:00:01.000Z",
+      }),
+    );
+
+    expect(restored).toMatchObject({
+      accessStatus: "active",
+      stripeStatus: "active",
+      latestInvoiceId: "in_lifecycle_due",
+      lastPaymentSucceededAt: "2026-08-12T00:00:00.000Z",
+    });
+    expect(restored.pastDueInvoiceId).toBeUndefined();
+    expect(restored.firstPaymentFailedAt).toBeUndefined();
+    expect(restored.gracePeriodEndsAt).toBeUndefined();
+  });
+
+  it("keeps payment grace ahead of cancellation, then terminates at Stripe end", async () => {
+    await activateLifecycleTestSubscription();
+    await syncProSubscriptionLifecycle(lifecycleSyncInput());
+
+    await expect(
+      syncProSubscriptionLifecycle(
+        lifecycleSyncInput({
+          cancelAtPeriodEnd: true,
+          cancellationRequestedAt: "2026-08-11T00:00:00.000Z",
+          paymentUpdate: { type: "none" },
+          lastStripeEventId: "evt_cancel_while_due",
+          lastStripeEventCreatedAt: "2026-08-11T00:00:00.000Z",
+          lastStripeSyncedAt: "2026-08-11T00:00:01.000Z",
+        }),
+      ),
+    ).resolves.toMatchObject({
+      accessStatus: "grace_period",
+      cancelAtPeriodEnd: true,
+      cancellationRequestedAt: "2026-08-11T00:00:00.000Z",
+    });
+
+    await expect(
+      syncProSubscriptionLifecycle(
+        lifecycleSyncInput({
+          stripeStatus: "canceled",
+          cancelAtPeriodEnd: true,
+          terminatedAt: "2026-09-01T00:00:00.000Z",
+          paymentUpdate: { type: "none" },
+          lastStripeEventId: "evt_subscription_deleted",
+          lastStripeEventCreatedAt: "2026-09-01T00:00:00.000Z",
+          lastStripeSyncedAt: "2026-09-01T00:00:01.000Z",
+        }),
+      ),
+    ).resolves.toMatchObject({
+      accessStatus: "suspended",
+      stripeStatus: "canceled",
+      pastDueInvoiceId: "in_lifecycle_due",
+    });
+  });
+
+  it("does not let an early Stripe cancellation shorten an unpaid grace window", async () => {
+    await activateLifecycleTestSubscription();
+    await syncProSubscriptionLifecycle(lifecycleSyncInput());
+
+    const canceledDuringGrace = await syncProSubscriptionLifecycle(
+      lifecycleSyncInput({
+        stripeStatus: "canceled",
+        cancelAtPeriodEnd: true,
+        terminatedAt: "2026-08-12T00:00:00.000Z",
+        paymentUpdate: { type: "none" },
+        lastStripeEventId: "evt_deleted_during_grace",
+        lastStripeEventCreatedAt: "2026-08-12T00:00:00.000Z",
+        lastStripeSyncedAt: "2026-08-12T00:00:01.000Z",
+      }),
+    );
+
+    expect(canceledDuringGrace).toMatchObject({
+      accessStatus: "grace_period",
+      stripeStatus: "canceled",
+      pastDueInvoiceId: "in_lifecycle_due",
+      gracePeriodEndsAt: "2026-08-24T00:00:00.000Z",
+    });
   });
 });
 

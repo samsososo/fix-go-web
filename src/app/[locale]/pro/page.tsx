@@ -3,6 +3,7 @@ import {
   BriefcaseBusiness,
   CalendarDays,
   Clock3,
+  CreditCard,
   MapPin,
   MessageCircle,
   Sparkles,
@@ -28,6 +29,7 @@ import {
   listRelevantLeads,
 } from "@/lib/mock/repositories";
 import { getProNav } from "@/lib/nav";
+import { getProSubscriptionEntitlement } from "@/lib/pro-subscription-entitlement";
 import { cn, formatCurrency } from "@/lib/utils";
 import { BookingStatus, RequestUrgency } from "@/types/domain";
 
@@ -59,8 +61,10 @@ export default async function ProDashboardPage() {
     return null;
   }
 
+  const subscriptionSnapshot = await getProSubscriptionEntitlement(user.id);
+  const canCreateQuotes = subscriptionSnapshot.entitlement.canCreateQuotes;
   const [leads, calendarBookings, jobs] = await Promise.all([
-    listRelevantLeads(user.id),
+    canCreateQuotes ? listRelevantLeads(user.id) : Promise.resolve([]),
     listProCalendarBookings(user.id),
     listProJobs(user.id),
   ]);
@@ -105,34 +109,62 @@ export default async function ProDashboardPage() {
           <CardContent className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
             <div className="space-y-3">
               <div className="inline-flex items-center gap-2 rounded-full border border-primary/16 bg-white/70 px-3 py-1 text-xs font-semibold text-primary">
-                <Sparkles className="h-4 w-4" />
-                {locale === "en" ? "Recommended next step" : "建議先處理"}
+                {canCreateQuotes ? (
+                  <Sparkles className="h-4 w-4" />
+                ) : (
+                  <CreditCard className="h-4 w-4" />
+                )}
+                {canCreateQuotes
+                  ? locale === "en"
+                    ? "Recommended next step"
+                    : "建議先處理"
+                  : locale === "en"
+                    ? "Existing work remains available"
+                    : "現有工作繼續保留"}
               </div>
               <div className="space-y-2">
                 <h2 className="font-display text-3xl font-extrabold tracking-normal text-foreground sm:text-4xl">
-                  {openLeads.length > 0
-                    ? locale === "en"
-                      ? `${openLeads.length} open jobs are waiting for quotes`
-                      : `有 ${openLeads.length} 張工作機會等緊你報價`
+                  {canCreateQuotes
+                    ? openLeads.length > 0
+                      ? locale === "en"
+                        ? `${openLeads.length} open jobs are waiting for quotes`
+                        : `有 ${openLeads.length} 張工作機會等緊你報價`
+                      : locale === "en"
+                        ? "No open jobs waiting for quotes right now"
+                        : "暫時未有等緊你報價嘅工作"
                     : locale === "en"
-                      ? "No open jobs waiting for quotes right now"
-                      : "暫時未有等緊你報價嘅工作"}
+                      ? "New quotes are paused, but accepted jobs are not"
+                      : "新報價暫停，但已接訂單可以繼續處理"}
                 </h2>
                 <p className="max-w-2xl text-sm leading-7 text-muted">
-                  {locale === "en"
-                    ? "This overview keeps work discovery in front, so an empty schedule no longer feels like there is nothing to do."
-                    : "呢版會將搵工作放喺最前，就算日程暫時未有安排，師傅都會知道下一步係去睇工作機會。"}
+                  {canCreateQuotes
+                    ? locale === "en"
+                      ? "This overview keeps work discovery in front, so an empty schedule no longer feels like there is nothing to do."
+                      : "呢版會將搵工作放喺最前，就算日程暫時未有安排，師傅都會知道下一步係去睇工作機會。"
+                    : locale === "en"
+                      ? "Use jobs and schedule as normal. Manage billing whenever you are ready to restore new-work access."
+                      : "你可以照常使用訂單同日程；準備好後到月費頁恢復新工作功能。"}
                 </p>
               </div>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
               <Link
-                href="/pro/leads"
+                href={canCreateQuotes ? "/pro/leads" : "/pro/billing"}
                 locale={locale}
                 className={buttonVariants({ size: "sm" })}
               >
-                <BriefcaseBusiness className="h-4 w-4" />
-                {locale === "en" ? "View job leads" : "查看工作機會"}
+                {canCreateQuotes ? (
+                  <BriefcaseBusiness className="h-4 w-4" />
+                ) : (
+                  <CreditCard className="h-4 w-4" />
+                )}
+                {canCreateQuotes
+                  ? locale === "en"
+                    ? "View job leads"
+                    : "查看工作機會"
+                  : locale === "en"
+                    ? "Manage billing"
+                    : "管理月費"}
               </Link>
               <Link
                 href="/pro/calendar"
@@ -148,9 +180,25 @@ export default async function ProDashboardPage() {
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <DashboardStat
-            label={locale === "en" ? "Open leads" : "等待報價"}
+            label={
+              canCreateQuotes
+                ? locale === "en"
+                  ? "Open leads"
+                  : "等待報價"
+                : locale === "en"
+                  ? "New leads"
+                  : "新工作機會"
+            }
             value={openLeads.length}
-            hint={locale === "en" ? "Ready to quote" : "可即時處理"}
+            hint={
+              canCreateQuotes
+                ? locale === "en"
+                  ? "Ready to quote"
+                  : "可即時處理"
+                : locale === "en"
+                  ? "Temporarily paused"
+                  : "暫時停用"
+            }
             icon={<BriefcaseBusiness className="h-5 w-5" />}
           />
           <DashboardStat
@@ -185,23 +233,39 @@ export default async function ProDashboardPage() {
               <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h2 className="font-display text-2xl font-extrabold">
-                    {locale === "en" ? "Recommended job leads" : "推薦工作機會"}
+                    {canCreateQuotes
+                      ? locale === "en"
+                        ? "Recommended job leads"
+                        : "推薦工作機會"
+                      : locale === "en"
+                        ? "New-work access"
+                        : "新工作功能"}
                   </h2>
                   <p className="mt-1 text-sm leading-6 text-muted">
-                    {locale === "en"
-                      ? "Urgent and unquoted jobs appear first."
-                      : "緊急同未報價需求會排喺最前。"}
+                    {canCreateQuotes
+                      ? locale === "en"
+                        ? "Urgent and unquoted jobs appear first."
+                        : "緊急同未報價需求會排喺最前。"
+                      : locale === "en"
+                        ? "No new customer details are shown while new work is paused."
+                        : "新工作暫停期間，呢度唔會顯示新客戶資料。"}
                   </p>
                 </div>
                 <Link
-                  href="/pro/leads"
+                  href={canCreateQuotes ? "/pro/leads" : "/pro/billing"}
                   locale={locale}
                   className={cn(
                     buttonVariants({ variant: "outline", size: "sm" }),
                     "shrink-0",
                   )}
                 >
-                  {locale === "en" ? "All leads" : "全部"}
+                  {canCreateQuotes
+                    ? locale === "en"
+                      ? "All leads"
+                      : "全部"
+                    : locale === "en"
+                      ? "Manage billing"
+                      : "管理月費"}
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </div>
@@ -271,14 +335,22 @@ export default async function ProDashboardPage() {
               ) : (
                 <div className="rounded-2xl border border-dashed border-line bg-white/58 px-5 py-8 text-center">
                   <p className="font-display text-xl font-bold">
-                    {locale === "en"
-                      ? "No recommended leads right now"
-                      : "暫時未有推薦工作"}
+                    {canCreateQuotes
+                      ? locale === "en"
+                        ? "No recommended leads right now"
+                        : "暫時未有推薦工作"
+                      : locale === "en"
+                        ? "New customer leads are hidden"
+                        : "新客戶工作機會已隱藏"}
                   </p>
                   <p className="mx-auto mt-2 max-w-xl text-sm leading-7 text-muted">
-                    {locale === "en"
-                      ? "New matched customer requests will appear here and in the leads list."
-                      : "新配對嘅客戶需求會出現在呢度同工作機會清單。"}
+                    {canCreateQuotes
+                      ? locale === "en"
+                        ? "New matched customer requests will appear here and in the leads list."
+                        : "新配對嘅客戶需求會出現在呢度同工作機會清單。"
+                      : locale === "en"
+                        ? "Existing jobs, schedules, and your own quote records remain available."
+                        : "現有訂單、日程同你自己嘅報價紀錄仍然可以查看。"}
                   </p>
                 </div>
               )}

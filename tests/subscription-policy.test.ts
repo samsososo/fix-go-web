@@ -188,6 +188,8 @@ describe("subscription entitlement", () => {
       const value = subscription(accessStatus, {
         trialEndsAt:
           accessStatus === "trialing" ? "2026-09-01T00:00:00.000Z" : undefined,
+        currentPeriodEndsAt:
+          accessStatus === "active" ? "2026-09-01T00:00:00.000Z" : undefined,
       });
       const entitlement = deriveProSubscriptionEntitlement(value, NOW);
 
@@ -231,6 +233,21 @@ describe("subscription entitlement", () => {
     });
 
     expect(deriveSubscriptionAccessStatus(value, NOW)).toBe("suspended");
+  });
+
+  it("fails closed when an active paid period expires before Stripe sync", () => {
+    const value = subscription("active", {
+      stripeStatus: "active",
+      currentPeriodEndsAt: NOW,
+    });
+
+    expect(deriveSubscriptionAccessStatus(value, NOW)).toBe("suspended");
+    expect(
+      deriveSubscriptionAccessStatus(
+        subscription("active", { stripeStatus: "active" }),
+        NOW,
+      ),
+    ).toBe("suspended");
   });
 
   it("keeps a cancelled trial active only until the trial end", () => {

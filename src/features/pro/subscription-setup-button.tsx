@@ -7,8 +7,15 @@ import { Button } from "@/components/ui/button";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { startProSubscriptionCheckoutAction } from "@/lib/actions";
 
-export function SubscriptionSetupButton({ locale }: { locale: string }) {
+export function SubscriptionSetupButton({
+  locale,
+  mode = "setup",
+}: {
+  locale: string;
+  mode?: "setup" | "reactivate";
+}) {
   const isEnglish = locale === "en";
+  const isReactivation = mode === "reactivate";
   const isHydrated = useHydrated();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -60,14 +67,22 @@ export function SubscriptionSetupButton({ locale }: { locale: string }) {
             ? "Opening Stripe…"
             : "正在開啟 Stripe…"
           : isEnglish
-            ? "Set up card securely"
-            : "前往 Stripe 安全綁卡"}
+            ? isReactivation
+              ? "Re-subscribe for HK$100"
+              : "Set up card securely"
+            : isReactivation
+              ? "重新訂閱並支付 HK$100"
+              : "前往 Stripe 安全綁卡"}
       </Button>
 
       <p id="subscription-setup-note" className="text-xs leading-6 text-muted">
         {isEnglish
-          ? "No charge today. Your three-month free trial starts only after Stripe confirms your card setup."
-          : "今日不會收費；Stripe 確認綁卡成功後，3 個月免費試用先會開始。"}
+          ? isReactivation
+            ? "Stripe charges HK$100 now. Access returns only after payment is confirmed; the lifetime trial is not repeated."
+            : "No charge today. Your three-month free trial starts only after Stripe confirms your card setup."
+          : isReactivation
+            ? "Stripe 會即時收取 HK$100；確認付款後先恢復功能，而且不會再次獲得免費試用。"
+            : "今日不會收費；Stripe 確認綁卡成功後，3 個月免費試用先會開始。"}
       </p>
 
       {error ? (

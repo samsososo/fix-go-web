@@ -12,15 +12,65 @@ import {
   listProCalendarBookings,
   submitProQuote,
 } from "@/lib/mock/repositories";
-import { readDb } from "@/lib/mock/db";
+import { readDb, withDb } from "@/lib/mock/db";
+import { ProNewWorkRestrictedError } from "@/lib/pro-subscription-entitlement";
 import { closeMockDb, resetMockDb } from "./helpers/mock-db";
+import {
+  closeProSubscriptionTestClient,
+  setProSubscriptionAccess,
+} from "./helpers/pro-subscription";
+
+const plumbingRequest = {
+  title: "Need urgent plumbing help in Lam Tin",
+  description:
+    "Kitchen tap keeps leaking and the cabinet is getting wet overnight.",
+  categoryId: "plumbing",
+  subcategoryId: "leak",
+  urgency: "asap" as const,
+  scheduledDate: "",
+  budgetMin: 400,
+  budgetMax: 900,
+  accessNotes: "Please call before arrival",
+  attachmentNames: [],
+  address: {
+    district: "Kwun Tong",
+    area: "Lam Tin",
+    buildingEstate: "Laguna City",
+    block: "Block 9",
+    floor: "8/F",
+    flatRoom: "C",
+    landmarkNotes: "Near the clubhouse",
+  },
+};
+
+const plumbingQuote = {
+  quoteAmount: 700,
+  labourEstimate: 500,
+  partsEstimate: 100,
+  callOutFee: 100,
+  total: 700,
+  includedWork: "Inspect and repair the leak.",
+  exclusions: "Concealed pipe replacement is excluded.",
+  earliestAvailability: "2026-08-11T09:00",
+  estimatedDurationMinutes: 90,
+  noteToCustomer: "Can visit tomorrow morning.",
+};
 
 describe("marketplace repositories", () => {
   beforeEach(async () => {
     await resetMockDb();
+    await setProSubscriptionAccess("user_pro_chan", "active", {
+      stripeStatus: "active",
+      currentPeriodEndsAt: "2099-01-01T00:00:00.000Z",
+    });
+    await setProSubscriptionAccess("user_pro_wong", "active", {
+      stripeStatus: "active",
+      currentPeriodEndsAt: "2099-01-01T00:00:00.000Z",
+    });
   });
 
   afterAll(async () => {
+    await closeProSubscriptionTestClient();
     await closeMockDb();
   });
 
@@ -212,5 +262,236 @@ describe("marketplace repositories", () => {
     expect(proCalendar[0]?.customer?.fullName).toBe("陳小姐");
     expect(proCalendar[0]?.estimatedDurationMinutes).toBe(120);
     expect(adminCalendar[0]?.quote?.total).toBe(780);
+  });
+
+  it("matches and notifies only pros whose subscriptions allow new work", async () => {
+    await withDb((db) => {
+      const wong = db.proProfiles.find(
+        (profile) => profile.userId === "user_pro_wong",
+      );
+      if (!wong) {
+        throw new Error("Seeded pro profile not found");
+      }
+      wong.serviceCategoryIds = [...wong.serviceCategoryIds, "plumbing"];
+    });
+    await setProSubscriptionAccess("user_pro_chan", "suspended");
+
+    const request = await createCustomerRequest(
+      "user_customer_ben",
+      plumbingRequest,
+      "zh-HK",
+    );
+
+    expect(request.matchedProIds).toEqual(["user_pro_wong"]);
+    const db = await readDb();
+    const matchingNotifications = db.notifications.filter(
+      (notification) => notification.body === request.title,
+    );
+    expect(
+      matchingNotifications.map((notification) => notification.userId),
+    ).toEqual(["user_pro_wong"]);
+  });
+
+  it("does not expose an unquoted lead after the matched pro is suspended", async () => {
+    const request = await createCustomerRequest(
+      "user_customer_ben",
+      plumbingRequest,
+      "zh-HK",
+    );
+    expect(request.matchedProIds).toContain("user_pro_chan");
+
+    await setProSubscriptionAccess("user_pro_chan", "suspended");
+
+    await expect(listRelevantLeads("user_pro_chan")).resolves.not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: request.id })]),
+    );
+    await expect(
+      getLeadDetail("user_pro_chan", request.id),
+    ).resolves.toBeNull();
+  });
+
+  it("keeps an existing quote record read-only while new work is suspended", async () => {
+    const request = await createCustomerRequest(
+      "user_customer_ben",
+      plumbingRequest,
+      "zh-HK",
+    );
+    await submitProQuote("user_pro_chan", request.id, plumbingQuote, "zh-HK");
+    await setProSubscriptionAccess("user_pro_chan", "suspended");
+
+    await expect(listRelevantLeads("user_pro_chan")).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: request.id,
+          existingQuote: expect.objectContaining({ total: 700 }),
+        }),
+      ]),
+    );
+    await expect(
+      getLeadDetail("user_pro_chan", request.id),
+    ).resolves.toMatchObject({
+      id: request.id,
+      existingQuote: { total: 700 },
+    });
+    await expect(
+      submitProQuote(
+        "user_pro_chan",
+        request.id,
+        { ...plumbingQuote, total: 1 },
+        "zh-HK",
+      ),
+    ).rejects.toBeInstanceOf(ProNewWorkRestrictedError);
+
+    const db = await readDb();
+    expect(
+      db.quotes.find(
+        (quote) =>
+          quote.requestId === request.id && quote.proId === "user_pro_chan",
+      )?.total,
+    ).toBe(700);
+  });
+
+  it("keeps a rejected quote record visible after another pro closes the request", async () => {
+    await withDb((db) => {
+      const wong = db.proProfiles.find(
+        (profile) => profile.userId === "user_pro_wong",
+      );
+      if (!wong) {
+        throw new Error("Seeded pro profile not found");
+      }
+      wong.serviceCategoryIds = [...wong.serviceCategoryIds, "plumbing"];
+    });
+    const request = await createCustomerRequest(
+      "user_customer_ben",
+      plumbingRequest,
+      "zh-HK",
+    );
+    const chanQuote = await submitProQuote(
+      "user_pro_chan",
+      request.id,
+      plumbingQuote,
+      "zh-HK",
+    );
+    const wongQuote = await submitProQuote(
+      "user_pro_wong",
+      request.id,
+      { ...plumbingQuote, total: 800, quoteAmount: 800 },
+      "zh-HK",
+    );
+    await acceptCustomerQuote(
+      "user_customer_ben",
+      request.id,
+      wongQuote.id,
+      "zh-HK",
+    );
+    await setProSubscriptionAccess("user_pro_chan", "suspended");
+
+    await expect(listRelevantLeads("user_pro_chan")).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: request.id,
+          existingQuote: expect.objectContaining({
+            id: chanQuote.id,
+            status: "rejected",
+          }),
+        }),
+      ]),
+    );
+    await expect(
+      getLeadDetail("user_pro_chan", request.id),
+    ).resolves.toMatchObject({
+      existingQuote: { id: chanQuote.id, status: "rejected" },
+    });
+  });
+
+  it("prevents a customer accepting a quote after the pro is suspended", async () => {
+    const request = await createCustomerRequest(
+      "user_customer_ben",
+      plumbingRequest,
+      "zh-HK",
+    );
+    const quote = await submitProQuote(
+      "user_pro_chan",
+      request.id,
+      plumbingQuote,
+      "zh-HK",
+    );
+    await setProSubscriptionAccess("user_pro_chan", "suspended");
+
+    await expect(
+      acceptCustomerQuote("user_customer_ben", request.id, quote.id, "zh-HK"),
+    ).rejects.toBeInstanceOf(ProNewWorkRestrictedError);
+
+    const db = await readDb();
+    const requestAfterRejection = db.requests.find(
+      (entry) => entry.id === request.id,
+    );
+    expect(requestAfterRejection?.status).toBe("quoted");
+    expect(requestAfterRejection?.acceptedQuoteId).toBeUndefined();
+    expect(db.quotes.find((entry) => entry.id === quote.id)?.status).toBe(
+      "sent",
+    );
+    expect(
+      db.bookings.some((booking) => booking.requestId === request.id),
+    ).toBe(false);
+  });
+
+  it("makes repeated acceptance idempotent instead of creating two bookings", async () => {
+    const request = await createCustomerRequest(
+      "user_customer_ben",
+      plumbingRequest,
+      "zh-HK",
+    );
+    const quote = await submitProQuote(
+      "user_pro_chan",
+      request.id,
+      plumbingQuote,
+      "zh-HK",
+    );
+
+    const first = await acceptCustomerQuote(
+      "user_customer_ben",
+      request.id,
+      quote.id,
+      "zh-HK",
+    );
+    const second = await acceptCustomerQuote(
+      "user_customer_ben",
+      request.id,
+      quote.id,
+      "zh-HK",
+    );
+
+    expect(second.id).toBe(first.id);
+    const db = await readDb();
+    expect(
+      db.bookings.filter((booking) => booking.requestId === request.id),
+    ).toHaveLength(1);
+  });
+
+  it("serializes concurrent acceptance so only one booking is created", async () => {
+    const request = await createCustomerRequest(
+      "user_customer_ben",
+      plumbingRequest,
+      "zh-HK",
+    );
+    const quote = await submitProQuote(
+      "user_pro_chan",
+      request.id,
+      plumbingQuote,
+      "zh-HK",
+    );
+
+    const accepted = await Promise.all([
+      acceptCustomerQuote("user_customer_ben", request.id, quote.id, "zh-HK"),
+      acceptCustomerQuote("user_customer_ben", request.id, quote.id, "zh-HK"),
+    ]);
+
+    expect(accepted[0]?.id).toBe(quote.id);
+    expect(accepted[1]?.id).toBe(quote.id);
+    const db = await readDb();
+    expect(
+      db.bookings.filter((booking) => booking.requestId === request.id),
+    ).toHaveLength(1);
   });
 });

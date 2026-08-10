@@ -10,6 +10,12 @@ import {
   canTransitionRequestStatus,
 } from "@/lib/status";
 import { formatStatusLabel } from "@/lib/formatters";
+import {
+  assertProCanAcceptNewWork,
+  assertProCanCreateQuotes,
+  getProIdsEligibleForNewWork,
+  getProSubscriptionEntitlement,
+} from "@/lib/pro-subscription-entitlement";
 import { createId, nowIso } from "@/lib/utils";
 import {
   AdminNote,
@@ -77,9 +83,17 @@ function isOpenLead(request: ServiceRequest) {
   return openLeadStatuses.includes(request.status);
 }
 
-function matchProsForRequest(proProfiles: ProProfile[], categoryId: string) {
+function matchProsForRequest(
+  proProfiles: ProProfile[],
+  categoryId: string,
+  eligibleProIds: ReadonlySet<string>,
+) {
   return proProfiles
-    .filter((profile) => profile.serviceCategoryIds.includes(categoryId))
+    .filter(
+      (profile) =>
+        eligibleProIds.has(profile.userId) &&
+        profile.serviceCategoryIds.includes(categoryId),
+    )
     .map((profile) => profile.userId);
 }
 
@@ -273,13 +287,18 @@ export async function createCustomerRequest(
   input: RequestFormInput,
   locale: string,
 ) {
-  return withDb((db) => {
+  return withDb(async (db) => {
+    const eligibleProIds = await getProIdsEligibleForNewWork();
     const requestId = createId("req");
     const address: Address = {
       id: createId("addr"),
       ...input.address,
     };
-    const matchedProIds = matchProsForRequest(db.proProfiles, input.categoryId);
+    const matchedProIds = matchProsForRequest(
+      db.proProfiles,
+      input.categoryId,
+      eligibleProIds,
+    );
     const status: RequestStatus =
       matchedProIds.length > 0 ? "awaiting_quotes" : "submitted";
 
@@ -415,7 +434,7 @@ export async function acceptCustomerQuote(
   quoteId: string,
   locale: string,
 ) {
-  return withDb((db) => {
+  return withDb(async (db) => {
     const request = db.requests.find(
       (entry) => entry.id === requestId && entry.customerId === customerId,
     );
@@ -429,6 +448,27 @@ export async function acceptCustomerQuote(
     if (!quote) {
       throw new Error("Quote not found");
     }
+
+    const existingBooking = db.bookings.find(
+      (entry) => entry.requestId === requestId,
+    );
+    if (request.acceptedQuoteId || existingBooking) {
+      if (
+        request.acceptedQuoteId === quoteId &&
+        existingBooking?.quoteId === quoteId &&
+        existingBooking.customerId === customerId &&
+        existingBooking.proId === quote.proId
+      ) {
+        return quote;
+      }
+      throw new Error("Request already has an accepted quote");
+    }
+
+    if (!isOpenLead(request) || quote.status !== "sent") {
+      throw new Error("Quote is no longer available");
+    }
+
+    await assertProCanAcceptNewWork(quote.proId);
 
     db.quotes.forEach((entry) => {
       if (entry.requestId === requestId) {
@@ -531,22 +571,41 @@ export async function saveProProfile(userId: string, input: ProProfileInput) {
 }
 
 export async function listRelevantLeads(proId: string, categoryId?: string) {
-  return listMongoRelevantLeads(proId, categoryId);
+  const snapshot = await getProSubscriptionEntitlement(proId);
+  const leads = await listMongoRelevantLeads(
+    proId,
+    categoryId,
+    !snapshot.entitlement.canCreateQuotes,
+  );
+
+  if (snapshot.entitlement.canCreateQuotes) {
+    return leads;
+  }
+
+  return leads.filter((lead) => Boolean(lead.existingQuote));
 }
 
 export async function getLeadDetail(proId: string, requestId: string) {
-  const db = await readDb();
+  const [snapshot, db] = await Promise.all([
+    getProSubscriptionEntitlement(proId),
+    readDb(),
+  ]);
   const request = db.requests.find(
-    (entry) =>
-      entry.id === requestId &&
-      isOpenLead(entry) &&
-      entry.matchedProIds.includes(proId),
+    (entry) => entry.id === requestId && entry.matchedProIds.includes(proId),
   );
   if (!request) {
     return null;
   }
 
-  return {
+  const existingQuote =
+    db.quotes.find(
+      (quote) => quote.requestId === request.id && quote.proId === proId,
+    ) ?? null;
+  if (!isOpenLead(request) && !existingQuote) {
+    return null;
+  }
+
+  const detail = {
     ...request,
     customer: findUser(db.users, request.customerId),
     category:
@@ -554,11 +613,14 @@ export async function getLeadDetail(proId: string, requestId: string) {
     attachments: db.attachments.filter(
       (entry) => entry.requestId === request.id,
     ),
-    existingQuote:
-      db.quotes.find(
-        (quote) => quote.requestId === request.id && quote.proId === proId,
-      ) ?? null,
+    existingQuote,
   };
+
+  if (!snapshot.entitlement.canCreateQuotes && !detail.existingQuote) {
+    return null;
+  }
+
+  return detail;
 }
 
 export async function submitProQuote(
@@ -567,7 +629,9 @@ export async function submitProQuote(
   input: QuoteFormInput,
   locale: string,
 ) {
-  return withDb((db) => {
+  return withDb(async (db) => {
+    await assertProCanCreateQuotes(proId);
+
     const request = db.requests.find(
       (entry) =>
         entry.id === requestId &&

@@ -15,7 +15,9 @@ import {
   PRO_SUBSCRIPTION_INTERVAL,
   PRO_SUBSCRIPTION_PLAN_CODE,
   addThreeHongKongCalendarMonths,
+  calculateGracePeriodEndsAt,
   type ProSubscription,
+  type SubscriptionAccessStatus,
   type StripeSubscriptionStatus,
 } from "@/lib/subscription-policy";
 import { createSeedDb } from "@/mock/seed";
@@ -43,6 +45,12 @@ type MongoDoc<T extends object> = T & { _id: string };
 type SystemMetadataDoc = {
   _id: string;
   value: string;
+};
+
+type MutationLockDoc = {
+  _id: string;
+  leaseId: string;
+  leaseExpiresAt: Date;
 };
 
 type ProfileDoc = MongoDoc<User> & {
@@ -204,6 +212,11 @@ let mongoSessionUserCache = new Map<
   string,
   { expiresAt: number; user: User | null }
 >();
+
+const MUTATION_LOCK_ID = "lock:marketplace-subscription-write";
+const MUTATION_LOCK_LEASE_MS = 30_000;
+const MUTATION_LOCK_WAIT_MS = 25;
+const MUTATION_LOCK_MAX_WAIT_MS = 10_000;
 
 function requireMongoUri() {
   if (!env.MONGODB_URI) {
@@ -892,6 +905,12 @@ async function initializeMongo(db: Db) {
     db
       .collection<ProSubscriptionDoc>("proSubscriptions")
       .createIndex({ stripeSetupIntentId: 1 }, { unique: true, sparse: true }),
+    db
+      .collection<ProSubscriptionDoc>("proSubscriptions")
+      .createIndex(
+        { reactivationCheckoutSessionId: 1 },
+        { unique: true, sparse: true },
+      ),
     db.collection<ProSubscriptionDoc>("proSubscriptions").createIndex({
       accessStatus: 1,
       gracePeriodEndsAt: 1,
@@ -1049,11 +1068,122 @@ export async function writeMongoDb(dbState: MockDb) {
   clearMongoSessionUserCache();
 }
 
+type MongoMutationLease = {
+  assertOwned: () => Promise<void>;
+};
+
+async function withMongoMutationLock<T>(
+  db: Db,
+  operation: (lease: MongoMutationLease) => Promise<T>,
+) {
+  const leaseId = createOpaqueToken();
+  const deadline = Date.now() + MUTATION_LOCK_MAX_WAIT_MS;
+  const collection = db.collection<MutationLockDoc>("systemMetadata");
+
+  while (true) {
+    const now = new Date();
+    try {
+      const lock = await collection.findOneAndUpdate(
+        {
+          _id: MUTATION_LOCK_ID,
+          $or: [
+            { leaseExpiresAt: { $lte: now } },
+            { leaseId },
+            { leaseExpiresAt: { $exists: false } },
+          ],
+        },
+        {
+          $set: {
+            leaseId,
+            leaseExpiresAt: new Date(now.getTime() + MUTATION_LOCK_LEASE_MS),
+          },
+        },
+        { upsert: true, returnDocument: "after" },
+      );
+      if (lock?.leaseId === leaseId) {
+        break;
+      }
+    } catch (error) {
+      if (!isDuplicateMongoKey(error)) {
+        throw error;
+      }
+    }
+
+    if (Date.now() >= deadline) {
+      throw new Error("Timed out waiting for the database mutation lock.");
+    }
+    await new Promise((resolve) => setTimeout(resolve, MUTATION_LOCK_WAIT_MS));
+  }
+
+  let heartbeatFailure: Error | undefined;
+  let heartbeatRunning = false;
+  const renewLease = async () => {
+    const now = new Date();
+    const renewed = await collection.updateOne(
+      {
+        _id: MUTATION_LOCK_ID,
+        leaseId,
+        leaseExpiresAt: { $gt: now },
+      },
+      {
+        $set: {
+          leaseExpiresAt: new Date(now.getTime() + MUTATION_LOCK_LEASE_MS),
+        },
+      },
+    );
+    if (renewed.matchedCount !== 1) {
+      throw new Error("The database mutation lock lease was lost.");
+    }
+  };
+  const heartbeat = setInterval(() => {
+    if (heartbeatRunning || heartbeatFailure) {
+      return;
+    }
+    heartbeatRunning = true;
+    void renewLease()
+      .catch((error) => {
+        heartbeatFailure =
+          error instanceof Error
+            ? error
+            : new Error("The database mutation lock heartbeat failed.");
+      })
+      .finally(() => {
+        heartbeatRunning = false;
+      });
+  }, MUTATION_LOCK_LEASE_MS / 3);
+  heartbeat.unref();
+
+  const lease: MongoMutationLease = {
+    assertOwned: async () => {
+      if (heartbeatFailure) {
+        throw heartbeatFailure;
+      }
+      await renewLease();
+    },
+  };
+
+  try {
+    return await operation(lease);
+  } finally {
+    clearInterval(heartbeat);
+    await collection.deleteOne({ _id: MUTATION_LOCK_ID, leaseId });
+  }
+}
+
 export async function withMongoDb<T>(updater: (db: MockDb) => Promise<T> | T) {
-  const dbState = await readMongoDb();
-  const result = await updater(dbState);
-  await writeMongoDb(dbState);
-  return result;
+  const db = await getMongoDb();
+  return withMongoMutationLock(db, async (lease) => {
+    // Mutations deliberately bypass the development read cache. Combined with
+    // the Mongo-backed lease, this prevents two app instances from accepting
+    // the same quote or writing an entitlement decision from stale state.
+    const dbState = await loadMongoDbStateFromDb(db);
+    const result = await updater(dbState);
+    await lease.assertOwned();
+    await writeState(db, dbState);
+    clearMongoReadCache();
+    clearMongoSessionUserCache();
+    return result;
+  });
 }
 
 export async function ensureMongoProSubscription(proId: string) {
@@ -1086,6 +1216,16 @@ export async function findMongoProSubscription(proId: string) {
   const subscription = await db
     .collection<ProSubscriptionDoc>("proSubscriptions")
     .findOne({ _id: proId });
+  return subscription ? stripMongoId<ProSubscription>(subscription) : null;
+}
+
+export async function findMongoProSubscriptionByStripeSubscriptionId(
+  stripeSubscriptionId: string,
+) {
+  const db = await getMongoDb();
+  const subscription = await db
+    .collection<ProSubscriptionDoc>("proSubscriptions")
+    .findOne({ stripeSubscriptionId });
   return subscription ? stripMongoId<ProSubscription>(subscription) : null;
 }
 
@@ -1275,6 +1415,138 @@ export async function clearMongoProSubscriptionCheckoutSession(
   return result.modifiedCount === 1;
 }
 
+export async function reserveMongoProSubscriptionReactivationCheckout(input: {
+  proId: string;
+  reservationId: string;
+  reservationExpiresAt: string;
+}) {
+  const expiresAt = new Date(input.reservationExpiresAt);
+  if (!Number.isFinite(expiresAt.getTime()) || expiresAt <= new Date()) {
+    throw new TypeError(
+      "Reactivation reservation expiry must be in the future.",
+    );
+  }
+
+  const db = await getMongoDb();
+  const now = new Date().toISOString();
+  const subscription = await db
+    .collection<ProSubscriptionDoc>("proSubscriptions")
+    .findOneAndUpdate(
+      {
+        _id: input.proId,
+        stripeStatus: "canceled",
+        stripeCustomerId: { $exists: true },
+        stripeSubscriptionId: { $exists: true },
+        stripePriceId: { $exists: true },
+        trialConsumedAt: { $exists: true },
+        pastDueInvoiceId: { $exists: false },
+        reactivationCheckoutSessionId: { $exists: false },
+        $or: [
+          { reactivationCheckoutReservationId: { $exists: false } },
+          { reactivationCheckoutReservationExpiresAt: { $lte: now } },
+          { reactivationCheckoutReservationId: input.reservationId },
+        ],
+      },
+      {
+        $set: {
+          reactivationCheckoutReservationId: input.reservationId,
+          reactivationCheckoutReservationExpiresAt: expiresAt.toISOString(),
+          updatedAt: now,
+        },
+      },
+      { returnDocument: "after" },
+    );
+  return subscription ? stripMongoId<ProSubscription>(subscription) : null;
+}
+
+export async function releaseMongoProSubscriptionReactivationCheckout(
+  proId: string,
+  reservationId: string,
+) {
+  const db = await getMongoDb();
+  const result = await db
+    .collection<ProSubscriptionDoc>("proSubscriptions")
+    .updateOne(
+      { _id: proId, reactivationCheckoutReservationId: reservationId },
+      {
+        $set: { updatedAt: new Date().toISOString() },
+        $unset: {
+          reactivationCheckoutReservationId: "",
+          reactivationCheckoutReservationExpiresAt: "",
+        },
+      },
+    );
+  return result.modifiedCount === 1;
+}
+
+export async function completeMongoProSubscriptionReactivationCheckoutReservation(input: {
+  proId: string;
+  reservationId: string;
+  checkoutSessionId: string;
+  checkoutSessionExpiresAt: string;
+  stripeCustomerId: string;
+  previousStripeSubscriptionId: string;
+}) {
+  const checkoutExpiresAt = new Date(input.checkoutSessionExpiresAt);
+  if (!Number.isFinite(checkoutExpiresAt.getTime())) {
+    throw new TypeError(
+      "Reactivation Checkout expiry must be a valid date-time.",
+    );
+  }
+  const db = await getMongoDb();
+  const subscription = await db
+    .collection<ProSubscriptionDoc>("proSubscriptions")
+    .findOneAndUpdate(
+      {
+        _id: input.proId,
+        stripeStatus: "canceled",
+        stripeCustomerId: input.stripeCustomerId,
+        stripeSubscriptionId: input.previousStripeSubscriptionId,
+        trialConsumedAt: { $exists: true },
+        pastDueInvoiceId: { $exists: false },
+        reactivationCheckoutReservationId: input.reservationId,
+      },
+      {
+        $set: {
+          reactivationCheckoutSessionId: input.checkoutSessionId,
+          reactivationCheckoutSessionExpiresAt: checkoutExpiresAt.toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        $unset: {
+          reactivationCheckoutReservationId: "",
+          reactivationCheckoutReservationExpiresAt: "",
+        },
+      },
+      { returnDocument: "after" },
+    );
+  return subscription ? stripMongoId<ProSubscription>(subscription) : null;
+}
+
+export async function clearMongoProSubscriptionReactivationCheckoutSession(
+  checkoutSessionId: string,
+) {
+  const db = await getMongoDb();
+  const result = await db
+    .collection<ProSubscriptionDoc>("proSubscriptions")
+    .updateOne(
+      {
+        reactivationCheckoutSessionId: checkoutSessionId,
+        stripeStatus: "canceled",
+        pastDueInvoiceId: { $exists: false },
+      },
+      {
+        $set: { updatedAt: new Date().toISOString() },
+        $unset: {
+          reactivationCheckoutSessionId: "",
+          reactivationCheckoutSessionExpiresAt: "",
+          reactivationCheckoutReservationId: "",
+          reactivationCheckoutReservationExpiresAt: "",
+        },
+      },
+    );
+  return result.modifiedCount === 1;
+}
+
 export type ConsumeProLifetimeTrialResult = {
   status: "consumed" | "existing";
   subscription: ProSubscription;
@@ -1379,6 +1651,7 @@ export async function activateMongoProTrialSubscription(input: {
   currentPeriodStartedAt?: string;
   currentPeriodEndsAt?: string;
   lastStripeEventId: string;
+  lastStripeEventCreatedAt?: string;
   lastStripeSyncedAt: string;
 }) {
   if (input.stripeStatus !== "trialing" && input.stripeStatus !== "active") {
@@ -1401,11 +1674,13 @@ export async function activateMongoProTrialSubscription(input: {
         stripePriceId: input.stripePriceId,
         stripeStatus: input.stripeStatus,
         stripeLivemode: input.stripeLivemode,
+        stripeSubscriptionHasTrial: true,
         accessStatus,
         currentPeriodStartedAt: input.currentPeriodStartedAt,
         currentPeriodEndsAt: input.currentPeriodEndsAt,
         cancelAtPeriodEnd: false,
         lastStripeEventId: input.lastStripeEventId,
+        lastStripeEventCreatedAt: input.lastStripeEventCreatedAt,
         lastStripeSyncedAt: input.lastStripeSyncedAt,
         updatedAt: input.lastStripeSyncedAt,
       },
@@ -1425,6 +1700,439 @@ export async function activateMongoProTrialSubscription(input: {
   return existing?.stripeSubscriptionId === input.stripeSubscriptionId
     ? stripMongoId<ProSubscription>(existing)
     : null;
+}
+
+export async function activateMongoPaidProSubscription(input: {
+  proId: string;
+  stripeCustomerId: string;
+  previousStripeSubscriptionId: string;
+  reactivationCheckoutSessionId: string;
+  stripeSubscriptionId: string;
+  stripePriceId: string;
+  stripeLivemode: boolean;
+  currentPeriodStartedAt: string;
+  currentPeriodEndsAt: string;
+  latestInvoiceId: string;
+  paidAt: string;
+  lastStripeEventId: string;
+  lastStripeEventCreatedAt: string;
+  lastStripeSyncedAt: string;
+}) {
+  const currentPeriodStartedAt = normalizedIso(
+    input.currentPeriodStartedAt,
+    "Current period start",
+  );
+  const currentPeriodEndsAt = normalizedIso(
+    input.currentPeriodEndsAt,
+    "Current period end",
+  );
+  if (Date.parse(currentPeriodEndsAt) <= Date.parse(currentPeriodStartedAt)) {
+    throw new Error("Current subscription period must end after it starts.");
+  }
+  const paidAt = normalizedIso(input.paidAt, "Payment success time");
+  const eventCreatedAt = normalizedIso(
+    input.lastStripeEventCreatedAt,
+    "Stripe event creation time",
+  );
+  const syncedAt = normalizedIso(
+    input.lastStripeSyncedAt,
+    "Stripe synchronization time",
+  );
+
+  const db = await getMongoDb();
+  return withMongoMutationLock(db, async (lease) => {
+    const collection = db.collection<ProSubscriptionDoc>("proSubscriptions");
+    await lease.assertOwned();
+    const subscription = await collection.findOneAndUpdate(
+      {
+        _id: input.proId,
+        stripeCustomerId: input.stripeCustomerId,
+        stripeSubscriptionId: input.previousStripeSubscriptionId,
+        stripeStatus: "canceled",
+        reactivationCheckoutSessionId: input.reactivationCheckoutSessionId,
+        trialConsumedAt: { $exists: true },
+        pastDueInvoiceId: { $exists: false },
+      },
+      {
+        $set: {
+          stripeSubscriptionId: input.stripeSubscriptionId,
+          stripePriceId: input.stripePriceId,
+          stripeStatus: "active",
+          stripeLivemode: input.stripeLivemode,
+          stripeSubscriptionHasTrial: false,
+          accessStatus: "active",
+          currentPeriodStartedAt,
+          currentPeriodEndsAt,
+          cancelAtPeriodEnd: false,
+          latestInvoiceId: input.latestInvoiceId,
+          lastPaymentSucceededAt: paidAt,
+          lastStripeEventId: input.lastStripeEventId,
+          lastStripeEventCreatedAt: eventCreatedAt,
+          lastStripeSyncedAt: syncedAt,
+          updatedAt: syncedAt,
+        },
+        $unset: {
+          cancellationRequestedAt: "",
+          terminatedAt: "",
+          pastDueInvoiceId: "",
+          firstPaymentFailedAt: "",
+          paymentFailureConfirmed: "",
+          gracePeriodEndsAt: "",
+          reactivationCheckoutSessionId: "",
+          reactivationCheckoutSessionExpiresAt: "",
+          reactivationCheckoutReservationId: "",
+          reactivationCheckoutReservationExpiresAt: "",
+        },
+        $inc: { stripeLifecycleRevision: 1 },
+      },
+      { returnDocument: "after" },
+    );
+    if (subscription) {
+      clearMongoReadCache();
+      return stripMongoId<ProSubscription>(subscription);
+    }
+
+    const existing = await collection.findOne({ _id: input.proId });
+    return existing?.stripeSubscriptionId === input.stripeSubscriptionId &&
+      existing.accessStatus === "active"
+      ? stripMongoId<ProSubscription>(existing)
+      : null;
+  });
+}
+
+export type ProSubscriptionLifecyclePaymentUpdate =
+  | { type: "none" }
+  | {
+      type: "failed";
+      invoiceId: string;
+      failedAt: string;
+      confirmed?: boolean;
+    }
+  | { type: "paid"; invoiceId: string; paidAt?: string };
+
+export interface SyncMongoProSubscriptionLifecycleInput {
+  proId: string;
+  stripeCustomerId: string;
+  stripeSubscriptionId: string;
+  stripePriceId: string;
+  stripeStatus: StripeSubscriptionStatus;
+  stripeLivemode: boolean;
+  currentPeriodStartedAt: string;
+  currentPeriodEndsAt: string;
+  cancelAtPeriodEnd: boolean;
+  cancellationRequestedAt?: string;
+  terminatedAt?: string;
+  paymentUpdate: ProSubscriptionLifecyclePaymentUpdate;
+  lastStripeEventId: string;
+  lastStripeEventCreatedAt: string;
+  lastStripeSyncedAt: string;
+}
+
+function normalizedIso(value: string, fieldName: string) {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) {
+    throw new TypeError(`${fieldName} must be a valid ISO date-time.`);
+  }
+  return new Date(timestamp).toISOString();
+}
+
+function earlierIso(first: string, second: string) {
+  return Date.parse(first) <= Date.parse(second) ? first : second;
+}
+
+function laterIso(first: string | undefined, second: string | undefined) {
+  if (!first) return second;
+  if (!second) return first;
+  return Date.parse(first) >= Date.parse(second) ? first : second;
+}
+
+function lifecycleAccessStatus(
+  stripeStatus: StripeSubscriptionStatus,
+  cancelAtPeriodEnd: boolean,
+  gracePeriodEndsAt: string | undefined,
+  now: string,
+): SubscriptionAccessStatus {
+  // An outstanding charge keeps its original 336-hour grace window even if
+  // Stripe's dunning configuration ends the remote subscription early.
+  // Cancellation stops future renewal; it does not erase the current debt or
+  // shorten the promised grace period.
+  if (
+    gracePeriodEndsAt &&
+    ["past_due", "unpaid", "canceled"].includes(stripeStatus)
+  ) {
+    return Date.parse(now) < Date.parse(gracePeriodEndsAt)
+      ? "grace_period"
+      : "suspended";
+  }
+  if (stripeStatus === "canceled" || stripeStatus === "incomplete_expired") {
+    return "terminated";
+  }
+  if (stripeStatus === "past_due" || stripeStatus === "unpaid") {
+    return "suspended";
+  }
+  if (stripeStatus === "trialing" || stripeStatus === "active") {
+    return cancelAtPeriodEnd ? "cancel_at_period_end" : stripeStatus;
+  }
+  return "suspended";
+}
+
+/**
+ * Applies canonical Stripe lifecycle state with optimistic concurrency. Older
+ * lifecycle snapshots cannot replace newer state, but their invoice facts are
+ * merged so out-of-order payment failures still start the fixed grace window.
+ */
+export async function syncMongoProSubscriptionLifecycle(
+  input: SyncMongoProSubscriptionLifecycleInput,
+) {
+  const eventCreatedAt = normalizedIso(
+    input.lastStripeEventCreatedAt,
+    "Stripe event creation time",
+  );
+  const syncedAt = normalizedIso(
+    input.lastStripeSyncedAt,
+    "Stripe synchronization time",
+  );
+  const currentPeriodStartedAt = normalizedIso(
+    input.currentPeriodStartedAt,
+    "Current period start",
+  );
+  const currentPeriodEndsAt = normalizedIso(
+    input.currentPeriodEndsAt,
+    "Current period end",
+  );
+  if (Date.parse(currentPeriodEndsAt) <= Date.parse(currentPeriodStartedAt)) {
+    throw new Error("Current subscription period must end after it starts.");
+  }
+  const cancellationRequestedAt = input.cancellationRequestedAt
+    ? normalizedIso(input.cancellationRequestedAt, "Cancellation request time")
+    : undefined;
+  const terminatedAt = input.terminatedAt
+    ? normalizedIso(input.terminatedAt, "Subscription termination time")
+    : undefined;
+  const paymentUpdate =
+    input.paymentUpdate.type === "failed"
+      ? {
+          ...input.paymentUpdate,
+          failedAt: normalizedIso(
+            input.paymentUpdate.failedAt,
+            "First payment failure time",
+          ),
+        }
+      : input.paymentUpdate.type === "paid" && input.paymentUpdate.paidAt
+        ? {
+            ...input.paymentUpdate,
+            paidAt: normalizedIso(
+              input.paymentUpdate.paidAt,
+              "Payment success time",
+            ),
+          }
+        : input.paymentUpdate;
+
+  const db = await getMongoDb();
+  return withMongoMutationLock(db, async (lease) => {
+    const collection = db.collection<ProSubscriptionDoc>("proSubscriptions");
+
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const existing = await collection.findOne({ _id: input.proId });
+      if (!existing) {
+        throw new Error("The pro subscription does not exist.");
+      }
+      if (
+        existing.stripeCustomerId !== input.stripeCustomerId ||
+        existing.stripeSubscriptionId !== input.stripeSubscriptionId ||
+        existing.stripePriceId !== input.stripePriceId ||
+        existing.stripeLivemode !== input.stripeLivemode ||
+        !existing.trialConsumedAt
+      ) {
+        throw new Error("Stripe lifecycle identity does not match locally.");
+      }
+      const isStaleEvent = Boolean(
+        existing.lastStripeEventCreatedAt &&
+        Date.parse(existing.lastStripeEventCreatedAt) >
+          Date.parse(eventCreatedAt),
+      );
+      if (
+        isStaleEvent &&
+        paymentUpdate.type === "failed" &&
+        !existing.pastDueInvoiceId &&
+        (existing.stripeStatus === "active" ||
+          existing.stripeStatus === "trialing")
+      ) {
+        return stripMongoId<ProSubscription>(existing);
+      }
+      if (isStaleEvent && paymentUpdate.type === "none") {
+        return stripMongoId<ProSubscription>(existing);
+      }
+
+      let pastDueInvoiceId = existing.pastDueInvoiceId;
+      let firstPaymentFailedAt = existing.firstPaymentFailedAt;
+      let paymentFailureConfirmed =
+        Boolean(existing.pastDueInvoiceId) &&
+        existing.paymentFailureConfirmed !== false;
+      let gracePeriodEndsAt = existing.gracePeriodEndsAt;
+      let latestInvoiceId = existing.latestInvoiceId;
+      let lastPaymentSucceededAt = existing.lastPaymentSucceededAt;
+
+      if (paymentUpdate.type === "failed") {
+        latestInvoiceId = paymentUpdate.invoiceId;
+        const incomingConfirmed = paymentUpdate.confirmed !== false;
+        if (!pastDueInvoiceId) {
+          pastDueInvoiceId = paymentUpdate.invoiceId;
+          firstPaymentFailedAt = paymentUpdate.failedAt;
+          paymentFailureConfirmed = incomingConfirmed;
+        } else if (pastDueInvoiceId === paymentUpdate.invoiceId) {
+          if (incomingConfirmed && !paymentFailureConfirmed) {
+            // Replace the conservative provisional time exactly once when the
+            // signed invoice failure/action-required event arrives.
+            firstPaymentFailedAt = paymentUpdate.failedAt;
+            paymentFailureConfirmed = true;
+          } else if (incomingConfirmed && firstPaymentFailedAt) {
+            firstPaymentFailedAt = earlierIso(
+              firstPaymentFailedAt,
+              paymentUpdate.failedAt,
+            );
+          } else if (!paymentFailureConfirmed && firstPaymentFailedAt) {
+            firstPaymentFailedAt = earlierIso(
+              firstPaymentFailedAt,
+              paymentUpdate.failedAt,
+            );
+          } else if (!firstPaymentFailedAt) {
+            firstPaymentFailedAt = paymentUpdate.failedAt;
+          }
+        }
+        if (firstPaymentFailedAt) {
+          gracePeriodEndsAt = calculateGracePeriodEndsAt(firstPaymentFailedAt);
+        }
+      } else if (paymentUpdate.type === "paid") {
+        if (!pastDueInvoiceId || pastDueInvoiceId === paymentUpdate.invoiceId) {
+          latestInvoiceId = paymentUpdate.invoiceId;
+        }
+        lastPaymentSucceededAt = laterIso(
+          lastPaymentSucceededAt,
+          paymentUpdate.paidAt,
+        );
+        if (pastDueInvoiceId === paymentUpdate.invoiceId) {
+          pastDueInvoiceId = undefined;
+          firstPaymentFailedAt = undefined;
+          paymentFailureConfirmed = false;
+          gracePeriodEndsAt = undefined;
+        }
+      }
+
+      if (
+        !isStaleEvent &&
+        (input.stripeStatus === "active" ||
+          input.stripeStatus === "trialing") &&
+        paymentUpdate.type !== "failed"
+      ) {
+        pastDueInvoiceId = undefined;
+        firstPaymentFailedAt = undefined;
+        paymentFailureConfirmed = false;
+        gracePeriodEndsAt = undefined;
+      }
+
+      const canonicalStripeStatus =
+        isStaleEvent && existing.stripeStatus
+          ? existing.stripeStatus
+          : input.stripeStatus;
+      const canonicalCancelAtPeriodEnd = isStaleEvent
+        ? existing.cancelAtPeriodEnd
+        : input.cancelAtPeriodEnd;
+      const canonicalCurrentPeriodStartedAt = isStaleEvent
+        ? (existing.currentPeriodStartedAt ?? currentPeriodStartedAt)
+        : currentPeriodStartedAt;
+      const canonicalCurrentPeriodEndsAt = isStaleEvent
+        ? (existing.currentPeriodEndsAt ?? currentPeriodEndsAt)
+        : currentPeriodEndsAt;
+      const accessStatus = lifecycleAccessStatus(
+        canonicalStripeStatus,
+        canonicalCancelAtPeriodEnd,
+        gracePeriodEndsAt,
+        syncedAt,
+      );
+      const setFields: Partial<ProSubscriptionDoc> = {
+        stripeStatus: canonicalStripeStatus,
+        accessStatus,
+        currentPeriodStartedAt: canonicalCurrentPeriodStartedAt,
+        currentPeriodEndsAt: canonicalCurrentPeriodEndsAt,
+        cancelAtPeriodEnd: canonicalCancelAtPeriodEnd,
+        lastStripeEventId: isStaleEvent
+          ? existing.lastStripeEventId
+          : input.lastStripeEventId,
+        lastStripeEventCreatedAt: isStaleEvent
+          ? existing.lastStripeEventCreatedAt
+          : eventCreatedAt,
+        lastStripeSyncedAt: syncedAt,
+        updatedAt: syncedAt,
+        ...(canonicalCancelAtPeriodEnd
+          ? {
+              cancellationRequestedAt:
+                cancellationRequestedAt ??
+                existing.cancellationRequestedAt ??
+                eventCreatedAt,
+            }
+          : {}),
+        ...(accessStatus === "terminated"
+          ? {
+              terminatedAt:
+                terminatedAt ?? existing.terminatedAt ?? eventCreatedAt,
+            }
+          : {}),
+        ...(pastDueInvoiceId ? { pastDueInvoiceId } : {}),
+        ...(firstPaymentFailedAt ? { firstPaymentFailedAt } : {}),
+        ...(pastDueInvoiceId ? { paymentFailureConfirmed } : {}),
+        ...(gracePeriodEndsAt ? { gracePeriodEndsAt } : {}),
+        ...(latestInvoiceId ? { latestInvoiceId } : {}),
+        ...(lastPaymentSucceededAt ? { lastPaymentSucceededAt } : {}),
+      };
+      const unsetFields: Record<string, ""> = {};
+      if (!canonicalCancelAtPeriodEnd) {
+        unsetFields.cancellationRequestedAt = "";
+      }
+      if (accessStatus !== "terminated") {
+        unsetFields.terminatedAt = "";
+      }
+      if (!pastDueInvoiceId) {
+        unsetFields.pastDueInvoiceId = "";
+      }
+      if (!firstPaymentFailedAt) {
+        unsetFields.firstPaymentFailedAt = "";
+      }
+      if (!pastDueInvoiceId) {
+        unsetFields.paymentFailureConfirmed = "";
+      }
+      if (!gracePeriodEndsAt) {
+        unsetFields.gracePeriodEndsAt = "";
+      }
+
+      const revision = existing.stripeLifecycleRevision;
+      await lease.assertOwned();
+      const updated = await collection.findOneAndUpdate(
+        {
+          _id: input.proId,
+          stripeCustomerId: input.stripeCustomerId,
+          stripeSubscriptionId: input.stripeSubscriptionId,
+          ...(revision === undefined
+            ? { stripeLifecycleRevision: { $exists: false } }
+            : { stripeLifecycleRevision: revision }),
+        },
+        {
+          $set: setFields,
+          $inc: { stripeLifecycleRevision: 1 },
+          ...(Object.keys(unsetFields).length > 0
+            ? { $unset: unsetFields }
+            : {}),
+        },
+        { returnDocument: "after" },
+      );
+      if (updated) {
+        clearMongoReadCache();
+        return stripMongoId<ProSubscription>(updated);
+      }
+    }
+
+    throw new Error("Unable to synchronize Stripe lifecycle state safely.");
+  });
 }
 
 function isDuplicateMongoKey(error: unknown) {
@@ -1668,12 +2376,15 @@ const openMongoLeadStatuses: RequestStatus[] = [
 export async function listMongoRelevantLeads(
   proId: string,
   categoryId?: string,
+  includeClosedQuoteRecords = false,
 ) {
   const db = await getMongoDb();
-  const filter: Record<string, unknown> = {
-    matchedProIds: proId,
-    status: { $in: openMongoLeadStatuses },
-  };
+  const filter: Record<string, unknown> = includeClosedQuoteRecords
+    ? { "quotes.proId": proId }
+    : {
+        matchedProIds: proId,
+        status: { $in: openMongoLeadStatuses },
+      };
   if (categoryId) {
     filter.categoryId = categoryId;
   }

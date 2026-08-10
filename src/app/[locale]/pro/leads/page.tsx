@@ -14,6 +14,7 @@ import {
   listRelevantLeads,
 } from "@/lib/mock/repositories";
 import { getProNav } from "@/lib/nav";
+import { getProSubscriptionEntitlement } from "@/lib/pro-subscription-entitlement";
 
 export default async function ProLeadsPage({
   searchParams,
@@ -26,6 +27,8 @@ export default async function ProLeadsPage({
   if (!user) {
     return null;
   }
+  const subscriptionSnapshot = await getProSubscriptionEntitlement(user.id);
+  const canCreateQuotes = subscriptionSnapshot.entitlement.canCreateQuotes;
 
   const categoryOptions = await listCategoryOptions(locale as "zh-HK" | "en");
   const activeCategory = categoryOptions.some((entry) => entry.id === category)
@@ -39,11 +42,23 @@ export default async function ProLeadsPage({
   return (
     <PortalShell
       locale={locale}
-      title={locale === "en" ? "Job leads" : "工作機會"}
+      title={
+        canCreateQuotes
+          ? locale === "en"
+            ? "Job leads"
+            : "工作機會"
+          : locale === "en"
+            ? "Quote records"
+            : "報價紀錄"
+      }
       subtitle={
-        locale === "en"
-          ? "Review open customer requests, filter by category, and submit a structured quote."
-          : "查看開放服務需求，可按分類篩選並提交結構化報價。"
+        canCreateQuotes
+          ? locale === "en"
+            ? "Review open customer requests, filter by category, and submit a structured quote."
+            : "查看開放服務需求，可按分類篩選並提交結構化報價。"
+          : locale === "en"
+            ? "New customer leads are hidden. You can still review quotes you previously submitted."
+            : "新客戶工作機會已隱藏；你仍可查看之前提交嘅報價紀錄。"
       }
       navItems={getProNav(locale, "leads")}
     >
@@ -129,12 +144,22 @@ export default async function ProLeadsPage({
                     </div>
                     <div className="rounded-2xl bg-soft-accent/45 p-4 text-sm">
                       <p className="font-semibold">
-                        {locale === "en" ? "Open lead" : "查看詳情"}
+                        {canCreateQuotes
+                          ? locale === "en"
+                            ? "Open lead"
+                            : "查看詳情"
+                          : locale === "en"
+                            ? "Quote record"
+                            : "報價紀錄"}
                       </p>
                       <p className="mt-2 text-muted">
-                        {locale === "en"
-                          ? "Review scope and send quote"
-                          : "查看工作範圍及提交報價"}
+                        {canCreateQuotes
+                          ? locale === "en"
+                            ? "Review scope and send quote"
+                            : "查看工作範圍及提交報價"
+                          : locale === "en"
+                            ? "Review your submitted quote"
+                            : "查看你已提交嘅報價"}
                       </p>
                     </div>
                   </div>
@@ -146,14 +171,22 @@ export default async function ProLeadsPage({
           <EmptyState
             locale={locale}
             title={
-              locale === "en"
-                ? "No open leads right now"
-                : "暫時未有開放工作機會"
+              canCreateQuotes
+                ? locale === "en"
+                  ? "No open leads right now"
+                  : "暫時未有開放工作機會"
+                : locale === "en"
+                  ? "No quote records to show"
+                  : "暫時未有報價紀錄"
             }
             description={
-              locale === "en"
-                ? "Try another category or check back when new customer requests arrive."
-                : "可以改用其他分類，或稍後查看新的客戶需求。"
+              canCreateQuotes
+                ? locale === "en"
+                  ? "Try another category or check back when new customer requests arrive."
+                  : "可以改用其他分類，或稍後查看新的客戶需求。"
+                : locale === "en"
+                  ? "Existing jobs and billing remain available from the pro workspace."
+                  : "你仍可喺師傅工作台處理現有訂單同管理月費。"
             }
           />
         )}

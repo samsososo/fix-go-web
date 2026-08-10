@@ -18,16 +18,15 @@ type QuoteView = {
   noteToCustomer: string;
   status: string;
   proName: string;
+  canAccept: boolean;
 };
 
 export function LiveQuotesPanel({
   requestId,
   locale,
-  customerId,
 }: {
   requestId: string;
   locale: string;
-  customerId: string;
 }) {
   const quotesQuery = useQuery({
     queryKey: ["request-quotes", requestId],
@@ -107,13 +106,18 @@ export function LiveQuotesPanel({
                 <p>{quote.exclusions}</p>
               </div>
             </div>
-            {quote.status === "sent" ? (
+            {quote.status === "sent" && quote.canAccept ? (
               <AcceptQuoteButton
                 locale={locale}
-                customerId={customerId}
                 requestId={requestId}
                 quoteId={quote.id}
               />
+            ) : quote.status === "sent" ? (
+              <p className="rounded-xl border border-warning/20 bg-warning/8 px-3 py-2 text-sm leading-6 text-warning">
+                {locale === "en"
+                  ? "This pro is temporarily unavailable for new work. You can review another quote or check again later."
+                  : "呢位師傅暫時未能接受新工作；你可以查看其他報價，或者稍後再試。"}
+              </p>
             ) : null}
           </CardContent>
         </Card>

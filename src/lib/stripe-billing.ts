@@ -11,6 +11,8 @@ import {
 const STRIPE_API_VERSION = Stripe.API_VERSION;
 const STRIPE_REQUEST_TIMEOUT_MS = 20_000;
 export const STRIPE_CARD_SETUP_PURPOSE = "pro_subscription_card_setup" as const;
+export const STRIPE_PAID_REACTIVATION_PURPOSE =
+  "pro_subscription_paid_reactivation" as const;
 
 export type StripeClientFactory = (
   secretKey: string,
@@ -57,7 +59,7 @@ function requireNonEmpty(value: string, fieldName: string) {
 
 function requireStripeId(
   value: string,
-  prefix: "cus_" | "seti_" | "pm_" | "price_" | "cs_",
+  prefix: "cus_" | "seti_" | "pm_" | "price_" | "cs_" | "sub_" | "in_",
   fieldName: string,
 ) {
   const normalized = requireNonEmpty(value, fieldName);
@@ -121,6 +123,20 @@ function assertConfiguredMonthlyPrice(
   ) {
     throw new StripeBillingError(
       "The configured Stripe Price does not match the HK$100 monthly plan.",
+    );
+  }
+}
+
+function assertHistoricalMonthlyPlanPrice(price: Stripe.Price) {
+  if (
+    price.type !== "recurring" ||
+    price.currency !== PRO_SUBSCRIPTION_CURRENCY ||
+    price.unit_amount !== PRO_SUBSCRIPTION_AMOUNT_MINOR ||
+    price.recurring?.interval !== PRO_SUBSCRIPTION_INTERVAL ||
+    price.recurring.interval_count !== 1
+  ) {
+    throw new StripeBillingError(
+      "The historical Stripe Price does not match the HK$100 monthly plan.",
     );
   }
 }
@@ -296,6 +312,288 @@ export function createCardSetupCheckoutSession(
     },
     { idempotencyKey },
   );
+}
+
+export interface CreatePaidProSubscriptionCheckoutSessionInput {
+  proId: string;
+  customerId: string;
+  previousSubscriptionId: string;
+  successUrl: string;
+  cancelUrl: string;
+  expectedLivemode?: boolean;
+  idempotencyKey: string;
+}
+
+function paidReactivationMetadata(
+  proId: string,
+  previousSubscriptionId: string,
+) {
+  return {
+    proId,
+    previousSubscriptionId,
+    purpose: STRIPE_PAID_REACTIVATION_PURPOSE,
+    planCode: PRO_SUBSCRIPTION_PLAN_CODE,
+  };
+}
+
+function assertPaidProCheckoutIdentity(
+  session: Stripe.Checkout.Session,
+  input: {
+    proId: string;
+    customerId: string;
+    previousSubscriptionId: string;
+    expectedLivemode: boolean;
+  },
+) {
+  if (
+    session.mode !== "subscription" ||
+    session.client_reference_id !== input.proId ||
+    session.metadata?.proId !== input.proId ||
+    session.metadata?.previousSubscriptionId !== input.previousSubscriptionId ||
+    session.metadata?.purpose !== STRIPE_PAID_REACTIVATION_PURPOSE ||
+    session.metadata?.planCode !== PRO_SUBSCRIPTION_PLAN_CODE ||
+    expandableId(session.customer) !== input.customerId ||
+    session.livemode !== input.expectedLivemode ||
+    session.currency !== PRO_SUBSCRIPTION_CURRENCY ||
+    session.payment_method_types.length !== 1 ||
+    session.payment_method_types[0] !== "card"
+  ) {
+    throw new StripeBillingError(
+      "The Stripe Checkout Session does not match this paid professional subscription flow.",
+    );
+  }
+}
+
+async function retrieveEndedPreviousProSubscription(
+  input: {
+    proId: string;
+    customerId: string;
+    previousSubscriptionId: string;
+    expectedLivemode?: boolean;
+  },
+  dependencies: StripeBillingDependencies,
+) {
+  const previous = await retrieveOwnedMonthlyProSubscription(
+    {
+      proId: input.proId,
+      customerId: input.customerId,
+      subscriptionId: input.previousSubscriptionId,
+      expectedLivemode: input.expectedLivemode,
+      allowHistoricalPriceId: true,
+    },
+    dependencies,
+  );
+  if (previous.subscription.status !== "canceled") {
+    throw new StripeBillingError(
+      "The previous Stripe subscription has not ended.",
+    );
+  }
+  return previous;
+}
+
+/**
+ * Starts a new paid subscription after a previous subscription has ended. The
+ * fixed recurring Price is server configured and no trial input is exposed.
+ */
+export async function createPaidProSubscriptionCheckoutSession(
+  input: CreatePaidProSubscriptionCheckoutSessionInput,
+  dependencies: StripeBillingDependencies = {},
+) {
+  const stripe = resolveStripe(dependencies);
+  const proId = requireNonEmpty(input.proId, "proId");
+  const customerId = requireStripeId(input.customerId, "cus_", "customerId");
+  const previousSubscriptionId = requireStripeId(
+    input.previousSubscriptionId,
+    "sub_",
+    "previousSubscriptionId",
+  );
+  const successUrl = requireHttpUrl(input.successUrl, "successUrl");
+  const cancelUrl = requireHttpUrl(input.cancelUrl, "cancelUrl");
+  const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
+  const monthlyPriceId = configuredMonthlyPriceId(dependencies);
+  const [customer, price, previous] = await Promise.all([
+    retrieveStripeCustomerForPro({ proId, customerId }, dependencies),
+    stripe.prices.retrieve(monthlyPriceId),
+    retrieveEndedPreviousProSubscription(
+      {
+        proId,
+        customerId,
+        previousSubscriptionId,
+        expectedLivemode: input.expectedLivemode,
+      },
+      dependencies,
+    ),
+  ]);
+  assertConfiguredMonthlyPrice(price, monthlyPriceId);
+  const expectedLivemode = previous.subscription.livemode;
+  if (
+    customer.metadata.accountType !== "pro" ||
+    customer.livemode !== expectedLivemode ||
+    price.livemode !== expectedLivemode
+  ) {
+    throw new StripeBillingError(
+      "The Stripe Customer or Price livemode does not match this professional account.",
+    );
+  }
+
+  const metadata = paidReactivationMetadata(proId, previousSubscriptionId);
+  const session = await stripe.checkout.sessions.create(
+    {
+      mode: "subscription",
+      customer: customerId,
+      client_reference_id: proId,
+      payment_method_types: ["card"],
+      line_items: [{ price: monthlyPriceId, quantity: 1 }],
+      allow_promotion_codes: false,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      metadata,
+      subscription_data: { metadata },
+    },
+    { idempotencyKey },
+  );
+  assertPaidProCheckoutIdentity(session, {
+    proId,
+    customerId,
+    previousSubscriptionId,
+    expectedLivemode,
+  });
+  if (session.status !== "open" || !session.url) {
+    throw new StripeBillingError(
+      "Stripe did not return an open paid subscription Checkout Session.",
+    );
+  }
+  requireHttpUrl(session.url, "Stripe Checkout Session URL");
+  return session;
+}
+
+export interface InspectOwnedPaidProSubscriptionCheckoutSessionInput {
+  proId: string;
+  customerId: string;
+  previousSubscriptionId: string;
+  checkoutSessionId: string;
+  expectedLivemode?: boolean;
+}
+
+/**
+ * Reuses an open paid Checkout or preserves a completed one for its signed
+ * webhook. Completed sessions must own a canonical, no-trial fixed plan.
+ */
+export async function inspectOwnedPaidProSubscriptionCheckoutSession(
+  input: InspectOwnedPaidProSubscriptionCheckoutSessionInput,
+  dependencies: StripeBillingDependencies = {},
+) {
+  const stripe = resolveStripe(dependencies);
+  const proId = requireNonEmpty(input.proId, "proId");
+  const customerId = requireStripeId(input.customerId, "cus_", "customerId");
+  const checkoutSessionId = requireStripeId(
+    input.checkoutSessionId,
+    "cs_",
+    "checkoutSessionId",
+  );
+  const previousSubscriptionId = requireStripeId(
+    input.previousSubscriptionId,
+    "sub_",
+    "previousSubscriptionId",
+  );
+  const monthlyPriceId = configuredMonthlyPriceId(dependencies);
+  const [session, previous] = await Promise.all([
+    stripe.checkout.sessions.retrieve(checkoutSessionId, {
+      expand: ["line_items.data.price"],
+    }),
+    retrieveEndedPreviousProSubscription(
+      {
+        proId,
+        customerId,
+        previousSubscriptionId,
+        expectedLivemode: input.expectedLivemode,
+      },
+      dependencies,
+    ),
+  ]);
+  const expectedLivemode = previous.subscription.livemode;
+  assertPaidProCheckoutIdentity(session, {
+    proId,
+    customerId,
+    previousSubscriptionId,
+    expectedLivemode,
+  });
+
+  const lineItem = session.line_items?.data[0];
+  const price = lineItem?.price;
+  if (
+    session.line_items?.data.length !== 1 ||
+    !lineItem ||
+    !price ||
+    lineItem.quantity !== 1 ||
+    lineItem.currency !== PRO_SUBSCRIPTION_CURRENCY ||
+    lineItem.amount_subtotal !== PRO_SUBSCRIPTION_AMOUNT_MINOR ||
+    lineItem.amount_total !== PRO_SUBSCRIPTION_AMOUNT_MINOR ||
+    lineItem.amount_discount !== 0 ||
+    lineItem.amount_tax !== 0 ||
+    session.amount_subtotal !== PRO_SUBSCRIPTION_AMOUNT_MINOR ||
+    session.amount_total !== PRO_SUBSCRIPTION_AMOUNT_MINOR ||
+    price.livemode !== expectedLivemode
+  ) {
+    throw new StripeBillingError(
+      "The Stripe Checkout line item does not match the HK$100 monthly plan.",
+    );
+  }
+  assertConfiguredMonthlyPrice(price, monthlyPriceId);
+
+  const nowUnix = dependencies.nowUnix?.() ?? Date.now() / 1_000;
+  if (!Number.isFinite(nowUnix)) {
+    throw new StripeBillingError("The current Unix timestamp is invalid.");
+  }
+  if (session.status === "expired") {
+    return { status: "expired" as const, session };
+  }
+  if (session.status === "open") {
+    if (session.expires_at <= Math.floor(nowUnix)) {
+      return { status: "expired" as const, session };
+    }
+    if (
+      session.subscription ||
+      session.payment_status !== "unpaid" ||
+      !session.url
+    ) {
+      throw new StripeBillingError(
+        "The open Stripe Checkout Session state is invalid.",
+      );
+    }
+    return {
+      status: "open" as const,
+      session,
+      url: requireHttpUrl(session.url, "Stripe Checkout Session URL"),
+    };
+  }
+  if (session.status !== "complete" || session.payment_status !== "paid") {
+    throw new StripeBillingError(
+      "The completed Stripe Checkout Session payment state is invalid.",
+    );
+  }
+  const stripeSubscriptionId = expandableId(session.subscription);
+  if (!stripeSubscriptionId) {
+    throw new StripeBillingError(
+      "The completed Stripe Checkout Session has no subscription.",
+    );
+  }
+  const canonicalSubscription = await retrieveOwnedMonthlyProSubscription(
+    {
+      proId,
+      customerId,
+      subscriptionId: stripeSubscriptionId,
+      expectedPriceId: monthlyPriceId,
+      expectedLivemode,
+      expectedNoTrial: true,
+    },
+    dependencies,
+  );
+  return {
+    status: "complete" as const,
+    session,
+    canonicalSubscription,
+  };
 }
 
 export interface RetrieveOpenCardSetupCheckoutSessionInput {
@@ -642,4 +940,310 @@ export async function createMonthlyProSubscription(
     },
     { idempotencyKey },
   );
+}
+
+export interface RetrieveOwnedMonthlyProSubscriptionInput {
+  proId: string;
+  customerId: string;
+  subscriptionId: string;
+  expectedPriceId?: string;
+  expectedTrialEndsAt?: string;
+  expectedLivemode?: boolean;
+  expectedNoTrial?: boolean;
+  allowHistoricalPriceId?: boolean;
+}
+
+function assertUnixTimestamp(value: number, fieldName: string) {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new StripeBillingError(`${fieldName} is invalid.`);
+  }
+}
+
+function expectedTrialEndUnix(value: string | undefined) {
+  if (!value) {
+    return undefined;
+  }
+
+  const timestamp = Date.parse(value);
+  if (!Number.isSafeInteger(timestamp) || timestamp < 0 || timestamp % 1_000) {
+    throw new StripeBillingError("expectedTrialEndsAt is invalid.");
+  }
+
+  return timestamp / 1_000;
+}
+
+function assertOwnedMonthlyProSubscription(
+  subscription: Stripe.Subscription,
+  input: RetrieveOwnedMonthlyProSubscriptionInput,
+  dependencies: StripeBillingDependencies,
+) {
+  const monthlyPriceId = configuredMonthlyPriceId(dependencies);
+  const item = subscription.items.data[0];
+  const trialEndUnix = expectedTrialEndUnix(input.expectedTrialEndsAt);
+
+  if (
+    subscription.id !== input.subscriptionId ||
+    expandableId(subscription.customer) !== input.customerId ||
+    subscription.metadata.proId !== input.proId ||
+    subscription.metadata.planCode !== PRO_SUBSCRIPTION_PLAN_CODE ||
+    subscription.collection_method !== "charge_automatically" ||
+    subscription.currency !== PRO_SUBSCRIPTION_CURRENCY ||
+    subscription.items.data.length !== 1 ||
+    !item ||
+    item.quantity !== 1 ||
+    (input.expectedPriceId && item.price.id !== input.expectedPriceId) ||
+    (input.expectedLivemode !== undefined &&
+      subscription.livemode !== input.expectedLivemode) ||
+    (trialEndUnix !== undefined && subscription.trial_end !== trialEndUnix) ||
+    (input.expectedNoTrial &&
+      (subscription.status === "trialing" ||
+        subscription.trial_start !== null ||
+        subscription.trial_end !== null))
+  ) {
+    throw new StripeBillingError(
+      "The Stripe subscription does not match this professional plan.",
+    );
+  }
+
+  if (input.allowHistoricalPriceId) {
+    assertHistoricalMonthlyPlanPrice(item.price);
+  } else {
+    assertConfiguredMonthlyPrice(item.price, monthlyPriceId);
+  }
+  assertUnixTimestamp(item.current_period_start, "current period start");
+  assertUnixTimestamp(item.current_period_end, "current period end");
+  if (item.current_period_end <= item.current_period_start) {
+    throw new StripeBillingError("The Stripe subscription period is invalid.");
+  }
+
+  return { subscription, item };
+}
+
+/**
+ * Retrieves canonical Stripe state and checks every server-owned identifier and
+ * fixed-plan attribute before it can be applied to local lifecycle state.
+ */
+export async function retrieveOwnedMonthlyProSubscription(
+  input: RetrieveOwnedMonthlyProSubscriptionInput,
+  dependencies: StripeBillingDependencies = {},
+) {
+  const stripe = resolveStripe(dependencies);
+  const normalized = {
+    ...input,
+    proId: requireNonEmpty(input.proId, "proId"),
+    customerId: requireStripeId(input.customerId, "cus_", "customerId"),
+    subscriptionId: requireStripeId(
+      input.subscriptionId,
+      "sub_",
+      "subscriptionId",
+    ),
+    ...(input.expectedPriceId
+      ? {
+          expectedPriceId: requireStripeId(
+            input.expectedPriceId,
+            "price_",
+            "expectedPriceId",
+          ),
+        }
+      : {}),
+  };
+  const subscription = await stripe.subscriptions.retrieve(
+    normalized.subscriptionId,
+  );
+  return assertOwnedMonthlyProSubscription(
+    subscription,
+    normalized,
+    dependencies,
+  );
+}
+
+export interface SetProSubscriptionAutoRenewalInput extends RetrieveOwnedMonthlyProSubscriptionInput {
+  cancelAtPeriodEnd: boolean;
+  idempotencyKey: string;
+}
+
+/**
+ * Cancellation is always scheduled at period end and never prorated. Passing
+ * false safely withdraws a still-pending cancellation before Stripe ends it.
+ */
+export async function setProSubscriptionAutoRenewal(
+  input: SetProSubscriptionAutoRenewalInput,
+  dependencies: StripeBillingDependencies = {},
+) {
+  const stripe = resolveStripe(dependencies);
+  const current = await retrieveOwnedMonthlyProSubscription(
+    input,
+    dependencies,
+  );
+  if (current.subscription.status === "canceled") {
+    throw new StripeBillingError("The Stripe subscription has already ended.");
+  }
+  if (current.subscription.cancel_at_period_end === input.cancelAtPeriodEnd) {
+    return current;
+  }
+
+  const updated = await stripe.subscriptions.update(
+    current.subscription.id,
+    {
+      cancel_at_period_end: input.cancelAtPeriodEnd,
+      proration_behavior: "none",
+    },
+    { idempotencyKey: requireIdempotencyKey(input.idempotencyKey) },
+  );
+  return assertOwnedMonthlyProSubscription(updated, input, dependencies);
+}
+
+export interface CreateProPaymentMethodPortalSessionInput {
+  proId: string;
+  customerId: string;
+  returnUrl: string;
+  locale?: "en" | "zh-HK";
+}
+
+/**
+ * Opens only Stripe's payment-method update flow. It does not expose generic
+ * portal subscription modifications, which could end a trial immediately or
+ * bypass the application's period-end cancellation policy.
+ */
+export async function createProPaymentMethodPortalSession(
+  input: CreateProPaymentMethodPortalSessionInput,
+  dependencies: StripeBillingDependencies = {},
+) {
+  const stripe = resolveStripe(dependencies);
+  const proId = requireNonEmpty(input.proId, "proId");
+  const customerId = requireStripeId(input.customerId, "cus_", "customerId");
+  const returnUrl = requireHttpUrl(input.returnUrl, "returnUrl");
+
+  await retrieveStripeCustomerForPro({ proId, customerId }, dependencies);
+  const session = await stripe.billingPortal.sessions.create({
+    customer: customerId,
+    locale: input.locale ?? "zh-HK",
+    return_url: returnUrl,
+    flow_data: {
+      type: "payment_method_update",
+      after_completion: {
+        type: "redirect",
+        redirect: { return_url: returnUrl },
+      },
+    },
+  });
+  requireHttpUrl(session.url, "Stripe Billing Portal URL");
+  if (session.customer !== customerId) {
+    throw new StripeBillingError(
+      "The Stripe Billing Portal Session belongs to another Customer.",
+    );
+  }
+
+  return session;
+}
+
+function invoiceSubscriptionId(invoice: Stripe.Invoice) {
+  return expandableId(invoice.parent?.subscription_details?.subscription);
+}
+
+export interface RetrieveOwnedProSubscriptionInvoiceInput {
+  proId: string;
+  customerId: string;
+  subscriptionId: string;
+  invoiceId: string;
+  expectedLivemode?: boolean;
+}
+
+function assertOwnedProSubscriptionInvoice(
+  invoice: Stripe.Invoice,
+  input: RetrieveOwnedProSubscriptionInvoiceInput,
+) {
+  if (
+    invoice.id !== input.invoiceId ||
+    expandableId(invoice.customer) !== input.customerId ||
+    invoiceSubscriptionId(invoice) !== input.subscriptionId ||
+    invoice.parent?.subscription_details?.metadata?.proId !== input.proId ||
+    invoice.parent.subscription_details.metadata?.planCode !==
+      PRO_SUBSCRIPTION_PLAN_CODE ||
+    invoice.collection_method !== "charge_automatically" ||
+    invoice.currency !== PRO_SUBSCRIPTION_CURRENCY ||
+    (input.expectedLivemode !== undefined &&
+      invoice.livemode !== input.expectedLivemode)
+  ) {
+    throw new StripeBillingError(
+      "The Stripe invoice does not match this professional plan.",
+    );
+  }
+
+  return invoice;
+}
+
+export async function retrieveOwnedProSubscriptionInvoice(
+  input: RetrieveOwnedProSubscriptionInvoiceInput,
+  dependencies: StripeBillingDependencies = {},
+) {
+  const stripe = resolveStripe(dependencies);
+  const normalized = {
+    ...input,
+    proId: requireNonEmpty(input.proId, "proId"),
+    customerId: requireStripeId(input.customerId, "cus_", "customerId"),
+    subscriptionId: requireStripeId(
+      input.subscriptionId,
+      "sub_",
+      "subscriptionId",
+    ),
+    invoiceId: requireStripeId(input.invoiceId, "in_", "invoiceId"),
+  };
+  const invoice = await stripe.invoices.retrieve(normalized.invoiceId);
+  return assertOwnedProSubscriptionInvoice(invoice, normalized);
+}
+
+export async function getOwnedProSubscriptionInvoicePaymentUrl(
+  input: RetrieveOwnedProSubscriptionInvoiceInput,
+  dependencies: StripeBillingDependencies = {},
+) {
+  const invoice = await retrieveOwnedProSubscriptionInvoice(
+    input,
+    dependencies,
+  );
+  if (
+    invoice.status !== "open" ||
+    invoice.amount_remaining <= 0 ||
+    !invoice.hosted_invoice_url
+  ) {
+    throw new StripeBillingError(
+      "The Stripe invoice has no outstanding hosted payment page.",
+    );
+  }
+  return {
+    invoice,
+    url: requireHttpUrl(
+      invoice.hosted_invoice_url,
+      "Stripe hosted invoice URL",
+    ),
+  };
+}
+
+export interface RetryProSubscriptionInvoicePaymentInput extends RetrieveOwnedProSubscriptionInvoiceInput {
+  idempotencyKey: string;
+}
+
+/** Attempts the owned unpaid invoice using the Customer's new default card. */
+export async function retryProSubscriptionInvoicePayment(
+  input: RetryProSubscriptionInvoicePaymentInput,
+  dependencies: StripeBillingDependencies = {},
+) {
+  const stripe = resolveStripe(dependencies);
+  const invoice = await retrieveOwnedProSubscriptionInvoice(
+    input,
+    dependencies,
+  );
+  if (invoice.status === "paid") {
+    return invoice;
+  }
+  if (invoice.status !== "open" || invoice.amount_remaining <= 0) {
+    throw new StripeBillingError("The Stripe invoice cannot be retried.");
+  }
+
+  const paid = await stripe.invoices.pay(
+    invoice.id,
+    { off_session: true },
+    { idempotencyKey: requireIdempotencyKey(input.idempotencyKey) },
+  );
+  return assertOwnedProSubscriptionInvoice(paid, input);
 }

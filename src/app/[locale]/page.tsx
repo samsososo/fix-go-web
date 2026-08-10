@@ -18,10 +18,15 @@ import {
 } from "@/lib/mock/repositories";
 import { HeroVisual } from "@/components/marketing/hero-visual";
 import { WorkflowShowcase } from "@/components/marketing/workflow-showcase";
+import { SubscriptionAccessNotice } from "@/features/pro/subscription-access-notice";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { createPageMetadata } from "@/lib/seo";
 import { formatDistrictName } from "@/lib/hk-locale";
+import {
+  getProSubscriptionEntitlement,
+  type ProSubscriptionEntitlementSnapshot,
+} from "@/lib/pro-subscription-entitlement";
 import { cn, formatCurrency } from "@/lib/utils";
 import { User } from "@/types/domain";
 
@@ -32,8 +37,8 @@ export async function generateMetadata(): Promise<Metadata> {
 
 type ProLead = Awaited<ReturnType<typeof listRelevantLeads>>[number];
 
-async function getHomeProLeads(user: User | null) {
-  if (user?.role !== "pro") {
+async function getHomeProLeads(user: User | null, canCreateQuotes: boolean) {
+  if (user?.role !== "pro" || !canCreateQuotes) {
     return [];
   }
 
@@ -49,11 +54,15 @@ export default async function HomePage() {
   const locale = (await getLocale()) as "zh-HK" | "en";
   const user = await getCurrentUser();
   const content = getMarketingContent(locale);
-  const [categories, proLeads] = await Promise.all([
+  const [categories, proSnapshot] = await Promise.all([
     listPublicCategories().then((items) => items.slice(0, 4)),
-    getHomeProLeads(user),
+    user?.role === "pro"
+      ? getProSubscriptionEntitlement(user.id)
+      : Promise.resolve(null),
   ]);
   const isLoggedInPro = user?.role === "pro";
+  const canCreateQuotes = proSnapshot?.entitlement.canCreateQuotes ?? false;
+  const proLeads = await getHomeProLeads(user, canCreateQuotes);
 
   const trustPoints =
     locale === "en"
@@ -91,16 +100,24 @@ export default async function HomePage() {
           <div className="space-y-4">
             <h1 className="max-w-2xl text-balance font-display text-4xl font-extrabold tracking-normal text-foreground sm:text-5xl lg:text-[3.4rem] lg:leading-[1.08]">
               {isLoggedInPro
-                ? locale === "en"
-                  ? "New home repair requests are waiting for your quote."
-                  : "有新家居維修需求等緊你報價。"
+                ? canCreateQuotes
+                  ? locale === "en"
+                    ? "New home repair requests are waiting for your quote."
+                    : "有新家居維修需求等緊你報價。"
+                  : locale === "en"
+                    ? "Keep existing jobs moving while you manage your plan."
+                    : "你可以繼續處理現有工作，同時管理月費。"
                 : content.hero.title}
             </h1>
             <p className="max-w-2xl text-lg leading-8 text-muted sm:text-xl">
               {isLoggedInPro
-                ? locale === "en"
-                  ? "You can still browse the public site, but your work actions stay visible so you never lose the path back to leads."
-                  : "首頁仍然可以睇品牌同客戶內容，但師傅登入後第一眼要有返工作入口，唔會離開咗工作台咁。"
+                ? canCreateQuotes
+                  ? locale === "en"
+                    ? "You can still browse the public site, but your work actions stay visible so you never lose the path back to leads."
+                    : "首頁仍然可以睇品牌同客戶內容，但師傅登入後第一眼要有返工作入口，唔會離開咗工作台咁。"
+                  : locale === "en"
+                    ? "New-work actions are paused, but your existing jobs, records, profile, and billing remain available."
+                    : "新工作功能暫停期間，你仍可處理現有訂單、查看紀錄、更新檔案同管理月費。"
                 : content.hero.description}
             </p>
           </div>
@@ -125,28 +142,48 @@ export default async function HomePage() {
 
           <div className="flex flex-col gap-3 sm:flex-row">
             <Link
-              href={isLoggedInPro ? "/pro/leads" : "/auth/signup"}
+              href={
+                isLoggedInPro
+                  ? canCreateQuotes
+                    ? "/pro/leads"
+                    : "/pro/billing"
+                  : "/auth/signup"
+              }
               locale={locale}
               className={buttonVariants({ size: "lg" })}
             >
               {isLoggedInPro
-                ? locale === "en"
-                  ? "View job leads"
-                  : "查看工作機會"
+                ? canCreateQuotes
+                  ? locale === "en"
+                    ? "View job leads"
+                    : "查看工作機會"
+                  : locale === "en"
+                    ? "Manage billing"
+                    : "管理月費"
                 : locale === "en"
                   ? "Arrange a free quote"
                   : "免費安排報價"}
               <ArrowRight className="h-4 w-4" />
             </Link>
             <Link
-              href={isLoggedInPro ? "/pro" : "/categories"}
+              href={
+                isLoggedInPro
+                  ? canCreateQuotes
+                    ? "/pro"
+                    : "/pro/jobs"
+                  : "/categories"
+              }
               locale={locale}
               className={buttonVariants({ size: "lg", variant: "outline" })}
             >
               {isLoggedInPro
-                ? locale === "en"
-                  ? "Back to overview"
-                  : "返回師傅總覽"
+                ? canCreateQuotes
+                  ? locale === "en"
+                    ? "Back to overview"
+                    : "返回師傅總覽"
+                  : locale === "en"
+                    ? "Manage existing jobs"
+                    : "處理現有訂單"
                 : locale === "en"
                   ? "Browse service categories"
                   : "瀏覽服務分類"}
@@ -170,8 +207,12 @@ export default async function HomePage() {
           ) : null}
         </div>
 
-        {isLoggedInPro ? (
-          <ProHomeWidget locale={locale} leads={proLeads} />
+        {isLoggedInPro && proSnapshot ? (
+          canCreateQuotes ? (
+            <ProHomeWidget locale={locale} leads={proLeads} />
+          ) : (
+            <ProRestrictedHomeWidget locale={locale} snapshot={proSnapshot} />
+          )
         ) : (
           <HeroVisual locale={locale} />
         )}
@@ -261,6 +302,55 @@ export default async function HomePage() {
         </div>
       </section>
     </div>
+  );
+}
+
+function ProRestrictedHomeWidget({
+  locale,
+  snapshot,
+}: {
+  locale: "zh-HK" | "en";
+  snapshot: ProSubscriptionEntitlementSnapshot;
+}) {
+  return (
+    <Card className="border-primary/20 bg-white/88 shadow-[0_18px_48px_rgba(24,36,51,0.11)]">
+      <CardContent className="space-y-5">
+        <SubscriptionAccessNotice locale={locale} snapshot={snapshot} />
+        <div>
+          <h2 className="font-display text-2xl font-extrabold">
+            {locale === "en"
+              ? "Your existing work stays here"
+              : "現有工作會繼續保留"}
+          </h2>
+          <p className="mt-2 text-sm leading-7 text-muted">
+            {locale === "en"
+              ? "Open accepted jobs or your schedule without taking on a new booking."
+              : "你可以繼續查看已接訂單同日程，唔會新增工作。"}
+          </p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Link
+            href="/pro/jobs"
+            locale={locale}
+            className={cn(buttonVariants({ size: "sm" }), "w-full")}
+          >
+            <BriefcaseBusiness className="h-4 w-4" />
+            {locale === "en" ? "Existing jobs" : "現有訂單"}
+          </Link>
+          <Link
+            href="/pro/calendar"
+            locale={locale}
+            className={cn(
+              buttonVariants({ variant: "outline", size: "sm" }),
+              "w-full",
+            )}
+          >
+            <CalendarDays className="h-4 w-4" />
+            {locale === "en" ? "Schedule" : "日程"}
+          </Link>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

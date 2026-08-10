@@ -55,12 +55,17 @@ export interface ProSubscription {
   stripePriceId?: string;
   stripeStatus?: StripeSubscriptionStatus;
   stripeLivemode?: boolean;
+  stripeSubscriptionHasTrial?: boolean;
   stripeSetupIntentId?: string;
   stripePaymentMethodId?: string;
   checkoutSessionId?: string;
   checkoutSessionExpiresAt?: IsoDateTime;
   checkoutReservationId?: string;
   checkoutReservationExpiresAt?: IsoDateTime;
+  reactivationCheckoutSessionId?: string;
+  reactivationCheckoutSessionExpiresAt?: IsoDateTime;
+  reactivationCheckoutReservationId?: string;
+  reactivationCheckoutReservationExpiresAt?: IsoDateTime;
   cardBoundAt?: IsoDateTime;
   trialConsumedAt?: IsoDateTime;
   trialGrantedAt?: IsoDateTime;
@@ -72,6 +77,7 @@ export interface ProSubscription {
   cancellationRequestedAt?: IsoDateTime;
   pastDueInvoiceId?: string;
   firstPaymentFailedAt?: IsoDateTime;
+  paymentFailureConfirmed?: boolean;
   gracePeriodEndsAt?: IsoDateTime;
   latestInvoiceId?: string;
   lastPaymentSucceededAt?: IsoDateTime;
@@ -79,7 +85,9 @@ export interface ProSubscription {
   createdAt: IsoDateTime;
   updatedAt: IsoDateTime;
   lastStripeEventId?: string;
+  lastStripeEventCreatedAt?: IsoDateTime;
   lastStripeSyncedAt?: IsoDateTime;
+  stripeLifecycleRevision?: number;
 }
 
 export interface ProSubscriptionEntitlement {
@@ -274,6 +282,16 @@ export function deriveSubscriptionAccessStatus(
     }
 
     return "trialing";
+  }
+
+  if (subscription.accessStatus === "active") {
+    if (
+      !subscription.currentPeriodEndsAt ||
+      isAtOrAfter(now, subscription.currentPeriodEndsAt)
+    ) {
+      return "suspended";
+    }
+    return "active";
   }
 
   return subscription.accessStatus;

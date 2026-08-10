@@ -13,6 +13,7 @@ import { SubscriptionStatusRefresh } from "@/features/pro/subscription-status-re
 import { requireRole } from "@/lib/auth";
 import { ensureProSubscription } from "@/lib/mock/db";
 import { getProNav } from "@/lib/nav";
+import { evaluateProSubscriptionEntitlement } from "@/lib/pro-subscription-entitlement";
 import { hasConsumedLifetimeTrial } from "@/lib/subscription-policy";
 
 function firstQueryValue(value: string | string[] | undefined) {
@@ -22,7 +23,10 @@ function firstQueryValue(value: string | string[] | undefined) {
 export default async function ProBillingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ checkout?: string | string[] }>;
+  searchParams: Promise<{
+    checkout?: string | string[];
+    billing?: string | string[];
+  }>;
 }) {
   const locale = await getLocale();
   const user = await requireRole("pro", locale);
@@ -31,20 +35,40 @@ export default async function ProBillingPage({
     searchParams,
   ]);
   const checkoutState = firstQueryValue(query.checkout);
+  const billingState = firstQueryValue(query.billing);
   const isEnglish = locale === "en";
-  const isTrialing = subscription.accessStatus === "trialing";
-  const isActive = subscription.accessStatus === "active";
+  const accessStatus = evaluateProSubscriptionEntitlement(
+    subscription,
+    new Date().toISOString(),
+  ).entitlement.status;
+  const isTrialing = accessStatus === "trialing";
+  const isActive = accessStatus === "active";
+  const hasEstablishedPlan = accessStatus !== "setup_required";
   const isActivationPending =
     subscription.accessStatus === "setup_required" &&
     hasConsumedLifetimeTrial(subscription) &&
     !subscription.stripeSubscriptionId;
+  const isPaidReactivationPending =
+    checkoutState === "reactivated" &&
+    Boolean(subscription.reactivationCheckoutSessionId) &&
+    accessStatus === "terminated";
+  const isPaidReactivationConfirmed =
+    checkoutState === "reactivated" &&
+    accessStatus === "active" &&
+    subscription.stripeStatus === "active" &&
+    subscription.stripeSubscriptionHasTrial === false &&
+    Boolean(subscription.lastPaymentSucceededAt) &&
+    !subscription.reactivationCheckoutSessionId;
   const isCheckoutPending =
-    subscription.accessStatus === "setup_required" &&
-    Boolean(subscription.checkoutSessionId) &&
-    (checkoutState === "success" || isActivationPending);
+    (subscription.accessStatus === "setup_required" &&
+      Boolean(subscription.checkoutSessionId) &&
+      (checkoutState === "success" || isActivationPending)) ||
+    isPaidReactivationPending;
   const showCheckoutSuccess =
-    checkoutState === "success" &&
-    (isCheckoutPending || subscription.accessStatus !== "setup_required");
+    (checkoutState === "success" &&
+      (isCheckoutPending || subscription.accessStatus !== "setup_required")) ||
+    isPaidReactivationPending ||
+    isPaidReactivationConfirmed;
 
   return (
     <PortalShell
@@ -68,26 +92,42 @@ export default async function ProBillingPage({
                 ? isEnglish
                   ? "Activating your free trial"
                   : "正在啟用免費試用"
-                : subscription.accessStatus === "setup_required"
+                : isPaidReactivationPending
                   ? isEnglish
-                    ? "Checking your card setup"
-                    : "正在確認綁卡結果"
-                  : isEnglish
-                    ? "Card setup confirmed"
-                    : "綁卡已經完成"}
+                    ? "Confirming your HK$100 payment"
+                    : "正在確認 HK$100 付款"
+                  : isPaidReactivationConfirmed
+                    ? isEnglish
+                      ? "Subscription reactivated"
+                      : "月費訂閱已重新啟用"
+                    : subscription.accessStatus === "setup_required"
+                      ? isEnglish
+                        ? "Checking your card setup"
+                        : "正在確認綁卡結果"
+                      : isEnglish
+                        ? "Card setup confirmed"
+                        : "綁卡已經完成"}
             </p>
             <p className="mt-1 text-muted">
               {isActivationPending
                 ? isEnglish
                   ? "Your card is confirmed. Stripe is finishing the monthly plan setup; no second card setup is needed."
                   : "付款卡已確認，Stripe 正在完成月費計劃設定，唔需要再次綁卡。"
-                : subscription.accessStatus === "setup_required"
+                : isPaidReactivationPending
                   ? isEnglish
-                    ? "Stripe has returned you to this page, but that redirect is not final confirmation. Your trial starts only after the secure Stripe notification is processed."
-                    : "Stripe 已帶你返到呢一頁，但返回頁面本身唔代表綁卡已完成；系統收到並處理 Stripe 安全通知後，免費期先會正式開始。"
-                  : isEnglish
-                    ? "Stripe has securely confirmed your card. Your subscription status below is now up to date."
-                    : "Stripe 已安全確認付款卡，下面顯示嘅訂閱狀態已經更新。"}
+                    ? "Stripe has returned you to this page. New-work access is restored only after the signed payment confirmation is processed."
+                    : "Stripe 已帶你返到呢一頁；系統處理已簽署嘅付款確認後，先會恢復新工作功能。"
+                  : isPaidReactivationConfirmed
+                    ? isEnglish
+                      ? "Stripe confirmed the HK$100 payment. New-work access is active again, with no additional free trial."
+                      : "Stripe 已確認 HK$100 付款；新工作功能已恢復，而且冇再次獲得免費期。"
+                    : subscription.accessStatus === "setup_required"
+                      ? isEnglish
+                        ? "Stripe has returned you to this page, but that redirect is not final confirmation. Your trial starts only after the secure Stripe notification is processed."
+                        : "Stripe 已帶你返到呢一頁，但返回頁面本身唔代表綁卡已完成；系統收到並處理 Stripe 安全通知後，免費期先會正式開始。"
+                      : isEnglish
+                        ? "Stripe has securely confirmed your card. Your subscription status below is now up to date."
+                        : "Stripe 已安全確認付款卡，下面顯示嘅訂閱狀態已經更新。"}
             </p>
           </div>
         ) : null}
@@ -99,12 +139,38 @@ export default async function ProBillingPage({
             role="status"
           >
             <p className="font-semibold text-warning">
-              {isEnglish ? "Card setup not completed" : "尚未完成綁卡"}
+              {hasConsumedLifetimeTrial(subscription)
+                ? isEnglish
+                  ? "Re-subscription not completed"
+                  : "尚未完成重新訂閱"
+                : isEnglish
+                  ? "Card setup not completed"
+                  : "尚未完成綁卡"}
+            </p>
+            <p className="mt-1 text-muted">
+              {hasConsumedLifetimeTrial(subscription)
+                ? isEnglish
+                  ? "No new subscription was started. You can restart the secure HK$100 checkout whenever you are ready."
+                  : "今次冇建立新訂閱；準備好之後可以重新開啟 HK$100 安全付款流程。"
+                : isEnglish
+                  ? "Nothing was charged. You can restart the secure Stripe setup whenever you are ready."
+                  : "今次冇收取任何費用；準備好之後可以隨時重新開啟 Stripe 安全綁卡。"}
+            </p>
+          </div>
+        ) : null}
+
+        {billingState === "updated" ? (
+          <div
+            className="rounded-2xl border border-primary/22 bg-surface-tint px-4 py-3 text-sm leading-6"
+            role="status"
+          >
+            <p className="font-semibold text-primary">
+              {isEnglish ? "Card update submitted" : "已提交付款卡更新"}
             </p>
             <p className="mt-1 text-muted">
               {isEnglish
-                ? "Nothing was charged. You can restart the secure Stripe setup whenever you are ready."
-                : "今次冇收取任何費用；準備好之後可以隨時重新開啟 Stripe 安全綁卡。"}
+                ? "Returning from Stripe is not payment confirmation. If you have an outstanding invoice, retry it below; access is restored only after Stripe confirms payment."
+                : "由 Stripe 返回並唔代表欠款已繳清；如有欠款，請喺下面重新扣款。系統只會喺 Stripe 確認付款後恢復狀態。"}
             </p>
           </div>
         ) : null}
@@ -143,9 +209,13 @@ export default async function ProBillingPage({
                         ? isEnglish
                           ? "HK$100 monthly"
                           : "每月 HK$100"
-                        : isEnglish
-                          ? "First 3 months free"
-                          : "首 3 個月免費"}
+                        : hasEstablishedPlan
+                          ? isEnglish
+                            ? "HK$100 monthly plan"
+                            : "每月 HK$100 計劃"
+                          : isEnglish
+                            ? "First 3 months free"
+                            : "首 3 個月免費"}
                 </span>
               </div>
 
@@ -153,19 +223,32 @@ export default async function ProBillingPage({
                 <PlanPoint
                   icon={<CalendarRange className="h-5 w-5" />}
                   title={
-                    isActive
+                    hasEstablishedPlan && !isTrialing
                       ? isEnglish
-                        ? "Subscription active"
-                        : "訂閱已生效"
+                        ? "Monthly subscription"
+                        : "月費訂閱"
                       : isEnglish
                         ? "Three calendar months"
                         : "3 個日曆月"
                   }
                   description={
-                    isActive
-                      ? isEnglish
-                        ? "Your HK$100 monthly plan renews automatically."
-                        : "每月 HK$100 計劃會自動續訂。"
+                    hasEstablishedPlan && !isTrialing
+                      ? accessStatus === "cancel_at_period_end"
+                        ? isEnglish
+                          ? "Automatic renewal is off until you restore it."
+                          : "自動續訂已關閉，你亦可以喺期末前恢復。"
+                        : accessStatus === "terminated"
+                          ? isEnglish
+                            ? "This monthly subscription has ended."
+                            : "呢個月費訂閱已經終止。"
+                          : accessStatus === "grace_period" ||
+                              accessStatus === "suspended"
+                            ? isEnglish
+                              ? "Billing needs attention before normal access resumes."
+                              : "付款狀態需要處理，完成後先恢復正常功能。"
+                            : isEnglish
+                              ? "Your HK$100 monthly plan renews automatically."
+                              : "每月 HK$100 計劃會自動續訂。"
                       : isEnglish
                         ? "Calculated in Hong Kong time from successful card setup."
                         : "由成功綁卡當日起，按香港時間計算。"
@@ -174,7 +257,7 @@ export default async function ProBillingPage({
                 <PlanPoint
                   icon={<CreditCard className="h-5 w-5" />}
                   title={
-                    isActive
+                    hasEstablishedPlan && !isTrialing
                       ? isEnglish
                         ? "HK$100 each month"
                         : "每月收取 HK$100"
@@ -187,10 +270,15 @@ export default async function ProBillingPage({
                           : "今日不收費"
                   }
                   description={
-                    isActive
-                      ? isEnglish
-                        ? "Stripe charges the saved card each billing period."
-                        : "Stripe 會喺每個帳單週期從已綁定付款卡收費。"
+                    hasEstablishedPlan && !isTrialing
+                      ? accessStatus === "cancel_at_period_end" ||
+                        accessStatus === "terminated"
+                        ? isEnglish
+                          ? "No further renewal charge is scheduled after access ends."
+                          : "使用權完結後不會再安排續期收費。"
+                        : isEnglish
+                          ? "Stripe charges the saved card each billing period."
+                          : "Stripe 會喺每個帳單週期從已綁定付款卡收費。"
                       : isEnglish
                         ? "HK$100 monthly billing starts only after the trial."
                         : "免費期完結後，先開始每月收取 HK$100。"
