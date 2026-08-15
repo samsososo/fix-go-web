@@ -17,10 +17,14 @@ Facebook Groups, reuse browser cookies, or store access tokens in SQLite.
   ```
 
 - Follows cursor pagination until `paging.next` is absent.
-- Retrieves every Page-authored post returned by this edge. Meta documents an
-  approximate limit of 600 ranked, published posts per year and does not return
-  expired posts, so this is not guaranteed to be a complete historical archive.
+- Retrieves every Page-authored post returned by this edge within the active
+  lookback or incremental window. Meta documents an approximate limit of 600
+  ranked, published posts per year and does not return expired posts, so this
+  is not guaranteed to be a complete historical archive.
 - Stores posts in SQLite and checkpoints the latest `created_time` per Page.
+- Supports an initial lookback window. The supplied `.env.example` uses 14
+  days, so a fresh database only receives posts from the preceding rolling
+  14-day UTC window. Every Page in one run shares the same cutoff instant.
 - Supplies `since=<last-created-time-minus-one-second>` on subsequent runs.
   The one-second boundary overlap plus post-ID upsert prevents a same-second
   post from being missed while older records are not fetched.
@@ -50,6 +54,7 @@ Edit `.env`:
 ```dotenv
 FACEBOOK_PAGE_IDS=123456789012345,987654321098765
 FACEBOOK_USER_ACCESS_TOKEN=your_long_lived_user_token
+FACEBOOK_INITIAL_LOOKBACK_DAYS=14
 FACEBOOK_SQLITE_PATH=../../data/facebook-page-posts.sqlite3
 ```
 
@@ -87,6 +92,7 @@ Useful overrides:
 ```bash
 python3 sync.py \
   --database ../../data/facebook-page-posts.sqlite3 \
+  --initial-lookback-days 14 \
   --timeout 30 \
   --max-attempts 6 \
   --base-backoff 1 \
@@ -110,6 +116,12 @@ Page failed. Configuration errors use status `2`.
 `last_successful_sync_at` independently for every Page. A checkpoint is updated
 only after all pages of that Page's response have completed. A mid-run error
 rolls back that Page without affecting Pages already completed.
+
+`FACEBOOK_INITIAL_LOOKBACK_DAYS` only applies when that Page has no checkpoint.
+After the first successful run, the saved checkpoint takes precedence. Remove
+the setting before the first run if you want every historical post the API can
+return. Changing the setting does not delete older rows from an existing
+database.
 
 Only the requested post fields and aggregate counts are stored; response data
 for individual reactions or comments is deliberately discarded.

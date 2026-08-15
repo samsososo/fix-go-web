@@ -20,7 +20,7 @@ import sys
 import tempfile
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
@@ -90,6 +90,7 @@ class Config:
     max_attempts: int
     base_backoff_seconds: float
     max_backoff_seconds: float
+    initial_lookback_days: int | None = None
 
 
 @dataclass(frozen=True)
@@ -258,6 +259,25 @@ def load_config(args: argparse.Namespace) -> Config:
     if args.base_backoff > args.max_backoff:
         raise ConfigurationError("--base-backoff cannot exceed --max-backoff.")
 
+    configured_lookback = (
+        args.initial_lookback_days
+        if args.initial_lookback_days is not None
+        else values.get("FACEBOOK_INITIAL_LOOKBACK_DAYS")
+    )
+    if configured_lookback in (None, ""):
+        initial_lookback_days = None
+    else:
+        try:
+            initial_lookback_days = int(configured_lookback)
+        except (TypeError, ValueError) as error:
+            raise ConfigurationError(
+                "FACEBOOK_INITIAL_LOOKBACK_DAYS must be a positive integer."
+            ) from error
+        if initial_lookback_days <= 0:
+            raise ConfigurationError(
+                "FACEBOOK_INITIAL_LOOKBACK_DAYS must be a positive integer."
+            )
+
     return Config(
         page_ids=page_ids,
         user_access_token=token,
@@ -266,6 +286,7 @@ def load_config(args: argparse.Namespace) -> Config:
         max_attempts=args.max_attempts,
         base_backoff_seconds=args.base_backoff,
         max_backoff_seconds=args.max_backoff,
+        initial_lookback_days=initial_lookback_days,
     )
 
 
@@ -776,15 +797,29 @@ def sync_page(
     store: SQLiteStore,
     page: PageAccess,
     logger: logging.Logger,
+    *,
+    initial_lookback_days: int | None = None,
+    now: datetime | None = None,
 ) -> PageSyncResult:
     checkpoint = store.get_checkpoint(page.page_id)
     checkpoint_dt = parse_graph_datetime(checkpoint) if checkpoint else None
+    sync_time = now or datetime.now(timezone.utc)
+    if sync_time.tzinfo is None:
+        sync_time = sync_time.replace(tzinfo=timezone.utc)
+    else:
+        sync_time = sync_time.astimezone(timezone.utc)
+    sync_time = sync_time.replace(microsecond=0)
+
     params: dict[str, Any] = {"fields": POST_FIELDS, "limit": 100}
+    lower_bound_dt = checkpoint_dt
     if checkpoint_dt:
         # Graph's `since` boundary can be inclusive or exclusive depending on
         # the edge. A one-second overlap plus primary-key upsert avoids missing
         # a different post created in the exact checkpoint second.
         params["since"] = max(0, int(checkpoint_dt.timestamp()) - 1)
+    elif initial_lookback_days is not None:
+        lower_bound_dt = sync_time - timedelta(days=initial_lookback_days)
+        params["since"] = max(0, int(lower_bound_dt.timestamp()) - 1)
 
     request_url: str | None = client.url(f"/{page.page_id}/posts", params)
     seen_urls: set[str] = set()
@@ -792,7 +827,7 @@ def sync_page(
     stored_posts = 0
     newest_checkpoint = checkpoint
     newest_dt = checkpoint_dt
-    synced_at = datetime.now(timezone.utc).isoformat()
+    synced_at = sync_time.isoformat()
 
     with store.connection:
         while request_url:
@@ -817,7 +852,7 @@ def sync_page(
                 if not isinstance(created_time, str):
                     raise ValueError("Facebook post is missing created_time.")
                 created_dt = parse_graph_datetime(created_time)
-                if checkpoint_dt is not None and created_dt < checkpoint_dt:
+                if lower_bound_dt is not None and created_dt < lower_bound_dt:
                     continue
                 if store.upsert_post(page, post, synced_at):
                     stored_posts += 1
@@ -839,6 +874,9 @@ def sync_page(
         stored_posts=stored_posts,
         previous_checkpoint=checkpoint,
         new_checkpoint=newest_checkpoint,
+        initial_lookback_days=(
+            initial_lookback_days if checkpoint is None else None
+        ),
     )
     return PageSyncResult(
         page_id=page.page_id,
@@ -856,7 +894,11 @@ def sync_requested_pages(
     client: GraphApiClient,
     store: SQLiteStore,
     logger: logging.Logger,
+    *,
+    initial_lookback_days: int | None = None,
+    now: datetime | None = None,
 ) -> tuple[list[PageSyncResult], list[str]]:
+    shared_sync_time = now or datetime.now(timezone.utc)
     results: list[PageSyncResult] = []
     failures: list[str] = []
     for page_id in page_ids:
@@ -872,7 +914,16 @@ def sync_requested_pages(
             )
             continue
         try:
-            results.append(sync_page(client, store, page, logger))
+            results.append(
+                sync_page(
+                    client,
+                    store,
+                    page,
+                    logger,
+                    initial_lookback_days=initial_lookback_days,
+                    now=shared_sync_time,
+                )
+            )
         except Exception as error:  # Per-page isolation is intentional.
             failures.append(page_id)
             fields: dict[str, Any] = {
@@ -991,6 +1042,15 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--base-backoff", type=float, default=1.0)
     parser.add_argument("--max-backoff", type=float, default=60.0)
     parser.add_argument(
+        "--initial-lookback-days",
+        type=int,
+        metavar="DAYS",
+        help=(
+            "On a Page's first sync, only fetch posts from the last DAYS; "
+            "overrides FACEBOOK_INITIAL_LOOKBACK_DAYS."
+        ),
+    )
+    parser.add_argument(
         "--log-level",
         choices=("DEBUG", "INFO", "WARNING", "ERROR"),
         default="INFO",
@@ -1031,6 +1091,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             "Starting Facebook Page post synchronization.",
             graph_api_version=GRAPH_API_VERSION,
             requested_page_count=len(config.page_ids),
+            initial_lookback_days=config.initial_lookback_days,
             database_path=str(config.database_path),
         )
         managed_pages = fetch_managed_pages(client, config.user_access_token)
@@ -1040,6 +1101,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             client,
             store,
             logger,
+            initial_lookback_days=config.initial_lookback_days,
         )
 
         csv_export_failed = False

@@ -8,8 +8,10 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from unittest import mock
 from urllib.error import HTTPError
 
 
@@ -183,7 +185,11 @@ class SQLiteSyncTests(unittest.TestCase):
         )
 
         second_result = sync.sync_page(
-            second_client, self.store, self.page, self.logger
+            second_client,
+            self.store,
+            self.page,
+            self.logger,
+            initial_lookback_days=14,
         )
 
         self.assertEqual(second_result.stored_posts, 1)
@@ -194,6 +200,109 @@ class SQLiteSyncTests(unittest.TestCase):
             "SELECT COUNT(*) FROM posts"
         ).fetchone()[0]
         self.assertEqual(stored, 3)
+
+    def test_initial_lookback_only_stores_posts_from_last_14_days(self) -> None:
+        reference_time = datetime(2026, 8, 15, 12, 0, tzinfo=timezone.utc)
+        lower_bound = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
+        request_url = sync.GraphApiClient.url(
+            "/123/posts",
+            {
+                "fields": sync.POST_FIELDS,
+                "limit": 100,
+                "since": int(lower_bound.timestamp()) - 1,
+            },
+        )
+        client = FakeClient(
+            {
+                request_url: {
+                    "data": [
+                        {
+                            "id": "123_new",
+                            "message": "inside window",
+                            "created_time": "2026-08-10T12:00:00+0000",
+                        },
+                        {
+                            "id": "123_boundary",
+                            "message": "on boundary",
+                            "created_time": "2026-08-01T12:00:00+0000",
+                        },
+                        {
+                            "id": "123_old",
+                            "message": "outside window",
+                            "created_time": "2026-08-01T11:59:59+0000",
+                        },
+                    ]
+                }
+            }
+        )
+
+        result = sync.sync_page(
+            client,
+            self.store,
+            self.page,
+            self.logger,
+            initial_lookback_days=14,
+            now=reference_time,
+        )
+
+        self.assertEqual(result.fetched_posts, 3)
+        self.assertEqual(result.stored_posts, 2)
+        stored_ids = {
+            row["post_id"]
+            for row in self.store.connection.execute("SELECT post_id FROM posts")
+        }
+        self.assertEqual(stored_ids, {"123_new", "123_boundary"})
+        self.assertEqual(
+            self.store.get_checkpoint("123"),
+            "2026-08-10T12:00:00+0000",
+        )
+
+    def test_two_pages_share_the_same_initial_lookback_cutoff(self) -> None:
+        reference_time = datetime(
+            2026,
+            8,
+            15,
+            12,
+            0,
+            0,
+            987654,
+            tzinfo=timezone.utc,
+        )
+        lower_bound = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
+        since = int(lower_bound.timestamp()) - 1
+        first_page = sync.PageAccess("1", "First", "token-1")
+        second_page = sync.PageAccess("2", "Second", "token-2")
+        first_url = sync.GraphApiClient.url(
+            "/1/posts",
+            {"fields": sync.POST_FIELDS, "limit": 100, "since": since},
+        )
+        second_url = sync.GraphApiClient.url(
+            "/2/posts",
+            {"fields": sync.POST_FIELDS, "limit": 100, "since": since},
+        )
+        client = FakeClient(
+            {
+                first_url: {"data": []},
+                second_url: {"data": []},
+            }
+        )
+
+        results, failures = sync.sync_requested_pages(
+            ["1", "2"],
+            {"1": first_page, "2": second_page},
+            client,
+            self.store,
+            self.logger,
+            initial_lookback_days=14,
+            now=reference_time,
+        )
+
+        self.assertEqual(failures, [])
+        self.assertEqual([result.page_id for result in results], ["1", "2"])
+        self.assertEqual(
+            [url for url, _token in client.calls],
+            [first_url, second_url],
+        )
 
     def test_failed_page_rolls_back_and_other_page_continues(self) -> None:
         failing_page = sync.PageAccess("1", "Failing", "token-1")
@@ -275,6 +384,47 @@ class SQLiteSyncTests(unittest.TestCase):
 
 
 class RunConfigurationTests(unittest.TestCase):
+    def test_env_lookback_and_cli_override_are_validated(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            env_path = Path(directory) / ".env"
+            env_path.write_text(
+                "FACEBOOK_PAGE_IDS=1,2\n"
+                "FACEBOOK_USER_ACCESS_TOKEN=test-user-token\n"
+                "FACEBOOK_INITIAL_LOOKBACK_DAYS=14\n",
+                encoding="utf-8",
+            )
+            parser = sync.build_argument_parser()
+
+            with mock.patch.dict(sync.os.environ, {}, clear=True):
+                env_config = sync.load_config(
+                    parser.parse_args(["--env-file", str(env_path)])
+                )
+                cli_config = sync.load_config(
+                    parser.parse_args(
+                        [
+                            "--env-file",
+                            str(env_path),
+                            "--initial-lookback-days",
+                            "7",
+                        ]
+                    )
+                )
+
+            self.assertEqual(env_config.initial_lookback_days, 14)
+            self.assertEqual(cli_config.initial_lookback_days, 7)
+
+            env_path.write_text(
+                "FACEBOOK_PAGE_IDS=1,2\n"
+                "FACEBOOK_USER_ACCESS_TOKEN=test-user-token\n"
+                "FACEBOOK_INITIAL_LOOKBACK_DAYS=0\n",
+                encoding="utf-8",
+            )
+            with mock.patch.dict(sync.os.environ, {}, clear=True):
+                with self.assertRaises(sync.ConfigurationError):
+                    sync.load_config(
+                        parser.parse_args(["--env-file", str(env_path)])
+                    )
+
     def test_csv_database_collision_exits_before_network_or_database_open(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
