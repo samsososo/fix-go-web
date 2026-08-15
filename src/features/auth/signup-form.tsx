@@ -3,16 +3,16 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useForm, useWatch } from "react-hook-form";
 
-import { requestSignupSmsCodeAction, signUpAction } from "@/lib/actions";
+import { signUpAction } from "@/lib/actions";
 import { securityQuestions } from "@/lib/account-recovery";
 import { useHydrated } from "@/hooks/use-hydrated";
 import {
-  signupWithVerificationSchema,
-  type SignupWithVerificationFormValues,
-  type SignupWithVerificationInput,
+  signupSchema,
+  type SignupFormValues,
+  type SignupInput,
 } from "@/lib/validation";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -28,19 +28,10 @@ export function SignupForm({
 }) {
   const router = useRouter();
   const isHydrated = useHydrated();
-  const [isSmsPending, startSmsTransition] = useTransition();
   const [isSubmitting, startSubmitTransition] = useTransition();
   const [serverError, setServerError] = useState<string | null>(null);
-  const [smsError, setSmsError] = useState<string | null>(null);
-  const [smsStatus, setSmsStatus] = useState<string | null>(null);
-  const [sentPhone, setSentPhone] = useState<string | null>(null);
-  const [cooldownSeconds, setCooldownSeconds] = useState(0);
-  const form = useForm<
-    SignupWithVerificationFormValues,
-    unknown,
-    SignupWithVerificationInput
-  >({
-    resolver: zodResolver(signupWithVerificationSchema),
+  const form = useForm<SignupFormValues, unknown, SignupInput>({
+    resolver: zodResolver(signupSchema),
     defaultValues: {
       fullName: "",
       phone: "",
@@ -53,64 +44,11 @@ export function SignupForm({
       securityAnswer: "",
       password: "",
       confirmPassword: "",
-      verificationCode: "",
     },
   });
   const role = useWatch({ control: form.control, name: "role" });
-  const phone = useWatch({ control: form.control, name: "phone" });
-  const verificationCode = useWatch({
-    control: form.control,
-    name: "verificationCode",
-  });
-  const codeMatchesPhone = Boolean(sentPhone && sentPhone === phone);
 
-  useEffect(() => {
-    if (cooldownSeconds <= 0) {
-      return;
-    }
-
-    const timer = window.setInterval(() => {
-      setCooldownSeconds((current) => Math.max(0, current - 1));
-    }, 1000);
-
-    return () => window.clearInterval(timer);
-  }, [cooldownSeconds]);
-
-  const requestSmsCode = async () => {
-    const phoneIsValid = await form.trigger("phone");
-    if (!phoneIsValid) {
-      return;
-    }
-
-    const requestedPhone = form.getValues("phone");
-    setServerError(null);
-    setSmsError(null);
-    setSmsStatus(null);
-    startSmsTransition(async () => {
-      const result = await requestSignupSmsCodeAction({
-        phone: requestedPhone,
-        locale,
-      });
-      if (!result.ok) {
-        setSmsError(result.error);
-        if (result.retryAfterSeconds) {
-          setCooldownSeconds(result.retryAfterSeconds);
-        }
-        return;
-      }
-
-      setSentPhone(requestedPhone);
-      setCooldownSeconds(result.retryAfterSeconds);
-      setSmsStatus(
-        locale === "en"
-          ? "A 6-digit code was sent to your phone."
-          : "六位數驗證碼已發送到你嘅電話。",
-      );
-      form.setFocus("verificationCode");
-    });
-  };
-
-  const onSubmit = (values: SignupWithVerificationInput) => {
+  const onSubmit = (values: SignupInput) => {
     setServerError(null);
     startSubmitTransition(async () => {
       const result = await signUpAction({ ...values, interfaceLocale: locale });
@@ -131,76 +69,22 @@ export function SignupForm({
       >
         <Input {...form.register("fullName")} />
       </Field>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <div className="min-w-0 flex-1">
-          <Field
-            label={
-              locale === "en" ? "WhatsApp contact phone" : "WhatsApp 聯絡電話"
-            }
-            hint={
-              locale === "en"
-                ? "Use a Hong Kong mobile number that can be reached on WhatsApp."
-                : "請填可用 WhatsApp 聯絡的香港手提電話。"
-            }
-            error={form.formState.errors.phone?.message}
-          >
-            <Input
-              {...form.register("phone")}
-              autoComplete="tel"
-              inputMode="tel"
-              placeholder="91234567"
-            />
-          </Field>
-        </div>
-        <Button
-          className="shrink-0"
-          disabled={isSmsPending || cooldownSeconds > 0}
-          onClick={requestSmsCode}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
-          {isSmsPending
-            ? locale === "en"
-              ? "Sending..."
-              : "發送中..."
-            : cooldownSeconds > 0
-              ? `${cooldownSeconds}s`
-              : sentPhone
-                ? locale === "en"
-                  ? "Resend code"
-                  : "重新發送"
-                : locale === "en"
-                  ? "Send code"
-                  : "發送驗證碼"}
-        </Button>
-      </div>
-      {smsError ? (
-        <p className="text-sm text-danger" role="alert">
-          {smsError}
-        </p>
-      ) : null}
-      {sentPhone ? (
-        <Field
-          label={locale === "en" ? "SMS verification code" : "SMS 驗證碼"}
-          hint={
-            codeMatchesPhone
-              ? (smsStatus ?? undefined)
-              : locale === "en"
-                ? "The phone number changed. Send a new code before continuing."
-                : "電話號碼已更改，請重新發送驗證碼。"
-          }
-          error={form.formState.errors.verificationCode?.message}
-        >
-          <Input
-            {...form.register("verificationCode")}
-            autoComplete="one-time-code"
-            inputMode="numeric"
-            maxLength={6}
-            placeholder="000000"
-          />
-        </Field>
-      ) : null}
+      <Field
+        label={locale === "en" ? "WhatsApp contact phone" : "WhatsApp 聯絡電話"}
+        hint={
+          locale === "en"
+            ? "Use a Hong Kong mobile number for contact, login and account recovery."
+            : "請填香港手提電話，用作聯絡、登入及重設密碼。"
+        }
+        error={form.formState.errors.phone?.message}
+      >
+        <Input
+          {...form.register("phone")}
+          autoComplete="tel"
+          inputMode="tel"
+          placeholder="91234567"
+        />
+      </Field>
       <Field
         label={locale === "en" ? "Email (optional)" : "電郵（可留空）"}
         error={form.formState.errors.email?.message}
@@ -328,13 +212,7 @@ export function SignupForm({
       <Button
         className="w-full"
         type="submit"
-        disabled={
-          !isHydrated ||
-          isSubmitting ||
-          isSmsPending ||
-          !codeMatchesPhone ||
-          !/^\d{6}$/.test(verificationCode ?? "")
-        }
+        disabled={!isHydrated || isSubmitting}
       >
         {isSubmitting ? "..." : locale === "en" ? "Create account" : "建立帳戶"}
       </Button>

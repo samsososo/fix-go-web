@@ -2,7 +2,6 @@
 
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 
 import {
   clearSession,
@@ -25,7 +24,6 @@ import {
   reserveProSubscriptionCheckout,
   reserveProSubscriptionReactivationCheckout,
   resetPasswordWithRecovery,
-  reserveSmsVerificationAttempt,
   setProStripeCustomer,
 } from "@/lib/mock/db";
 import {
@@ -39,25 +37,19 @@ import {
   updateAdminRequestStatus,
   updateProBookingStatus,
 } from "@/lib/mock/repositories";
-import {
-  checkSmsVerificationCode,
-  sendSmsVerificationCode,
-  SmsVerificationError,
-} from "@/lib/sms-verification";
 import { BookingStatus, RequestStatus } from "@/types/domain";
 import {
   ProProfileInput,
   PasswordResetInput,
   QuoteFormInput,
   RequestFormInput,
-  SignupWithVerificationInput,
+  SignupInput,
   loginSchema,
   passwordResetSchema,
   proProfileSchema,
   quoteFormSchema,
   requestFormSchema,
-  signupSmsRequestSchema,
-  signupWithVerificationSchema,
+  signupSchema,
 } from "@/lib/validation";
 import {
   createCardSetupCheckoutSession,
@@ -557,91 +549,15 @@ export async function startLoginAction(input: {
   };
 }
 
-export async function requestSignupSmsCodeAction(input: {
-  phone: string;
-  locale: string;
-}) {
-  const parsed = signupSmsRequestSchema.safeParse(input);
-  const isEnglish = input.locale === "en";
-
-  if (!parsed.success) {
-    return {
-      ok: false as const,
-      error: isEnglish
-        ? "Enter a valid Hong Kong mobile number."
-        : "請輸入有效香港手提電話。",
-    };
-  }
-
-  if (await findUserByIdentifier(parsed.data.phone)) {
-    return {
-      ok: false as const,
-      error: isEnglish
-        ? "This phone number already has an account. Please log in instead."
-        : "呢個電話號碼已經有帳戶，請直接登入。",
-    };
-  }
-
-  const requestHeaders = await headers();
-  const forwardedFor = requestHeaders.get("x-forwarded-for");
-  const ipAddress =
-    forwardedFor?.split(",")[0]?.trim() ||
-    requestHeaders.get("x-real-ip") ||
-    undefined;
-  const reservation = await reserveSmsVerificationAttempt({
-    phone: parsed.data.phone,
-    ipAddress,
-  });
-
-  if (!reservation.ok) {
-    return {
-      ok: false as const,
-      retryAfterSeconds: reservation.retryAfterSeconds,
-      error:
-        reservation.reason === "cooldown"
-          ? isEnglish
-            ? `Please wait ${reservation.retryAfterSeconds} seconds before resending.`
-            : `請等 ${reservation.retryAfterSeconds} 秒先重新發送。`
-          : isEnglish
-            ? "Too many SMS requests. Please try again later."
-            : "SMS 請求次數太多，請稍後再試。",
-    };
-  }
-
-  try {
-    await sendSmsVerificationCode(parsed.data.phone, parsed.data.locale);
-  } catch (error) {
-    const notConfigured =
-      error instanceof SmsVerificationError &&
-      error.reason === "not_configured";
-    return {
-      ok: false as const,
-      retryAfterSeconds: reservation.retryAfterSeconds,
-      error: notConfigured
-        ? isEnglish
-          ? "SMS verification has not been configured yet."
-          : "SMS 驗證尚未完成系統設定。"
-        : isEnglish
-          ? "The SMS could not be sent. Please try again later."
-          : "暫時未能發送 SMS，請稍後再試。",
-    };
-  }
-
-  return {
-    ok: true as const,
-    retryAfterSeconds: reservation.retryAfterSeconds,
-  };
-}
-
 export async function signUpAction(
-  input: SignupWithVerificationInput & { interfaceLocale?: string },
+  input: SignupInput & { interfaceLocale?: string },
 ) {
-  const parsed = signupWithVerificationSchema.safeParse(input);
+  const parsed = signupSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: "Please check the form fields." };
   }
 
-  const { verificationCode, ...signupData } = parsed.data;
+  const signupData = parsed.data;
   const isEnglish = input.interfaceLocale === "en";
   const [phoneAccount, emailAccount] = await Promise.all([
     findUserByIdentifier(signupData.phone),
@@ -656,35 +572,9 @@ export async function signUpAction(
     };
   }
 
-  let phoneApproved = false;
-  try {
-    phoneApproved = await checkSmsVerificationCode(
-      signupData.phone,
-      verificationCode,
-    );
-  } catch {
-    return {
-      ok: false as const,
-      error: isEnglish
-        ? "The SMS verification service is temporarily unavailable."
-        : "SMS 驗證服務暫時未能使用，請稍後再試。",
-    };
-  }
-
-  if (!phoneApproved) {
-    return {
-      ok: false as const,
-      error: isEnglish
-        ? "The verification code is incorrect or has expired."
-        : "驗證碼錯誤或已過期，請重新輸入或發送。",
-    };
-  }
-
   let user;
   try {
-    user = await createUserAccount(signupData, {
-      phoneVerifiedAt: new Date().toISOString(),
-    });
+    user = await createUserAccount(signupData);
   } catch (error) {
     return {
       ok: false,

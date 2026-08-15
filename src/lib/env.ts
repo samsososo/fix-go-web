@@ -25,24 +25,6 @@ const envSchema = z.object({
     .optional(),
   DEMO_PASSWORD: z.string().min(10).default("HotfixDemo123!"),
   BOOTSTRAP_ADMIN_PASSWORD: z.string().min(10).default("HotfixAdmin123!"),
-  TWILIO_API_KEY: z.preprocess(
-    (value) => (value === "" ? undefined : value),
-    z
-      .string()
-      .regex(/^SK[0-9a-fA-F]{32}$/)
-      .optional(),
-  ),
-  TWILIO_API_SECRET: z.preprocess(
-    (value) => (value === "" ? undefined : value),
-    z.string().min(16).optional(),
-  ),
-  TWILIO_VERIFY_SERVICE_SID: z.preprocess(
-    (value) => (value === "" ? undefined : value),
-    z
-      .string()
-      .regex(/^VA[0-9a-fA-F]{32}$/)
-      .optional(),
-  ),
   STRIPE_SECRET_KEY: z.preprocess(
     (value) => (value === "" ? undefined : value),
     z

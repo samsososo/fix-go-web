@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { Db, MongoClient } from "mongodb";
 
 import {
@@ -2573,70 +2572,6 @@ export async function resetMongoPasswordWithRecovery(
   await attempts.insertOne({ ...attemptBase, success: true });
   clearMongoSessionUserCache();
   return { ok: true as const };
-}
-
-export async function reserveMongoSmsVerificationAttempt(input: {
-  phone: string;
-  ipAddress?: string;
-}) {
-  const db = await getMongoDb();
-  const collection = db.collection<SecurityAttemptDoc>("securityAttempts");
-  const phone = input.phone.replace(/\D/g, "");
-  const ipHash = input.ipAddress
-    ? createHash("sha256").update(input.ipAddress).digest("hex")
-    : undefined;
-  const now = new Date();
-  const lastAttempt = await collection
-    .find({ attemptType: "smsVerification", phone })
-    .sort({ attemptedAt: -1 })
-    .limit(1)
-    .next();
-  if (lastAttempt) {
-    const elapsedMs = now.getTime() - lastAttempt.attemptedAt.getTime();
-    const cooldownMs = 60 * 1000;
-    if (elapsedMs < cooldownMs) {
-      return {
-        ok: false as const,
-        reason: "cooldown" as const,
-        retryAfterSeconds: Math.max(
-          1,
-          Math.ceil((cooldownMs - elapsedMs) / 1000),
-        ),
-      };
-    }
-  }
-
-  const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-  const [phoneAttempts, ipAttempts] = await Promise.all([
-    collection.countDocuments({
-      attemptType: "smsVerification",
-      phone,
-      attemptedAt: { $gte: hourAgo },
-    }),
-    ipHash
-      ? collection.countDocuments({
-          attemptType: "smsVerification",
-          ipHash,
-          attemptedAt: { $gte: hourAgo },
-        })
-      : Promise.resolve(0),
-  ]);
-  if (phoneAttempts >= 5 || ipAttempts >= 20) {
-    return {
-      ok: false as const,
-      reason: "rate_limited" as const,
-      retryAfterSeconds: 60 * 60,
-    };
-  }
-
-  await collection.insertOne({
-    attemptType: "smsVerification",
-    phone,
-    ipHash,
-    attemptedAt: now,
-    expiresAt: addMilliseconds(now, 24 * 60 * 60 * 1000),
-  });
-  return { ok: true as const, retryAfterSeconds: 60 };
 }
 
 export async function verifyMongoUserCredentials(

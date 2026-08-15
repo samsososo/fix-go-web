@@ -29,7 +29,6 @@ export {
   resetMongoPasswordWithRecovery as resetPasswordWithRecovery,
   reserveMongoProSubscriptionCheckout as reserveProSubscriptionCheckout,
   reserveMongoProSubscriptionReactivationCheckout as reserveProSubscriptionReactivationCheckout,
-  reserveMongoSmsVerificationAttempt as reserveSmsVerificationAttempt,
   setMongoProStripeCustomer as setProStripeCustomer,
   syncMongoProSubscriptionLifecycle as syncProSubscriptionLifecycle,
   verifyMongoUserCredentials as verifyUserCredentials,

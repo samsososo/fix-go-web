@@ -21,7 +21,7 @@ This is still not a finished enterprise marketplace, but it is now materially cl
 Implemented sections:
 
 - Public marketing pages: home, how it works, service categories, become a pro, FAQ / trust
-- Shared auth: verified Hong Kong phone plus password, SMS OTP signup, email/phone login, role-based session handling
+- Shared auth: required Hong Kong phone plus password, email/phone login, and role-based session handling. SMS phone verification is temporarily disabled.
 - Customer portal: dashboard, create request, request detail, incoming quotes, accept quote, booking history, booking calendar, message centre shell, profile / saved addresses
 - Pro portal: dashboard, profile completion, lead list/detail, send quote, accepted jobs, work calendar, booking status updates, earnings shell
 - Admin area: overview, customers, pros, requests, quotes, operations calendar, manual request status updates, pro verification toggle
@@ -113,9 +113,6 @@ Supported environment variables:
 - `ENABLE_DATABASE_SEEDING`
 - `DEMO_PASSWORD`
 - `BOOTSTRAP_ADMIN_PASSWORD`
-- `TWILIO_API_KEY`
-- `TWILIO_API_SECRET`
-- `TWILIO_VERIFY_SERVICE_SID`
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
 - `STRIPE_PRO_MONTHLY_PRICE_ID`
@@ -130,15 +127,6 @@ For MongoDB development, set these values in `.env.dev`:
 MONGODB_URI=mongodb+srv://...
 MONGODB_DATABASE=hotfix_dev
 ENABLE_DATABASE_SEEDING=true
-```
-
-Twilio Verify is required for public signup. Put development credentials in
-`.env.dev` and use a separate restricted API key in `.env.production`:
-
-```bash
-TWILIO_API_KEY=SK...
-TWILIO_API_SECRET=...
-TWILIO_VERIFY_SERVICE_SID=VA...
 ```
 
 Stripe Billing configuration is environment-specific. Use sandbox values in
@@ -290,7 +278,8 @@ Change them through environment variables before deploying.
 Production-readiness assumptions used for this pass:
 
 - Public signup remains limited to `customer` and `pro`; `admin` stays internal
-- Public signup verifies Hong Kong mobile numbers with Twilio Verify before creating an account
+- Public signup still requires a Hong Kong mobile number for contact, login, and account recovery, but SMS phone verification is temporarily disabled
+- Pros go straight to the billing setup flow after creating an account
 - MongoDB is the only supported persistence layer
 - File uploads, messaging, earnings, document verification depth and payouts remain intentionally simplified
 - Matching stays category + district based for now
