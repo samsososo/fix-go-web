@@ -60,6 +60,13 @@ Important implementation notes:
 - Demo quick-login and database seeding are environment-controlled and default off in production
 - Marketplace repositories expose a pragmatic typed interface backed by MongoDB
 
+## Operational Documentation
+
+- [Business rules](docs/business-rules.zh-HK.md)
+- [Facebook Group Hong Kong job-lead workflow](docs/facebook-group-job-lead-workflow.zh-HK.md)
+- [AI agent runbook for Facebook job leads](docs/facebook-group-job-lead-agent-runbook.md)
+- [Managed Facebook Page Graph API sync](tools/facebook_page_sync/README.md)
+
 ## Local Setup
 
 Requirements:

@@ -18,3 +18,10 @@
 - `docs/business-rules.zh-HK.md` 是目前商業邏輯的主要依據。
 - 新功能不得默默改變已確認的收費、試用、欠費、取消或權限規則。
 - 如果需求與既有商業規則衝突，實作前先指出衝突並請使用者確認。
+
+## Facebook 工作線索資料
+
+- 處理 Facebook Page／Group 工作線索、外部 lead 匯入、聯絡資料或相關 Excel 前，必須先閱讀 `docs/facebook-group-job-lead-workflow.zh-HK.md` 及 `docs/facebook-group-job-lead-agent-runbook.md`。
+- Facebook Pages 官方 Graph API 與 Facebook Groups 人手提供／獲 Meta 明確授權的收集流程是兩條不同路線，不得互相代替或聲稱有相同存取權限。
+- 外部 Facebook lead 只屬未驗證線索，不得直接建立正式 `ServiceRequest`、quote 或 booking，亦不得繞過師傅訂閱權限。
+- 不得提交 `data/`、screenshots、CSV／SQLite／Excel exports、browser profile、tokens 或 raw 聯絡資料；stage 及 push 前必須再次檢查 working tree。
