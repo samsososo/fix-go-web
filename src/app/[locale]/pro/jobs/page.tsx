@@ -1,9 +1,11 @@
 import { getLocale } from "next-intl/server";
+import { ArrowRight, Clock3, MapPin } from "lucide-react";
 
 import { EmptyState } from "@/components/shared/empty-state";
 import { PortalShell } from "@/components/shared/portal-shell";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Link } from "@/i18n/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { formatDateTime, formatDurationMinutes } from "@/lib/formatters";
 import { formatDistrictName } from "@/lib/hk-locale";
@@ -31,66 +33,64 @@ export default async function ProJobsPage() {
       }
       navItems={getProNav(locale, "jobs")}
     >
-      <div className="grid gap-5">
+      <div className="grid gap-3 sm:gap-5">
         {jobs.length ? (
           jobs.map((job) => (
-            <a key={job.id} href={`/pro/jobs/${job.id}`} className="block">
+            <Link
+              key={job.id}
+              href={`/pro/jobs/${job.id}`}
+              locale={locale}
+              className="block"
+            >
               <Card>
-                <CardContent className="space-y-4">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="font-display text-2xl font-bold">
+                <CardContent className="space-y-3 p-4 sm:p-6">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-display text-xl font-bold sm:text-2xl">
                         {job.request?.title}
                       </p>
-                      <p className="text-sm text-muted">
+                      <p className="mt-1 text-sm text-muted">
                         {job.customer?.fullName}
                       </p>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <p className="font-semibold">
-                        {formatCurrency(job.quote?.total ?? 0, locale)}
-                      </p>
-                      <StatusBadge status={job.status} locale={locale} />
-                    </div>
+                    <StatusBadge status={job.status} locale={locale} />
                   </div>
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <div className="rounded-2xl bg-soft-accent/45 p-4 text-sm">
-                      <p className="font-semibold">
-                        {locale === "en" ? "Scheduled date" : "預約時間"}
-                      </p>
-                      <p className="mt-2 text-muted">
-                        {formatDateTime(job.scheduledDate, locale)}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl bg-soft-accent/45 p-4 text-sm">
-                      <p className="font-semibold">
-                        {locale === "en" ? "District" : "地區"}
-                      </p>
-                      <p className="mt-2 text-muted">
+                  <div className="rounded-2xl bg-surface-tint/72 p-3">
+                    <p className="inline-flex items-center gap-2 text-sm font-bold text-primary">
+                      <Clock3 className="h-4 w-4" />
+                      {formatDateTime(job.scheduledDate, locale)}
+                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-medium text-muted">
+                      <span className="inline-flex items-center gap-1">
+                        <MapPin className="h-3.5 w-3.5" />
                         {job.request
                           ? formatDistrictName(
                               job.request.address.district,
                               locale,
                             )
                           : "-"}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl bg-soft-accent/45 p-4 text-sm">
-                      <p className="font-semibold">
-                        {locale === "en" ? "Estimated duration" : "預計需時"}
-                      </p>
-                      <p className="mt-2 text-muted">
+                      </span>
+                      <span>
                         {formatDurationMinutes(
                           job.estimatedDurationMinutes ??
                             job.quote?.estimatedDurationMinutes,
                           locale,
                         )}
-                      </p>
+                      </span>
                     </div>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-line/70 pt-3">
+                    <p className="font-display text-lg font-bold">
+                      {formatCurrency(job.quote?.total ?? 0, locale)}
+                    </p>
+                    <span className="inline-flex items-center gap-1 text-sm font-bold text-primary">
+                      {locale === "en" ? "Job detail" : "工作詳情"}
+                      <ArrowRight className="h-4 w-4" />
+                    </span>
                   </div>
                 </CardContent>
               </Card>
-            </a>
+            </Link>
           ))
         ) : (
           <EmptyState

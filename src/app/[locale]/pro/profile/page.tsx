@@ -6,7 +6,12 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ProProfileForm } from "@/features/pro/pro-profile-form";
 import { getCurrentUser } from "@/lib/auth";
-import { getProProfile } from "@/lib/mock/repositories";
+import { formatDistrictName } from "@/lib/hk-locale";
+import {
+  getProProfile,
+  listCategoryOptions,
+  listDistricts,
+} from "@/lib/mock/repositories";
 import { getProNav } from "@/lib/nav";
 
 export default async function ProProfilePage() {
@@ -16,7 +21,19 @@ export default async function ProProfilePage() {
     return null;
   }
 
-  const profile = await getProProfile(user.id);
+  const [profile, categoryOptions, districts] = await Promise.all([
+    getProProfile(user.id),
+    listCategoryOptions(locale as "zh-HK" | "en"),
+    listDistricts(),
+  ]);
+  const verificationLevelLabel =
+    locale === "en"
+      ? { none: "Standard", basic: "Basic", enhanced: "Enhanced" }[
+          profile.verificationLevel
+        ]
+      : { none: "標準", basic: "基本", enhanced: "進階" }[
+          profile.verificationLevel
+        ];
 
   return (
     <PortalShell
@@ -29,8 +46,9 @@ export default async function ProProfilePage() {
       }
       navItems={getProNav(locale, "profile")}
     >
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-3 gap-2 sm:gap-5">
         <StatCard
+          compact
           label={locale === "en" ? "Completed jobs" : "已完成工作"}
           value={profile.completedJobs}
           hint={
@@ -40,11 +58,13 @@ export default async function ProProfilePage() {
           }
         />
         <StatCard
+          compact
           label={locale === "en" ? "Avg response" : "平均回覆"}
           value={`${profile.avgResponseHours}h`}
           hint={locale === "en" ? "Lead response speed" : "回應工作機會的速度"}
         />
         <StatCard
+          compact
           label={locale === "en" ? "Emergency jobs" : "緊急工作"}
           value={
             profile.emergencyAvailability
@@ -63,9 +83,9 @@ export default async function ProProfilePage() {
         />
       </div>
 
-      <div className="mt-8 grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
+      <div className="mt-4 grid gap-4 sm:mt-8 lg:grid-cols-[0.85fr_1.15fr] lg:gap-5">
         <Card>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 p-4 sm:p-6">
             <h2 className="font-display text-2xl font-bold">
               {profile.displayName}
             </h2>
@@ -75,7 +95,7 @@ export default async function ProProfilePage() {
                 locale={locale}
               />
               <span className="text-sm text-muted">
-                {profile.verificationLevel}
+                {verificationLevelLabel}
               </span>
             </div>
             <p className="text-sm text-muted">
@@ -85,8 +105,16 @@ export default async function ProProfilePage() {
           </CardContent>
         </Card>
         <Card>
-          <CardContent>
-            <ProProfileForm locale={locale} profile={profile} />
+          <CardContent className="p-4 sm:p-6">
+            <ProProfileForm
+              locale={locale}
+              profile={profile}
+              categoryOptions={categoryOptions}
+              districtOptions={districts.map((entry) => ({
+                value: entry.district,
+                label: formatDistrictName(entry.district, locale),
+              }))}
+            />
           </CardContent>
         </Card>
       </div>

@@ -108,6 +108,12 @@ textarea {
   @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
 }
 
+@media (max-width: 1023px) {
+  body:has(.pro-workspace-shell) footer {
+    display: none !important;
+  }
+}
+
 .section-title {
   font-family: var(--font-display), sans-serif;
   @apply text-3xl font-extrabold tracking-normal text-foreground sm:text-4xl;

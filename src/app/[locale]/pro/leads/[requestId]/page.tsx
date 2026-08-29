@@ -1,16 +1,19 @@
 import { getLocale } from "next-intl/server";
 import { redirect } from "next/navigation";
+import { ArrowLeft, Clock3, MapPin, Paperclip, Tag } from "lucide-react";
 
 import { PortalShell } from "@/components/shared/portal-shell";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { WhatsAppContactLink } from "@/components/shared/whatsapp-contact-link";
 import { Card, CardContent } from "@/components/ui/card";
 import { QuoteForm } from "@/features/pro/quote-form";
+import { Link } from "@/i18n/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import {
   formatDateTime,
   formatDurationMinutes,
   formatHongKongPhone,
+  formatUrgencyLabel,
 } from "@/lib/formatters";
 import { formatDistrictName } from "@/lib/hk-locale";
 import { getLeadDetail } from "@/lib/mock/repositories";
@@ -53,42 +56,98 @@ export default async function ProLeadDetailPage({
       subtitle={lead.title}
       navItems={getProNav(locale, "leads")}
     >
-      <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
+      <Link
+        href="/pro/leads"
+        locale={locale}
+        className="mb-3 inline-flex min-h-11 items-center gap-2 rounded-full px-1 text-sm font-semibold text-primary"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        {locale === "en" ? "Back to job leads" : "返回工作機會"}
+      </Link>
+      <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr] lg:gap-5">
         <Card>
-          <CardContent className="space-y-5">
-            <div className="flex items-center justify-between">
-              <h2 className="font-display text-2xl font-bold">{lead.title}</h2>
+          <CardContent className="space-y-4 p-4 sm:p-6">
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="font-display text-xl font-bold sm:text-2xl">
+                {lead.title}
+              </h2>
               <StatusBadge status={lead.status} locale={locale} />
             </div>
             <p className="text-sm leading-7 text-muted">{lead.description}</p>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-2xl bg-soft-accent/45 p-4 text-sm">
+            <div className="flex flex-wrap gap-2 text-xs font-semibold text-foreground/68">
+              <span className="inline-flex items-center gap-1 rounded-full bg-surface-tint px-2.5 py-1.5">
+                <Clock3 className="h-3.5 w-3.5 text-primary" />
+                {formatUrgencyLabel(lead.urgency, locale)}
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-surface-tint px-2.5 py-1.5">
+                <MapPin className="h-3.5 w-3.5 text-primary" />
+                {formatDistrictName(lead.address.district, locale)}
+              </span>
+              {lead.category ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-surface-tint px-2.5 py-1.5">
+                  <Tag className="h-3.5 w-3.5 text-primary" />
+                  {lead.category.name[locale as "zh-HK" | "en"]}
+                </span>
+              ) : null}
+              {lead.attachments.length ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-surface-tint px-2.5 py-1.5">
+                  <Paperclip className="h-3.5 w-3.5 text-primary" />
+                  {locale === "en"
+                    ? `${lead.attachments.length} attachment`
+                    : `${lead.attachments.length} 個附件`}
+                </span>
+              ) : null}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-2xl bg-paper-warm p-3 text-sm sm:p-4">
+                <p className="font-semibold">
+                  {locale === "en" ? "Budget" : "預算"}
+                </p>
+                <p className="mt-1 font-display text-lg font-bold">
+                  {lead.budgetMax
+                    ? `HK$${lead.budgetMin ?? 0}–${lead.budgetMax}`
+                    : locale === "en"
+                      ? "Flexible"
+                      : "彈性處理"}
+                </p>
+              </div>
+              <div className="rounded-2xl bg-soft-accent/45 p-3 text-sm sm:p-4">
                 <p className="font-semibold">
                   {locale === "en" ? "Customer" : "客戶"}
                 </p>
-                <p className="mt-2 text-muted">{lead.customer.fullName}</p>
+                <p className="mt-1 text-muted">{lead.customer.fullName}</p>
                 <p className="mt-1 text-muted">
                   {formatHongKongPhone(lead.customer.phone)}
                 </p>
-                <WhatsAppContactLink
-                  phone={lead.customer.phone}
-                  locale={locale}
-                  className="mt-3"
-                />
-              </div>
-              <div className="rounded-2xl bg-soft-accent/45 p-4 text-sm">
-                <p className="font-semibold">
-                  {locale === "en" ? "District" : "地區"}
-                </p>
-                <p className="mt-2 text-muted">
-                  {formatDistrictName(lead.address.district, locale)}
-                </p>
               </div>
             </div>
+            <WhatsAppContactLink
+              phone={lead.customer.phone}
+              locale={locale}
+              className="min-h-12 w-full justify-center"
+            />
+            {lead.attachments.length ? (
+              <div className="rounded-2xl border border-line/80 bg-white/72 p-3">
+                <p className="text-sm font-semibold">
+                  {locale === "en" ? "Customer attachments" : "客戶附件"}
+                </p>
+                <div className="mt-2 space-y-1">
+                  {lead.attachments.map((attachment) => (
+                    <p
+                      key={attachment.id}
+                      className="flex items-center gap-2 text-sm text-muted"
+                    >
+                      <Paperclip className="h-4 w-4 shrink-0 text-primary" />
+                      <span className="truncate">{attachment.fileName}</span>
+                    </p>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 p-4 sm:p-6">
             <div className="space-y-3">
               <h2 className="font-display text-2xl font-bold">
                 {lead.existingQuote

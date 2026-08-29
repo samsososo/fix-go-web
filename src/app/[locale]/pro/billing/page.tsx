@@ -219,7 +219,7 @@ export default async function ProBillingPage({
                 </span>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 <PlanPoint
                   icon={<CalendarRange className="h-5 w-5" />}
                   title={
@@ -332,12 +332,16 @@ function PlanPoint({
   description: string;
 }) {
   return (
-    <div className="rounded-2xl border border-line/70 bg-white/66 p-4">
+    <div className="rounded-2xl border border-line/70 bg-white/66 p-3 sm:p-4">
       <span className="text-primary" aria-hidden="true">
         {icon}
       </span>
-      <h2 className="mt-3 font-semibold">{title}</h2>
-      <p className="mt-1 text-xs leading-6 text-muted">{description}</p>
+      <h2 className="mt-2 text-sm font-semibold sm:mt-3 sm:text-base">
+        {title}
+      </h2>
+      <p className="mt-1 hidden text-xs leading-6 text-muted sm:block">
+        {description}
+      </p>
     </div>
   );
 }

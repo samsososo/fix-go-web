@@ -64,6 +64,7 @@ export default async function ProCalendarPage({
         locale={locale}
         events={events}
         view={view}
+        preferMobileAgenda={!viewParam}
         initialDate={date}
         referenceDate={referenceDate}
         perspectiveLabel={locale === "en" ? "My timetable" : "我的日程"}

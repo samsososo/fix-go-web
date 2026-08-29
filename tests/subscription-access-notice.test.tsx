@@ -95,6 +95,6 @@ describe("subscription access notice", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "New-work access remains available until",
     );
-    expect(screen.getByRole("status")).toHaveTextContent("8/24/2026");
+    expect(screen.getByRole("status")).toHaveTextContent("24 August 2026");
   });
 });

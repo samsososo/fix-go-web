@@ -1,11 +1,11 @@
 import { getLocale } from "next-intl/server";
+import { ArrowRight, Clock3, MapPin, Paperclip } from "lucide-react";
 
 import { EmptyState } from "@/components/shared/empty-state";
 import { PortalShell } from "@/components/shared/portal-shell";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Select } from "@/components/ui/select";
+import { Link } from "@/i18n/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { formatUrgencyLabel } from "@/lib/formatters";
 import { formatDistrictName } from "@/lib/hk-locale";
@@ -15,6 +15,7 @@ import {
 } from "@/lib/mock/repositories";
 import { getProNav } from "@/lib/nav";
 import { getProSubscriptionEntitlement } from "@/lib/pro-subscription-entitlement";
+import { cn } from "@/lib/utils";
 
 export default async function ProLeadsPage({
   searchParams,
@@ -62,110 +63,121 @@ export default async function ProLeadsPage({
       }
       navItems={getProNav(locale, "leads")}
     >
-      <form
-        action="/pro/leads"
-        className="mb-5 flex flex-col gap-3 rounded-2xl border border-line bg-card/90 p-4 sm:flex-row sm:items-end"
-      >
-        <div className="min-w-0 flex-1">
-          <label
-            htmlFor="lead-category-filter"
-            className="text-sm font-semibold text-muted"
-          >
-            {locale === "en" ? "Category filter" : "分類篩選"}
-          </label>
-          <Select
-            id="lead-category-filter"
-            name="category"
-            defaultValue={activeCategory}
-            className="mt-2"
-          >
-            <option value="all">
-              {locale === "en" ? "All categories" : "全部分類"}
-            </option>
-            {categoryOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </Select>
+      <section className="mb-4 rounded-2xl border border-line/80 bg-card/90 p-3 sm:p-4">
+        <div className="flex items-center justify-between gap-3 px-1">
+          <p className="text-sm font-semibold text-muted">
+            {locale === "en" ? "Filter by category" : "按分類篩選"}
+          </p>
+          <p className="text-xs font-semibold text-primary">
+            {locale === "en"
+              ? `${leads.length} results`
+              : `${leads.length} 個結果`}
+          </p>
         </div>
-        <Button type="submit" className="sm:w-auto">
-          {locale === "en" ? "Apply" : "套用"}
-        </Button>
-      </form>
-      <div className="grid gap-5">
+        <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+          <Link
+            href="/pro/leads"
+            locale={locale}
+            className={cn(
+              "inline-flex min-h-11 shrink-0 items-center rounded-full border px-4 text-sm font-semibold",
+              activeCategory === "all"
+                ? "border-primary bg-primary !text-white"
+                : "border-line bg-white text-foreground/72",
+            )}
+          >
+            {locale === "en" ? "All" : "全部"}
+          </Link>
+          {categoryOptions.map((option) => (
+            <Link
+              key={option.id}
+              href={`/pro/leads?category=${encodeURIComponent(option.id)}`}
+              locale={locale}
+              className={cn(
+                "inline-flex min-h-11 shrink-0 items-center rounded-full border px-4 text-sm font-semibold",
+                activeCategory === option.id
+                  ? "border-primary bg-primary !text-white"
+                  : "border-line bg-white text-foreground/72",
+              )}
+            >
+              {option.label}
+            </Link>
+          ))}
+        </div>
+      </section>
+      <div className="grid gap-3 sm:gap-5">
         {leads.length ? (
           leads.map((lead) => (
-            <a key={lead.id} href={`/pro/leads/${lead.id}`} className="block">
+            <Link
+              key={lead.id}
+              href={`/pro/leads/${lead.id}`}
+              locale={locale}
+              className="block"
+            >
               <Card>
-                <CardContent className="space-y-4">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="font-display text-2xl font-bold">
+                <CardContent className="space-y-3 p-4 sm:p-6">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-display text-xl font-bold sm:text-2xl">
                         {lead.title}
                       </p>
-                      <p className="text-sm text-muted">
-                        {lead.customer.fullName} ·{" "}
-                        {formatDistrictName(lead.address.district, locale)} ·{" "}
-                        {lead.category?.name[locale as "zh-HK" | "en"]}
-                      </p>
                     </div>
-                    <div className="flex items-center gap-3">
-                      {lead.existingQuote ? (
-                        <span className="text-xs text-muted">
-                          {locale === "en"
-                            ? "Quote already sent"
-                            : "已提交報價"}
-                        </span>
-                      ) : null}
-                      <StatusBadge status={lead.status} locale={locale} />
-                    </div>
+                    <StatusBadge status={lead.status} locale={locale} />
                   </div>
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <div className="rounded-2xl bg-soft-accent/45 p-4 text-sm">
-                      <p className="font-semibold">
-                        {locale === "en" ? "Urgency" : "緊急程度"}
-                      </p>
-                      <p className="mt-2 text-muted">
-                        {formatUrgencyLabel(lead.urgency, locale)}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl bg-soft-accent/45 p-4 text-sm">
-                      <p className="font-semibold">
+                  <p className="line-clamp-2 text-sm leading-6 text-muted">
+                    {lead.description}
+                  </p>
+                  <div className="flex flex-wrap gap-2 text-xs font-semibold text-foreground/68">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-surface-tint px-2.5 py-1.5">
+                      <Clock3 className="h-3.5 w-3.5 text-primary" />
+                      {formatUrgencyLabel(lead.urgency, locale)}
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-surface-tint px-2.5 py-1.5">
+                      <MapPin className="h-3.5 w-3.5 text-primary" />
+                      {formatDistrictName(lead.address.district, locale)}
+                    </span>
+                    <span className="rounded-full bg-surface-tint px-2.5 py-1.5">
+                      {lead.category?.name[locale as "zh-HK" | "en"]}
+                    </span>
+                    {lead.attachmentIds.length ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-surface-tint px-2.5 py-1.5">
+                        <Paperclip className="h-3.5 w-3.5 text-primary" />
+                        {locale === "en"
+                          ? `${lead.attachmentIds.length} file`
+                          : `${lead.attachmentIds.length} 張相`}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="flex items-end justify-between gap-3 border-t border-line/70 pt-3">
+                    <div>
+                      <p className="text-xs text-muted">
                         {locale === "en" ? "Budget" : "預算"}
                       </p>
-                      <p className="mt-2 text-muted">
+                      <p className="font-display text-lg font-bold">
                         {lead.budgetMax
-                          ? `HK$${lead.budgetMin ?? 0} - HK$${lead.budgetMax}`
+                          ? `HK$${lead.budgetMin ?? 0}–${lead.budgetMax}`
                           : locale === "en"
                             ? "Flexible"
                             : "彈性處理"}
                       </p>
                     </div>
-                    <div className="rounded-2xl bg-soft-accent/45 p-4 text-sm">
-                      <p className="font-semibold">
-                        {canCreateQuotes
+                    <span className="inline-flex items-center gap-1 text-sm font-bold text-primary">
+                      {lead.existingQuote
+                        ? locale === "en"
+                          ? "View quote"
+                          : "查看報價"
+                        : canCreateQuotes
                           ? locale === "en"
-                            ? "Open lead"
-                            : "查看詳情"
+                            ? "Quote"
+                            : "報價"
                           : locale === "en"
-                            ? "Quote record"
-                            : "報價紀錄"}
-                      </p>
-                      <p className="mt-2 text-muted">
-                        {canCreateQuotes
-                          ? locale === "en"
-                            ? "Review scope and send quote"
-                            : "查看工作範圍及提交報價"
-                          : locale === "en"
-                            ? "Review your submitted quote"
-                            : "查看你已提交嘅報價"}
-                      </p>
-                    </div>
+                            ? "View"
+                            : "查看"}
+                      <ArrowRight className="h-4 w-4" />
+                    </span>
                   </div>
                 </CardContent>
               </Card>
-            </a>
+            </Link>
           ))
         ) : (
           <EmptyState

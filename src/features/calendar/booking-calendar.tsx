@@ -250,6 +250,7 @@ export function BookingCalendar({
   locale,
   events,
   view: initialView = "month",
+  preferMobileAgenda = false,
   initialDate,
   referenceDate,
   emptyTitle,
@@ -259,6 +260,7 @@ export function BookingCalendar({
   locale: string;
   events: CalendarEvent[];
   view?: CalendarView;
+  preferMobileAgenda?: boolean;
   initialDate?: string;
   referenceDate: string;
   emptyTitle: string;
@@ -381,6 +383,17 @@ export function BookingCalendar({
 
   useEffect(() => {
     if (
+      preferMobileAgenda &&
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 767px)").matches
+    ) {
+      const timeoutId = window.setTimeout(() => setView("week"), 0);
+      return () => window.clearTimeout(timeoutId);
+    }
+  }, [preferMobileAgenda]);
+
+  useEffect(() => {
+    if (
       typeof window === "undefined" ||
       window.location.protocol === "about:"
     ) {
@@ -473,7 +486,7 @@ export function BookingCalendar({
         </Card>
       ) : null}
 
-      <Card className="overflow-hidden bg-card/95">
+      <Card className="-mx-3 overflow-hidden bg-card/95 sm:mx-0">
         <CardContent className="p-0">
           <div className="border-b border-line/70 bg-white/55 p-4 sm:p-5">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
@@ -511,14 +524,14 @@ export function BookingCalendar({
                     type="button"
                     onClick={() => movePeriod(-1)}
                     aria-label={previousLabel}
-                    className="flex h-10 w-10 items-center justify-center rounded-lg text-foreground/72 transition hover:bg-surface-tint hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/35"
+                    className="flex h-11 w-11 items-center justify-center rounded-lg text-foreground/72 transition hover:bg-surface-tint hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/35"
                   >
                     <ChevronLeft className="h-5 w-5" aria-hidden="true" />
                   </button>
                   <button
                     type="button"
                     onClick={() => setCursor(today)}
-                    className="min-h-10 rounded-lg px-3 text-sm font-bold text-foreground transition hover:bg-surface-tint hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/35"
+                    className="min-h-11 rounded-lg px-3 text-sm font-bold text-foreground transition hover:bg-surface-tint hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/35"
                   >
                     {locale === "en" ? "Today" : "今天"}
                   </button>
@@ -526,13 +539,18 @@ export function BookingCalendar({
                     type="button"
                     onClick={() => movePeriod(1)}
                     aria-label={nextLabel}
-                    className="flex h-10 w-10 items-center justify-center rounded-lg text-foreground/72 transition hover:bg-surface-tint hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/35"
+                    className="flex h-11 w-11 items-center justify-center rounded-lg text-foreground/72 transition hover:bg-surface-tint hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/35"
                   >
                     <ChevronRight className="h-5 w-5" aria-hidden="true" />
                   </button>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div
+                  className={cn(
+                    "grid grid-cols-2 gap-2",
+                    view === "week" && "hidden md:grid",
+                  )}
+                >
                   <label>
                     <span className="sr-only">
                       {locale === "en" ? "Choose month" : "選擇月份"}
@@ -585,7 +603,7 @@ export function BookingCalendar({
                       aria-pressed={view === option}
                       onClick={() => setView(option)}
                       className={cn(
-                        "min-h-10 rounded-lg px-3 text-sm font-bold transition focus-visible:ring-2 focus-visible:ring-primary/35",
+                        "min-h-11 rounded-lg px-3 text-sm font-bold transition focus-visible:ring-2 focus-visible:ring-primary/35",
                         view === option
                           ? "bg-white text-primary shadow-sm"
                           : "text-muted hover:text-primary",

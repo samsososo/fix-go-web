@@ -33,11 +33,12 @@ export function PaymentMethodUpdateButton({ locale }: { locale: string }) {
   const [message, setMessage] = useState<string | null>(null);
 
   return (
-    <div className="space-y-2">
+    <div className="w-full space-y-2 sm:w-auto">
       <Button
         type="button"
         variant="outline"
         size="sm"
+        className="w-full sm:w-auto"
         disabled={!hydrated || pending}
         onClick={() =>
           startTransition(async () => {
@@ -76,10 +77,11 @@ export function RetryOutstandingPaymentButton({ locale }: { locale: string }) {
   const [message, setMessage] = useState<string | null>(null);
 
   return (
-    <div className="space-y-2">
+    <div className="w-full space-y-2 sm:w-auto">
       <Button
         type="button"
         size="sm"
+        className="w-full sm:w-auto"
         disabled={!hydrated || pending}
         onClick={() =>
           startTransition(async () => {
@@ -151,11 +153,12 @@ export function SubscriptionRenewalButton({
   };
 
   return (
-    <div className="space-y-2">
+    <div className="w-full space-y-2 sm:w-auto">
       <Button
         type="button"
         variant={cancelAtPeriodEnd ? "outline" : "ghost"}
         size="sm"
+        className="w-full sm:w-auto"
         disabled={!hydrated || pending}
         onClick={submit}
       >

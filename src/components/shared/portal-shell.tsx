@@ -58,9 +58,9 @@ export function PortalShell({
 }) {
   if (isProWorkspace(navItems)) {
     return (
-      <div className="content-wrap py-6 sm:py-8">
+      <div className="pro-workspace-shell content-wrap pb-28 pt-4 sm:pt-6 lg:py-8">
         <div className="grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
-          <aside className="surface-panel sticky top-20 z-40 flex min-w-0 flex-col gap-5 p-4 lg:top-24 lg:min-h-[calc(100vh-7rem)]">
+          <aside className="surface-panel sticky top-24 z-40 hidden min-h-[calc(100vh-7rem)] min-w-0 flex-col gap-5 p-4 lg:flex">
             <Link
               href="/pro"
               locale={locale}
@@ -74,14 +74,14 @@ export function PortalShell({
               </span>
             </Link>
 
-            <nav className="grid w-full min-w-0 grid-cols-2 gap-2 pb-1 sm:flex sm:flex-wrap lg:grid lg:grid-cols-1 lg:pb-0">
+            <nav className="grid w-full min-w-0 gap-2">
               {navItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
                   locale={locale}
                   className={cn(
-                    "inline-flex min-w-0 items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition sm:shrink-0 lg:w-full",
+                    "inline-flex min-w-0 items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition lg:w-full",
                     item.active
                       ? "bg-primary !text-white shadow-[0_12px_24px_rgba(15,99,95,0.18)]"
                       : item.href === "/pro/leads"
@@ -108,7 +108,7 @@ export function PortalShell({
           </aside>
 
           <main className="min-w-0">
-            <div className="surface-panel mb-5 p-5 sm:p-6">
+            <div className="mb-4 px-1 py-1 lg:mb-5 lg:rounded-[24px] lg:border lg:border-line/70 lg:bg-white/78 lg:p-6 lg:shadow-[0_14px_36px_rgba(24,36,51,0.06)] lg:backdrop-blur">
               <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
                   <p className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
@@ -119,14 +119,14 @@ export function PortalShell({
                     />
                     {locale === "en" ? "Pro workspace" : "師傅工作台"}
                   </p>
-                  <h1 className="mt-2 font-display text-3xl font-extrabold tracking-normal sm:text-4xl">
+                  <h1 className="mt-1.5 font-display text-3xl font-extrabold tracking-normal sm:text-4xl">
                     {title}
                   </h1>
-                  <p className="mt-3 max-w-2xl text-sm leading-7 text-muted">
+                  <p className="mt-1.5 max-w-2xl text-sm leading-6 text-muted lg:mt-3 lg:leading-7">
                     {subtitle}
                   </p>
                 </div>
-                <div className="flex shrink-0 items-center">
+                <div className="hidden shrink-0 items-center lg:flex">
                   <LogoutButton locale={locale} />
                 </div>
               </div>
@@ -135,6 +135,31 @@ export function PortalShell({
             {children}
           </main>
         </div>
+
+        <nav
+          aria-label={locale === "en" ? "Pro workspace" : "師傅工作台"}
+          className="fixed inset-x-0 bottom-0 z-50 border-t border-line/80 bg-[#fffdf8]/96 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 shadow-[0_-12px_30px_rgba(24,36,51,0.08)] backdrop-blur-xl lg:hidden"
+        >
+          <div className="mx-auto grid max-w-lg grid-cols-5">
+            {navItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                locale={locale}
+                aria-current={item.active ? "page" : undefined}
+                className={cn(
+                  "flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-semibold leading-4 transition",
+                  item.active
+                    ? "bg-primary/10 text-primary"
+                    : "text-foreground/62 hover:bg-surface-tint hover:text-primary",
+                )}
+              >
+                <NavIcon href={item.href} className="h-5 w-5" />
+                <span className="max-w-full truncate">{item.label}</span>
+              </Link>
+            ))}
+          </div>
+        </nav>
       </div>
     );
   }

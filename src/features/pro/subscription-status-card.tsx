@@ -227,7 +227,7 @@ export function SubscriptionStatusCard({
 
           {subscription.stripeSubscriptionId &&
           (status !== "terminated" || subscription.pastDueInvoiceId) ? (
-            <div className="flex flex-wrap items-start gap-3">
+            <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-start sm:gap-3">
               <PaymentMethodUpdateButton locale={locale} />
               {isPastDue && subscription.pastDueInvoiceId ? (
                 <RetryOutstandingPaymentButton locale={locale} />
@@ -239,10 +239,24 @@ export function SubscriptionStatusCard({
                 "cancel_at_period_end",
                 "suspended",
               ].includes(status) ? (
-                <SubscriptionRenewalButton
-                  locale={locale}
-                  cancelAtPeriodEnd={subscription.cancelAtPeriodEnd}
-                />
+                subscription.cancelAtPeriodEnd ? (
+                  <SubscriptionRenewalButton
+                    locale={locale}
+                    cancelAtPeriodEnd
+                  />
+                ) : (
+                  <details className="group w-full sm:w-auto">
+                    <summary className="flex min-h-11 cursor-pointer list-none items-center justify-center rounded-full px-4 text-sm font-semibold text-muted transition hover:bg-white/72 hover:text-foreground [&::-webkit-details-marker]:hidden">
+                      {isEnglish ? "Manage renewal" : "管理自動續訂"}
+                    </summary>
+                    <div className="mt-2">
+                      <SubscriptionRenewalButton
+                        locale={locale}
+                        cancelAtPeriodEnd={false}
+                      />
+                    </div>
+                  </details>
+                )
               ) : null}
             </div>
           ) : null}

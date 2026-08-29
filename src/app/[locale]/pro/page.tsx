@@ -106,7 +106,7 @@ export default async function ProDashboardPage() {
     >
       <section className="grid gap-5">
         <Card className="border-primary/20 bg-gradient-to-br from-white/88 via-card/92 to-surface-tint/82">
-          <CardContent className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <CardContent className="grid gap-4 p-4 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
             <div className="space-y-3">
               <div className="inline-flex items-center gap-2 rounded-full border border-primary/16 bg-white/70 px-3 py-1 text-xs font-semibold text-primary">
                 {canCreateQuotes ? (
@@ -123,7 +123,7 @@ export default async function ProDashboardPage() {
                     : "現有工作繼續保留"}
               </div>
               <div className="space-y-2">
-                <h2 className="font-display text-3xl font-extrabold tracking-normal text-foreground sm:text-4xl">
+                <h2 className="font-display text-2xl font-extrabold tracking-normal text-foreground sm:text-4xl">
                   {canCreateQuotes
                     ? openLeads.length > 0
                       ? locale === "en"
@@ -147,7 +147,7 @@ export default async function ProDashboardPage() {
                 </p>
               </div>
             </div>
-            <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
+            <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
               <Link
                 href={canCreateQuotes ? "/pro/leads" : "/pro/billing"}
                 locale={locale}
@@ -178,7 +178,7 @@ export default async function ProDashboardPage() {
           </CardContent>
         </Card>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-2 xl:grid-cols-4">
           <DashboardStat
             label={
               canCreateQuotes
@@ -447,13 +447,15 @@ function DashboardStat({
 }) {
   return (
     <Card>
-      <CardContent className="flex items-start justify-between gap-4 p-5">
+      <CardContent className="flex items-start justify-between gap-3 p-4 sm:p-5">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-muted">{label}</p>
-          <p className="mt-2 font-display text-4xl font-extrabold">{value}</p>
-          <p className="mt-1 truncate text-xs text-muted">{hint}</p>
+          <p className="mt-1 font-display text-3xl font-extrabold sm:mt-2 sm:text-4xl">
+            {value}
+          </p>
+          <p className="mt-1 line-clamp-2 text-xs text-muted">{hint}</p>
         </div>
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-surface-tint text-primary">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-tint text-primary sm:h-11 sm:w-11 sm:rounded-2xl">
           {icon}
         </span>
       </CardContent>

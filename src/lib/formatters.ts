@@ -50,9 +50,15 @@ export function formatDateTime(value: string | undefined, locale: string) {
     return locale === "en" ? "Not set" : "未設定";
   }
 
-  return new Date(value).toLocaleString(locale, {
+  return new Intl.DateTimeFormat(locale === "en" ? "en-HK" : "zh-HK", {
     timeZone: "Asia/Hong_Kong",
-  });
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 export function formatDurationMinutes(
