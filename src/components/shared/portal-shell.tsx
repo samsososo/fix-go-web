@@ -60,7 +60,7 @@ export function PortalShell({
     return (
       <div className="content-wrap py-6 sm:py-8">
         <div className="grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
-          <aside className="surface-panel sticky top-20 z-40 flex flex-col gap-5 p-4 lg:top-24 lg:min-h-[calc(100vh-7rem)]">
+          <aside className="surface-panel sticky top-20 z-40 flex min-w-0 flex-col gap-5 p-4 lg:top-24 lg:min-h-[calc(100vh-7rem)]">
             <Link
               href="/pro"
               locale={locale}
@@ -74,14 +74,14 @@ export function PortalShell({
               </span>
             </Link>
 
-            <nav className="flex gap-2 overflow-x-auto pb-1 lg:grid lg:overflow-visible lg:pb-0">
+            <nav className="grid w-full min-w-0 grid-cols-2 gap-2 pb-1 sm:flex sm:flex-wrap lg:grid lg:grid-cols-1 lg:pb-0">
               {navItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
                   locale={locale}
                   className={cn(
-                    "inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition lg:w-full",
+                    "inline-flex min-w-0 items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition sm:shrink-0 lg:w-full",
                     item.active
                       ? "bg-primary !text-white shadow-[0_12px_24px_rgba(15,99,95,0.18)]"
                       : item.href === "/pro/leads"
