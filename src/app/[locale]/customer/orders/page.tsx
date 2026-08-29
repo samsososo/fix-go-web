@@ -1,4 +1,5 @@
 import { getLocale } from "next-intl/server";
+import { ArrowRight } from "lucide-react";
 
 import { EmptyState } from "@/components/shared/empty-state";
 import { PortalShell } from "@/components/shared/portal-shell";
@@ -41,10 +42,10 @@ export default async function OrdersPage() {
               className="block"
             >
               <Card>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-4 p-4 sm:p-6">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="font-display text-2xl font-bold">
+                    <div className="min-w-0">
+                      <p className="font-display text-xl font-bold sm:text-2xl">
                         {request.title}
                       </p>
                       <p className="text-sm text-muted">
@@ -57,8 +58,8 @@ export default async function OrdersPage() {
                       locale={locale}
                     />
                   </div>
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <div className="rounded-2xl bg-soft-accent/45 p-4 text-sm">
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4">
+                    <div className="order-2 rounded-2xl bg-soft-accent/45 p-3 text-sm sm:p-4 md:order-1">
                       <p className="font-semibold">
                         {locale === "en" ? "Accepted quote" : "已接受報價"}
                       </p>
@@ -71,7 +72,7 @@ export default async function OrdersPage() {
                         )}
                       </p>
                     </div>
-                    <div className="rounded-2xl bg-soft-accent/45 p-4 text-sm">
+                    <div className="order-1 col-span-2 rounded-2xl bg-soft-accent/45 p-3 text-sm sm:p-4 md:order-2 md:col-span-1">
                       <p className="font-semibold">
                         {locale === "en" ? "Scheduled date" : "預約時間"}
                       </p>
@@ -79,7 +80,7 @@ export default async function OrdersPage() {
                         {formatDateTime(request.booking?.scheduledDate, locale)}
                       </p>
                     </div>
-                    <div className="rounded-2xl bg-soft-accent/45 p-4 text-sm">
+                    <div className="order-3 rounded-2xl bg-soft-accent/45 p-3 text-sm sm:p-4">
                       <p className="font-semibold">
                         {locale === "en" ? "Estimated duration" : "預計需時"}
                       </p>
@@ -94,6 +95,10 @@ export default async function OrdersPage() {
                       </p>
                     </div>
                   </div>
+                  <p className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
+                    {locale === "en" ? "View order" : "查看訂單"}
+                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  </p>
                 </CardContent>
               </Card>
             </a>
@@ -107,6 +112,9 @@ export default async function OrdersPage() {
                 ? "Accepted quotes will appear here once a professional is confirmed."
                 : "當你接受報價並確認師傅後，訂單會集中顯示於此。"
             }
+            actionHref="/customer/requests/new"
+            actionLabel={locale === "en" ? "Create a request" : "建立服務請求"}
+            compact
           />
         )}
       </div>

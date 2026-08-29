@@ -30,8 +30,8 @@ export default async function NewRequestPage() {
       }
       navItems={getCustomerNav(locale, "new-request")}
     >
-      <Card>
-        <CardContent>
+      <Card className="border-0 bg-transparent shadow-none backdrop-blur-none hover:shadow-none sm:border sm:border-line/70 sm:bg-card/90 sm:shadow-[0_12px_34px_rgba(24,36,51,0.06)] sm:backdrop-blur">
+        <CardContent className="p-0 sm:p-6">
           <RequestForm
             locale={locale}
             customerPhone={user.phone}

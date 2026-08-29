@@ -81,19 +81,41 @@ export const addressSchema = z.object({
   landmarkNotes: z.string().optional(),
 });
 
-export const requestFormSchema = z.object({
-  title: z.string().min(5),
-  description: z.string().min(20),
-  categoryId: z.string().min(1),
-  subcategoryId: z.string().min(1),
-  urgency: z.enum(["asap", "today", "tomorrow", "scheduled"]),
-  scheduledDate: z.string().optional(),
-  budgetMin: z.coerce.number().min(0).optional(),
-  budgetMax: z.coerce.number().min(0).optional(),
-  accessNotes: z.string().optional(),
-  address: addressSchema,
-  attachmentNames: z.array(z.string()).default([]),
-});
+export const requestFormSchema = z
+  .object({
+    title: z.string().min(5),
+    description: z.string().min(20),
+    categoryId: z.string().min(1),
+    subcategoryId: z.string().min(1),
+    urgency: z.enum(["asap", "today", "tomorrow", "scheduled"]),
+    scheduledDate: z.string().optional(),
+    budgetMin: z.coerce.number().min(0).optional(),
+    budgetMax: z.coerce.number().min(0).optional(),
+    accessNotes: z.string().optional(),
+    address: addressSchema,
+    attachmentNames: z.array(z.string()).default([]),
+  })
+  .superRefine((value, context) => {
+    if (value.urgency === "scheduled" && !value.scheduledDate) {
+      context.addIssue({
+        code: "custom",
+        message: "Scheduled date required",
+        path: ["scheduledDate"],
+      });
+    }
+
+    if (
+      value.budgetMin !== undefined &&
+      value.budgetMax !== undefined &&
+      value.budgetMin > value.budgetMax
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Maximum budget must not be below minimum budget",
+        path: ["budgetMax"],
+      });
+    }
+  });
 
 export const quoteFormSchema = z.object({
   quoteAmount: z.coerce.number().min(1),

@@ -58,59 +58,76 @@ export function LiveQuotesPanel({
 
   return (
     <div className="grid gap-4">
+      <p className="text-sm leading-6 text-muted" aria-live="polite">
+        {locale === "en"
+          ? `${quotesQuery.data.length} quote${quotesQuery.data.length === 1 ? "" : "s"} received. Review the price, timing and scope before accepting.`
+          : `已收到 ${quotesQuery.data.length} 份報價；接受前請比較價錢、時間同工作範圍。`}
+      </p>
       {quotesQuery.data.map((quote) => (
-        <Card key={quote.id}>
-          <CardContent className="space-y-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="font-display text-2xl font-bold">
+        <Card key={quote.id} className="bg-white/72 shadow-none">
+          <CardContent className="space-y-4 p-4 sm:p-5">
+            <div className="flex flex-col gap-3">
+              <div className="min-w-0">
+                <p className="font-display text-xl font-bold sm:text-2xl">
                   {quote.proName}
                 </p>
-                <p className="text-sm text-muted">{quote.noteToCustomer}</p>
+                <p className="mt-1 text-sm leading-6 text-muted">
+                  {quote.noteToCustomer}
+                </p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line/70 pt-3">
                 <StatusBadge status={quote.status as never} locale={locale} />
                 <p className="font-display text-2xl font-bold">
                   {formatCurrency(quote.total, locale)}
                 </p>
               </div>
             </div>
-            <div className="grid gap-3 text-sm text-muted md:grid-cols-2">
-              <div>
+            <div className="grid grid-cols-2 gap-3 text-sm text-muted">
+              <div className="rounded-2xl bg-soft-accent/45 p-3">
                 <p className="font-semibold text-foreground">
                   {locale === "en" ? "Earliest visit" : "最早可上門"}
                 </p>
-                <p>{formatDateTime(quote.earliestAvailability, locale)}</p>
+                <p className="mt-1 leading-6">
+                  {formatDateTime(quote.earliestAvailability, locale)}
+                </p>
               </div>
-              <div>
+              <div className="rounded-2xl bg-soft-accent/45 p-3">
                 <p className="font-semibold text-foreground">
                   {locale === "en" ? "Estimated duration" : "預計需時"}
                 </p>
-                <p>
+                <p className="mt-1 leading-6">
                   {formatDurationMinutes(
                     quote.estimatedDurationMinutes,
                     locale,
                   )}
                 </p>
               </div>
-              <div>
-                <p className="font-semibold text-foreground">
-                  {locale === "en" ? "Included work" : "包含項目"}
-                </p>
-                <p>{quote.includedWork}</p>
-              </div>
-              <div>
-                <p className="font-semibold text-foreground">
-                  {locale === "en" ? "Exclusions" : "不包括"}
-                </p>
-                <p>{quote.exclusions}</p>
-              </div>
             </div>
+            <details className="rounded-2xl border border-line/70 bg-white/72 p-3 text-sm">
+              <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-foreground">
+                {locale === "en" ? "View work scope" : "查看工作範圍"}
+              </summary>
+              <div className="space-y-4 border-t border-line/70 pt-4 text-muted">
+                <div>
+                  <p className="font-semibold text-foreground">
+                    {locale === "en" ? "Included work" : "包含項目"}
+                  </p>
+                  <p className="mt-1 leading-6">{quote.includedWork}</p>
+                </div>
+                <div>
+                  <p className="font-semibold text-foreground">
+                    {locale === "en" ? "Exclusions" : "不包括"}
+                  </p>
+                  <p className="mt-1 leading-6">{quote.exclusions}</p>
+                </div>
+              </div>
+            </details>
             {quote.status === "sent" && quote.canAccept ? (
               <AcceptQuoteButton
                 locale={locale}
                 requestId={requestId}
                 quoteId={quote.id}
+                quoteSummary={`${quote.proName} · ${formatCurrency(quote.total, locale)}`}
               />
             ) : quote.status === "sent" ? (
               <p className="rounded-xl border border-warning/20 bg-warning/8 px-3 py-2 text-sm leading-6 text-warning">

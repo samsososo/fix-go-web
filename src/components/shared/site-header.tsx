@@ -1,6 +1,9 @@
 import {
   BriefcaseBusiness,
   CalendarDays,
+  CheckSquare,
+  CirclePlus,
+  ClipboardList,
   CreditCard,
   Menu,
   UserRound,
@@ -74,9 +77,7 @@ export async function SiteHeader({
       <div
         className={cn(
           "content-wrap flex items-center justify-between gap-4",
-          user?.role === "pro"
-            ? "min-h-16 py-2 lg:min-h-20 lg:py-4"
-            : "min-h-20 py-4",
+          user ? "min-h-16 py-2 lg:min-h-20 lg:py-4" : "min-h-20 py-4",
         )}
       >
         <Link
@@ -87,7 +88,7 @@ export async function SiteHeader({
           <BrandLogo
             className={cn(
               "max-w-[9rem] shrink sm:h-12 sm:max-w-[11rem]",
-              user?.role === "pro" ? "h-8 lg:h-10" : "h-10",
+              user ? "h-8 lg:h-10" : "h-10",
             )}
             priority
           />
@@ -169,7 +170,7 @@ export async function SiteHeader({
           <MobileMenuDetails className="group relative lg:hidden [&_summary::-webkit-details-marker]:hidden">
             <summary className="flex min-h-11 min-w-11 cursor-pointer list-none items-center justify-center rounded-full border border-white bg-card/90 p-2.5 text-foreground shadow-[0_10px_20px_rgba(24,36,51,0.05)] transition hover:border-primary/25 hover:text-primary">
               <span className="sr-only">
-                {user?.role === "pro"
+                {user
                   ? locale === "en"
                     ? "Open account menu"
                     : "開啟帳戶選單"
@@ -177,7 +178,7 @@ export async function SiteHeader({
                     ? "Open menu"
                     : "開啟選單"}
               </span>
-              {user?.role === "pro" ? (
+              {user ? (
                 <UserRound className="h-5 w-5" />
               ) : (
                 <Menu className="h-5 w-5" />
@@ -207,6 +208,55 @@ export async function SiteHeader({
                   </div>
                   <LogoutButton locale={locale} className="w-full" />
                 </div>
+              ) : user?.role === "customer" ? (
+                <div className="space-y-3">
+                  <div>
+                    <p className="px-3 text-xs font-semibold text-muted">
+                      {locale === "en" ? "Customer account" : "客戶帳戶"}
+                    </p>
+                    <p className="mt-1 px-3 font-display text-lg font-bold">
+                      {user.fullName}
+                    </p>
+                  </div>
+                  <div className="grid gap-1">
+                    <Link
+                      href="/customer"
+                      locale={locale}
+                      className="flex min-h-12 items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-white hover:text-primary"
+                    >
+                      <ClipboardList className="h-5 w-5" />
+                      {locale === "en" ? "My requests" : "我的請求"}
+                    </Link>
+                    <Link
+                      href="/customer/requests/new"
+                      locale={locale}
+                      className="flex min-h-12 items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-white hover:text-primary"
+                    >
+                      <CirclePlus className="h-5 w-5" />
+                      {locale === "en" ? "New request" : "建立請求"}
+                    </Link>
+                    <Link
+                      href="/customer/orders"
+                      locale={locale}
+                      className="flex min-h-12 items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-white hover:text-primary"
+                    >
+                      <CheckSquare className="h-5 w-5" />
+                      {locale === "en" ? "Orders" : "訂單"}
+                    </Link>
+                    <Link
+                      href="/customer/profile"
+                      locale={locale}
+                      className="flex min-h-12 items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-white hover:text-primary"
+                    >
+                      <UserRound className="h-5 w-5" />
+                      {locale === "en" ? "Account details" : "帳戶資料"}
+                    </Link>
+                  </div>
+                  <div className="border-t border-line pt-3">
+                    <LocaleSwitcher />
+                  </div>
+                  <LogoutButton locale={locale} className="w-full" />
+                </div>
               ) : (
                 <div className="space-y-2">
                   <div className="pb-2">
@@ -229,9 +279,7 @@ export async function SiteHeader({
                         locale={locale}
                         className={`${buttonVariants({ variant: "outline", size: "sm" })} w-full`}
                       >
-                        {user.role === "customer"
-                          ? t("nav.customer")
-                          : t("nav.admin")}
+                        {t("nav.admin")}
                       </Link>
                     ) : (
                       <div className="space-y-2">

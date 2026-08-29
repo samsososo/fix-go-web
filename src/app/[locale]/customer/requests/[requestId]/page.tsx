@@ -36,10 +36,10 @@ export default async function CustomerRequestDetailPage({
       navItems={getCustomerNav(locale, "dashboard")}
     >
       <div className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
-        <Card>
-          <CardContent className="space-y-5">
-            <div className="flex items-center justify-between">
-              <h2 className="font-display text-2xl font-bold">
+        <Card className="order-2 lg:order-1">
+          <CardContent className="space-y-5 p-4 sm:p-6">
+            <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="font-display text-xl font-bold sm:text-2xl">
                 {request.title}
               </h2>
               <StatusBadge status={request.status} locale={locale} />
@@ -74,10 +74,10 @@ export default async function CustomerRequestDetailPage({
                   request.timeline.map((event) => (
                     <div
                       key={event.id}
-                      className="flex items-center justify-between gap-3 rounded-xl bg-background px-3 py-2"
+                      className="flex flex-col items-start gap-1 rounded-xl bg-background px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
                     >
                       <span>{formatStatusLabel(event.status, locale)}</span>
-                      <span>
+                      <span className="text-xs sm:text-sm">
                         {new Date(event.createdAt).toLocaleString(locale)}
                       </span>
                     </div>
@@ -94,9 +94,9 @@ export default async function CustomerRequestDetailPage({
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="space-y-4">
-            <h2 className="font-display text-2xl font-bold">
+        <Card className="order-1 lg:order-2">
+          <CardContent className="space-y-4 p-4 sm:p-6">
+            <h2 className="font-display text-xl font-bold sm:text-2xl">
               {locale === "en" ? "Incoming quotes" : "收到的報價"}
             </h2>
             <LiveQuotesPanel requestId={request.id} locale={locale} />

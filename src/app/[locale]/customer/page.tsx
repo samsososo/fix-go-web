@@ -9,6 +9,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { formatDistrictName } from "@/lib/hk-locale";
 import { getCustomerDashboard } from "@/lib/mock/repositories";
 import { getCustomerNav } from "@/lib/nav";
+import { cn } from "@/lib/utils";
 
 export default async function CustomerDashboardPage() {
   const locale = await getLocale();
@@ -30,36 +31,45 @@ export default async function CustomerDashboardPage() {
       }
       navItems={getCustomerNav(locale, "dashboard")}
     >
-      <div className="grid gap-5 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
         <StatCard
           label={locale === "en" ? "Active requests" : "進行中請求"}
           value={dashboard.stats.active}
           hint={
             locale === "en" ? "Open marketplace demand" : "仍在撮合中的需求"
           }
+          compact
         />
         <StatCard
           label={locale === "en" ? "Awaiting quotes" : "等待報價"}
           value={dashboard.stats.awaitingQuotes}
           hint={locale === "en" ? "Need pro responses" : "仍需師傅回覆"}
+          compact
         />
         <StatCard
           label={locale === "en" ? "Accepted bookings" : "已確認訂單"}
           value={dashboard.stats.acceptedBookings}
           hint={locale === "en" ? "Ready for scheduling" : "待安排或進行中"}
+          compact
         />
         <StatCard
           label={locale === "en" ? "Completed jobs" : "已完成工作"}
           value={dashboard.stats.completed}
           hint={locale === "en" ? "Finished successfully" : "已完結項目"}
+          compact
         />
       </div>
 
-      <div className="mt-8 grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
+      <div
+        className={cn(
+          "mt-5 grid gap-5 sm:mt-8",
+          dashboard.activity.length && "lg:grid-cols-[1.2fr_0.8fr]",
+        )}
+      >
         <Card>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 p-4 sm:p-6">
             <div className="flex items-center justify-between">
-              <h2 className="font-display text-2xl font-bold">
+              <h2 className="font-display text-xl font-bold sm:text-2xl">
                 {locale === "en" ? "Recent requests" : "最近請求"}
               </h2>
             </div>
@@ -71,8 +81,8 @@ export default async function CustomerDashboardPage() {
                     href={`/customer/requests/${request.id}`}
                     className="block rounded-2xl border border-line bg-white p-4"
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
+                    <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
+                      <div className="min-w-0">
                         <p className="font-semibold">{request.title}</p>
                         <p className="text-sm text-muted">
                           {formatDistrictName(request.address.district, locale)}
@@ -92,29 +102,36 @@ export default async function CustomerDashboardPage() {
                     ? "Create your first request to begin collecting quotes from professionals."
                     : "建立第一張服務請求後，即可開始收集師傅報價。"
                 }
+                actionHref="/customer/requests/new"
+                actionLabel={
+                  locale === "en" ? "Create first request" : "建立第一張請求"
+                }
+                compact
               />
             )}
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="space-y-4">
-            <h2 className="font-display text-2xl font-bold">
-              {locale === "en" ? "Recent activity" : "最近動態"}
-            </h2>
-            <div className="space-y-3">
-              {dashboard.activity.map((item) => (
-                <div
-                  key={item.id}
-                  className="rounded-2xl border border-line bg-white p-4"
-                >
-                  <p className="font-semibold">{item.title}</p>
-                  <p className="text-sm text-muted">{item.body}</p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        {dashboard.activity.length ? (
+          <Card>
+            <CardContent className="space-y-4 p-4 sm:p-6">
+              <h2 className="font-display text-xl font-bold sm:text-2xl">
+                {locale === "en" ? "Recent activity" : "最近動態"}
+              </h2>
+              <div className="space-y-3">
+                {dashboard.activity.map((item) => (
+                  <div
+                    key={item.id}
+                    className="rounded-2xl border border-line bg-white p-4"
+                  >
+                    <p className="font-semibold">{item.title}</p>
+                    <p className="text-sm text-muted">{item.body}</p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
     </PortalShell>
   );

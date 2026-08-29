@@ -11,7 +11,12 @@ describe("routing helpers", () => {
   it("keeps portal nav hrefs locale-free so next-intl can prefix them once", () => {
     expect(
       getCustomerNav("zh-HK", "dashboard").map((item) => item.href),
-    ).toEqual(["/customer", "/customer/requests/new", "/customer/orders"]);
+    ).toEqual([
+      "/customer",
+      "/customer/requests/new",
+      "/customer/orders",
+      "/customer/profile",
+    ]);
 
     expect(getProNav("zh-HK", "dashboard").map((item) => item.href)).toEqual([
       "/pro",

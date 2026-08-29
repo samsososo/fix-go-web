@@ -1,8 +1,23 @@
 import { BrandLogo } from "@/components/shared/brand-logo";
+import { cn } from "@/lib/utils";
+import { type UserRole } from "@/types/domain";
 
-export function SiteFooter({ locale }: { locale: string }) {
+export function SiteFooter({
+  locale,
+  userRole,
+}: {
+  locale: string;
+  userRole?: UserRole;
+}) {
+  const hasMobileWorkspaceNav = userRole === "customer" || userRole === "pro";
+
   return (
-    <footer className="mt-auto border-t border-white/70 bg-white/55 py-10">
+    <footer
+      className={cn(
+        "mt-auto border-t border-white/70 bg-white/55 pt-10",
+        hasMobileWorkspaceNav ? "pb-28 lg:pb-10" : "pb-10",
+      )}
+    >
       <div className="content-wrap flex flex-col gap-5 text-sm text-muted sm:flex-row sm:items-end sm:justify-between">
         <div>
           <BrandLogo className="h-12 max-w-[13rem]" />

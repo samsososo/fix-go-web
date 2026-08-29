@@ -15,6 +15,11 @@ export function getCustomerNav(locale: string, current: string) {
       label: locale === "en" ? "Orders" : "訂單",
       active: current === "orders",
     },
+    {
+      href: "/customer/profile",
+      label: locale === "en" ? "Account" : "帳戶",
+      active: current === "profile",
+    },
   ];
 }
 

@@ -676,7 +676,13 @@ export async function createRequestAction(input: {
   const customer = await requireRole("customer", input.locale);
   const parsed = requestFormSchema.safeParse(input.values);
   if (!parsed.success) {
-    return { ok: false, error: "Please review the request details." };
+    return {
+      ok: false,
+      error:
+        input.locale === "en"
+          ? "Please review the request details."
+          : "請檢查服務請求資料後再試。",
+    };
   }
 
   const request = await createCustomerRequest(

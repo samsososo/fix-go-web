@@ -41,10 +41,10 @@ export default async function CustomerBookingDetailPage({
     >
       <div className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
         <Card>
-          <CardContent className="space-y-5">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <h2 className="font-display text-2xl font-bold">
+          <CardContent className="space-y-5 p-4 sm:p-6">
+            <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+              <div className="min-w-0">
+                <h2 className="font-display text-xl font-bold sm:text-2xl">
                   {booking.request?.title}
                 </h2>
                 <p className="text-sm text-muted">{booking.pro?.fullName}</p>
@@ -54,8 +54,8 @@ export default async function CustomerBookingDetailPage({
             <p className="text-sm leading-7 text-muted">
               {booking.request?.description}
             </p>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-2xl bg-soft-accent/45 p-4 text-sm">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              <div className="rounded-2xl bg-soft-accent/45 p-3 text-sm sm:p-4">
                 <p className="font-semibold">
                   {locale === "en" ? "Accepted total" : "已確認總額"}
                 </p>
@@ -63,7 +63,7 @@ export default async function CustomerBookingDetailPage({
                   {formatCurrency(booking.quote?.total ?? 0, locale)}
                 </p>
               </div>
-              <div className="rounded-2xl bg-soft-accent/45 p-4 text-sm">
+              <div className="rounded-2xl bg-soft-accent/45 p-3 text-sm sm:p-4">
                 <p className="font-semibold">
                   {locale === "en" ? "Estimated duration" : "預計需時"}
                 </p>
@@ -76,7 +76,7 @@ export default async function CustomerBookingDetailPage({
                 </p>
               </div>
             </div>
-            <div className="rounded-2xl bg-soft-accent/45 p-4 text-sm">
+            <div className="rounded-2xl border border-primary/15 bg-surface-tint/72 p-4 text-sm">
               <p className="font-semibold">
                 {locale === "en" ? "Scheduled date" : "預約時間"}
               </p>
@@ -103,8 +103,8 @@ export default async function CustomerBookingDetailPage({
         </Card>
 
         <Card>
-          <CardContent className="space-y-4">
-            <h2 className="font-display text-2xl font-bold">
+          <CardContent className="space-y-4 p-4 sm:p-6">
+            <h2 className="font-display text-xl font-bold sm:text-2xl">
               {locale === "en" ? "Booking timeline" : "訂單時間線"}
             </h2>
             <div className="space-y-3">

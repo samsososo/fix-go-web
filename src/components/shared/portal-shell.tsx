@@ -2,8 +2,11 @@ import {
   BriefcaseBusiness,
   CalendarDays,
   CheckSquare,
+  CirclePlus,
+  ClipboardList,
   CreditCard,
   Grid2X2,
+  UserRound,
 } from "lucide-react";
 
 import { BrandLogo } from "@/components/shared/brand-logo";
@@ -15,6 +18,10 @@ type PortalNavItem = { href: string; label: string; active?: boolean };
 
 function isProWorkspace(navItems: PortalNavItem[]) {
   return navItems.some((item) => item.href === "/pro");
+}
+
+function isCustomerWorkspace(navItems: PortalNavItem[]) {
+  return navItems.some((item) => item.href === "/customer");
 }
 
 function NavIcon({ href, className }: { href: string; className?: string }) {
@@ -38,6 +45,34 @@ function NavIcon({ href, className }: { href: string; className?: string }) {
 
   if (href === "/pro/billing") {
     return <CreditCard className={iconClass} aria-hidden="true" />;
+  }
+
+  return null;
+}
+
+function CustomerNavIcon({
+  href,
+  className,
+}: {
+  href: string;
+  className?: string;
+}) {
+  const iconClass = cn("h-4 w-4", className);
+
+  if (href === "/customer") {
+    return <ClipboardList className={iconClass} aria-hidden="true" />;
+  }
+
+  if (href === "/customer/requests/new") {
+    return <CirclePlus className={iconClass} aria-hidden="true" />;
+  }
+
+  if (href === "/customer/orders") {
+    return <CheckSquare className={iconClass} aria-hidden="true" />;
+  }
+
+  if (href === "/customer/profile") {
+    return <UserRound className={iconClass} aria-hidden="true" />;
   }
 
   return null;
@@ -155,6 +190,94 @@ export function PortalShell({
                 )}
               >
                 <NavIcon href={item.href} className="h-5 w-5" />
+                <span className="max-w-full truncate">{item.label}</span>
+              </Link>
+            ))}
+          </div>
+        </nav>
+      </div>
+    );
+  }
+
+  if (isCustomerWorkspace(navItems)) {
+    return (
+      <div className="content-wrap pb-28 pt-4 sm:pt-6 lg:py-8">
+        <div className="mb-5 px-1 py-1 sm:mb-6 lg:rounded-[24px] lg:border lg:border-line/70 lg:bg-white/78 lg:p-6 lg:shadow-[0_14px_36px_rgba(24,36,51,0.06)] lg:backdrop-blur">
+          <div className="flex items-start justify-between gap-5">
+            <div className="min-w-0">
+              <p className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
+                <CustomerNavIcon
+                  href={
+                    navItems.find((item) => item.active)?.href ?? "/customer"
+                  }
+                />
+                {locale === "en" ? "Customer workspace" : "客戶工作台"}
+              </p>
+              <h1 className="mt-1.5 font-display text-3xl font-extrabold tracking-tight sm:text-4xl">
+                {title}
+              </h1>
+              <p className="mt-1.5 max-w-2xl text-sm leading-6 text-muted sm:mt-3 sm:leading-7">
+                {subtitle}
+              </p>
+            </div>
+            <div className="hidden shrink-0 lg:block">
+              <LogoutButton locale={locale} />
+            </div>
+          </div>
+
+          <nav
+            aria-label={locale === "en" ? "Customer workspace" : "客戶工作台"}
+            className="mt-6 hidden flex-wrap gap-2 border-t border-line/70 pt-4 lg:flex"
+          >
+            {navItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                locale={locale}
+                aria-current={item.active ? "page" : undefined}
+                className={cn(
+                  "inline-flex min-h-11 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition",
+                  item.active
+                    ? "bg-primary !text-white"
+                    : "text-foreground/72 hover:bg-surface-tint hover:text-primary",
+                )}
+              >
+                <CustomerNavIcon href={item.href} />
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+        </div>
+
+        {children}
+
+        <nav
+          aria-label={locale === "en" ? "Customer workspace" : "客戶工作台"}
+          className="fixed inset-x-0 bottom-0 z-50 border-t border-line/80 bg-[#fffdf8]/96 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 shadow-[0_-12px_30px_rgba(24,36,51,0.08)] backdrop-blur-xl lg:hidden"
+        >
+          <div
+            className={cn(
+              "mx-auto grid max-w-lg",
+              navItems.length === 4 ? "grid-cols-4" : "grid-cols-3",
+            )}
+          >
+            {navItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                locale={locale}
+                aria-current={item.active ? "page" : undefined}
+                className={cn(
+                  "flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-semibold leading-4 transition",
+                  item.active
+                    ? "bg-primary/10 text-primary"
+                    : "text-foreground/62 hover:bg-surface-tint hover:text-primary",
+                  item.href === "/customer/requests/new" &&
+                    !item.active &&
+                    "text-primary",
+                )}
+              >
+                <CustomerNavIcon href={item.href} className="h-5 w-5" />
                 <span className="max-w-full truncate">{item.label}</span>
               </Link>
             ))}
