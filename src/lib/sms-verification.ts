@@ -2,17 +2,23 @@ import { cookies } from "next/headers";
 
 import { env, shouldUseSecureCookies } from "@/lib/env";
 import {
+  consumeVerifiedSignupPhone,
   findUserById,
   getSmsVerificationChallenge,
   getSmsVerificationConfig,
+  getSignupSmsVerificationChallenge,
+  getVerifiedSignupPhone,
   issueSmsVerificationChallenge,
+  issueSignupSmsVerificationChallenge,
   verifySmsVerificationChallenge,
+  verifySignupSmsVerificationChallenge,
 } from "@/lib/mock/db";
 import type { SmsVerificationConfigState } from "@/lib/sms-verification-config";
 import type { User } from "@/types/domain";
 
 export const CONSOLE_SMS_POC_CODE = "123456";
 const PENDING_SMS_COOKIE_NAME = `${env.SESSION_COOKIE_NAME}_sms_pending`;
+const SIGNUP_SMS_COOKIE_NAME = `${env.SESSION_COOKIE_NAME}_sms_signup`;
 const PENDING_SMS_COOKIE_MAX_AGE_SECONDS = 24 * 60 * 60;
 
 function pendingCookieOptions() {
@@ -45,9 +51,24 @@ async function storePendingChallenge(challengeId: string) {
   cookieStore.set(PENDING_SMS_COOKIE_NAME, challengeId, pendingCookieOptions());
 }
 
+async function getSignupChallengeId() {
+  const cookieStore = await cookies();
+  return cookieStore.get(SIGNUP_SMS_COOKIE_NAME)?.value;
+}
+
+async function storeSignupChallenge(challengeId: string) {
+  const cookieStore = await cookies();
+  cookieStore.set(SIGNUP_SMS_COOKIE_NAME, challengeId, pendingCookieOptions());
+}
+
 export async function clearPendingSmsVerification() {
   const cookieStore = await cookies();
   cookieStore.delete(PENDING_SMS_COOKIE_NAME);
+}
+
+export async function clearPendingSignupSmsVerification() {
+  const cookieStore = await cookies();
+  cookieStore.delete(SIGNUP_SMS_COOKIE_NAME);
 }
 
 export async function startSmsPhoneVerification(user: User) {
@@ -102,7 +123,6 @@ export async function getPendingSmsVerification() {
   if (!challenge) {
     return null;
   }
-
   return {
     ...challenge,
     maskedPhone: `${challenge.phone.slice(0, 1)}*** ${challenge.phone.slice(-4)}`,
@@ -151,4 +171,115 @@ export async function resendPendingSmsCode() {
   }
 
   return startSmsPhoneVerification(user);
+}
+
+export async function startSignupSmsPhoneVerification(phone: string) {
+  const config = await getSmsVerificationConfig();
+  if (!config.effectiveEnabled) {
+    return { status: "disabled" as const };
+  }
+  if (!isSmsVerificationProviderReady(config)) {
+    return { status: "provider_unavailable" as const };
+  }
+
+  const result = await issueSignupSmsVerificationChallenge({
+    challengeId: await getSignupChallengeId(),
+    phone,
+    code: CONSOLE_SMS_POC_CODE,
+    otpTtlSeconds: config.otpTtlSeconds,
+    resendCooldownSeconds: config.resendCooldownSeconds,
+    maxSendsPerHour: config.maxSendsPerHour,
+  });
+
+  if (result.challengeId) {
+    await storeSignupChallenge(result.challengeId);
+  }
+  if (result.status === "sent") {
+    await deliverVerificationCode(phone, CONSOLE_SMS_POC_CODE);
+  }
+
+  return {
+    ...result,
+    maskedPhone: `${phone.slice(0, 1)}*** ${phone.slice(-4)}`,
+    consolePocCode: CONSOLE_SMS_POC_CODE,
+  };
+}
+
+export async function getPendingSignupSmsVerification() {
+  const config = await getSmsVerificationConfig();
+  if (!config.effectiveEnabled) {
+    return null;
+  }
+
+  const challengeId = await getSignupChallengeId();
+  if (!challengeId) {
+    return null;
+  }
+  const challenge = await getSignupSmsVerificationChallenge(challengeId);
+  if (!challenge) {
+    return null;
+  }
+  const now = Date.now();
+
+  return {
+    ...challenge,
+    maskedPhone: `${challenge.phone.slice(0, 1)}*** ${challenge.phone.slice(-4)}`,
+    verified: Boolean(
+      challenge.verifiedAt &&
+      challenge.verifiedExpiresAt &&
+      Date.parse(challenge.verifiedExpiresAt) > now,
+    ),
+    resendSeconds: Math.max(
+      0,
+      Math.ceil((Date.parse(challenge.resendAvailableAt) - now) / 1000),
+    ),
+    expirySeconds: Math.max(
+      0,
+      Math.ceil((Date.parse(challenge.codeExpiresAt) - now) / 1000),
+    ),
+    consolePocCode: isSmsVerificationProviderReady(config)
+      ? CONSOLE_SMS_POC_CODE
+      : undefined,
+  };
+}
+
+export async function verifyPendingSignupSmsCode(phone: string, code: string) {
+  const config = await getSmsVerificationConfig();
+  if (!config.effectiveEnabled) {
+    return { status: "disabled" as const };
+  }
+
+  const challengeId = await getSignupChallengeId();
+  if (!challengeId) {
+    return { status: "missing" as const };
+  }
+
+  return verifySignupSmsVerificationChallenge({
+    challengeId,
+    phone,
+    code,
+    maxAttempts: config.maxAttempts,
+  });
+}
+
+export async function getVerifiedPendingSignupPhone(phone: string) {
+  const challengeId = await getSignupChallengeId();
+  if (!challengeId) {
+    return null;
+  }
+
+  return getVerifiedSignupPhone({ challengeId, phone });
+}
+
+export async function consumePendingSignupPhoneVerification(phone: string) {
+  const challengeId = await getSignupChallengeId();
+  if (!challengeId) {
+    return false;
+  }
+
+  const consumed = await consumeVerifiedSignupPhone({ challengeId, phone });
+  if (consumed) {
+    await clearPendingSignupSmsVerification();
+  }
+  return consumed;
 }

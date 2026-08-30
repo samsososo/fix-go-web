@@ -69,9 +69,13 @@ import {
 } from "@/lib/pro-subscription-entitlement";
 import { hasConsumedLifetimeTrial } from "@/lib/subscription-policy";
 import {
+  consumePendingSignupPhoneVerification,
+  getVerifiedPendingSignupPhone,
   isSmsVerificationProviderReady,
   resendPendingSmsCode,
+  startSignupSmsPhoneVerification,
   startSmsPhoneVerification,
+  verifyPendingSignupSmsCode,
   verifyPendingSmsCode,
 } from "@/lib/sms-verification";
 
@@ -600,6 +604,7 @@ export async function signUpAction(
   const signupData = parsed.data;
   const isEnglish = input.interfaceLocale === "en";
   const smsConfig = await getSmsVerificationConfig();
+  let verifiedPhone: { phone: string; verifiedAt: string } | null = null;
   if (
     smsConfig.effectiveEnabled &&
     !isSmsVerificationProviderReady(smsConfig)
@@ -610,6 +615,17 @@ export async function signUpAction(
         ? "SMS verification is temporarily unavailable."
         : "SMS 驗證暫時未能使用，請稍後再試。",
     };
+  }
+  if (smsConfig.effectiveEnabled) {
+    verifiedPhone = await getVerifiedPendingSignupPhone(signupData.phone);
+    if (!verifiedPhone) {
+      return {
+        ok: false as const,
+        error: isEnglish
+          ? "Verify this phone number before creating your account."
+          : "請先驗證呢個電話號碼，再建立帳戶。",
+      };
+    }
   }
   const [phoneAccount, emailAccount] = await Promise.all([
     findUserByIdentifier(signupData.phone),
@@ -626,9 +642,9 @@ export async function signUpAction(
 
   let user;
   try {
-    user = smsConfig.effectiveEnabled
+    user = verifiedPhone
       ? await createUserAccount(signupData, {
-          phoneVerificationRequiredAt: new Date().toISOString(),
+          phoneVerifiedAt: verifiedPhone.verifiedAt,
         })
       : await createUserAccount(signupData);
   } catch (error) {
@@ -645,20 +661,8 @@ export async function signUpAction(
     securityQuestionId: signupData.securityQuestionId,
     securityAnswer: signupData.securityAnswer,
   });
-  if (smsConfig.effectiveEnabled) {
-    const verification = await startSmsPhoneVerification(user);
-    if (verification.status === "sent" || verification.status === "cooldown") {
-      revalidatePath("/");
-      return { ok: true as const, target: "/auth/verify" };
-    }
-    if (verification.status !== "disabled") {
-      return {
-        ok: false as const,
-        error: isEnglish
-          ? "Your account was created, but the verification code could not be sent. Log in to try again."
-          : "帳戶已建立，但暫時未能發送驗證碼。請登入後再試。",
-      };
-    }
+  if (verifiedPhone) {
+    await consumePendingSignupPhoneVerification(verifiedPhone.phone);
   }
   await signInAs(user.id);
 
@@ -670,6 +674,140 @@ export async function signUpAction(
         ? billingPath(signupData.locale)
         : localizedRoleHomePath(user.role, signupData.locale),
   };
+}
+
+function normalizeSignupPhone(phone: string) {
+  return phone.replace(/\D/g, "");
+}
+
+function isHongKongMobilePhone(phone: string) {
+  return /^(5|6|8|9)\d{7}$/.test(phone);
+}
+
+export async function requestSignupPhoneOtpAction(input: {
+  phone: string;
+  locale: string;
+}) {
+  const isEnglish = input.locale === "en";
+  const phone = normalizeSignupPhone(input.phone);
+  if (!isHongKongMobilePhone(phone)) {
+    return {
+      ok: false as const,
+      error: isEnglish
+        ? "Enter a valid Hong Kong mobile number."
+        : "請輸入有效香港手提電話。",
+    };
+  }
+
+  const config = await getSmsVerificationConfig();
+  if (!config.effectiveEnabled) {
+    return {
+      ok: false as const,
+      error: isEnglish
+        ? "Phone verification is not currently required."
+        : "目前毋須電話驗證。",
+    };
+  }
+  if (!isSmsVerificationProviderReady(config)) {
+    return {
+      ok: false as const,
+      error: isEnglish
+        ? "SMS verification is temporarily unavailable."
+        : "SMS 驗證暫時未能使用，請稍後再試。",
+    };
+  }
+  if (await findUserByIdentifier(phone)) {
+    return {
+      ok: false as const,
+      error: isEnglish
+        ? "An account with this phone already exists."
+        : "呢個電話已經有帳戶。",
+    };
+  }
+
+  const result = await startSignupSmsPhoneVerification(phone);
+  if (result.status === "sent" || result.status === "cooldown") {
+    return {
+      ok: true as const,
+      phone,
+      maskedPhone: result.maskedPhone,
+      retryAfterSeconds: result.retryAfterSeconds,
+      codeExpiresInSeconds: result.codeExpiresInSeconds,
+      consolePocCode: result.consolePocCode,
+      alreadySent: result.status === "cooldown",
+    };
+  }
+  if (result.status === "rate_limited") {
+    return {
+      ok: false as const,
+      retryAfterSeconds: result.retryAfterSeconds,
+      error: isEnglish
+        ? "Too many codes have been sent. Please try again later."
+        : "已發送太多驗證碼，請稍後再試。",
+    };
+  }
+
+  return {
+    ok: false as const,
+    error: isEnglish
+      ? "SMS verification is temporarily unavailable."
+      : "SMS 驗證暫時未能使用，請稍後再試。",
+  };
+}
+
+export async function verifySignupPhoneOtpAction(input: {
+  phone: string;
+  code: string;
+  locale: string;
+}) {
+  const isEnglish = input.locale === "en";
+  const phone = normalizeSignupPhone(input.phone);
+  const code = input.code.replace(/\D/g, "");
+  if (!isHongKongMobilePhone(phone)) {
+    return {
+      ok: false as const,
+      error: isEnglish
+        ? "Enter a valid Hong Kong mobile number."
+        : "請輸入有效香港手提電話。",
+    };
+  }
+  if (!/^\d{6}$/.test(code)) {
+    return {
+      ok: false as const,
+      error: isEnglish
+        ? "Enter the 6-digit verification code."
+        : "請輸入 6 位數字驗證碼。",
+    };
+  }
+
+  const result = await verifyPendingSignupSmsCode(phone, code);
+  if (result.status === "verified") {
+    return {
+      ok: true as const,
+      phone: result.phone,
+      verifiedAt: result.verifiedAt,
+    };
+  }
+
+  const errors = {
+    invalid: isEnglish
+      ? `Incorrect code. ${result.status === "invalid" ? result.attemptsRemaining : 0} attempts remaining.`
+      : `驗證碼不正確，仲有 ${result.status === "invalid" ? result.attemptsRemaining : 0} 次機會。`,
+    expired: isEnglish
+      ? "This code has expired. Request a new code."
+      : "驗證碼已過期，請重新發送。",
+    locked: isEnglish
+      ? "Too many incorrect attempts. Request a new code."
+      : "錯誤次數太多，請重新發送驗證碼。",
+    missing: isEnglish
+      ? "This verification session is no longer available. Request a new code."
+      : "驗證程序已失效，請重新發送驗證碼。",
+    disabled: isEnglish
+      ? "Phone verification has been turned off."
+      : "電話驗證已關閉。",
+  } as const;
+
+  return { ok: false as const, error: errors[result.status] };
 }
 
 export async function verifyPhoneOtpAction(input: {

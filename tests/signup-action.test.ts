@@ -28,8 +28,11 @@ vi.mock("@/lib/sms-verification", async (importOriginal) => {
     await importOriginal<typeof import("@/lib/sms-verification")>();
   return {
     ...actual,
+    consumePendingSignupPhoneVerification: vi.fn(),
+    getVerifiedPendingSignupPhone: vi.fn(),
     isSmsVerificationProviderReady: vi.fn(),
-    startSmsPhoneVerification: vi.fn(),
+    startSignupSmsPhoneVerification: vi.fn(),
+    verifyPendingSignupSmsCode: vi.fn(),
   };
 });
 
@@ -49,10 +52,17 @@ import {
   createUserAccount,
   findUserByIdentifier,
 } from "@/lib/mock/repositories";
-import { signUpAction } from "@/lib/actions";
 import {
+  requestSignupPhoneOtpAction,
+  signUpAction,
+  verifySignupPhoneOtpAction,
+} from "@/lib/actions";
+import {
+  consumePendingSignupPhoneVerification,
+  getVerifiedPendingSignupPhone,
   isSmsVerificationProviderReady,
-  startSmsPhoneVerification,
+  startSignupSmsPhoneVerification,
+  verifyPendingSignupSmsCode,
 } from "@/lib/sms-verification";
 import { defaultSmsVerificationConfig } from "@/lib/sms-verification-config";
 import type { SignupInput } from "@/lib/validation";
@@ -94,6 +104,7 @@ describe("signup SMS verification routing", () => {
     vi.clearAllMocks();
     vi.mocked(getSmsVerificationConfig).mockResolvedValue(disabledSmsConfig);
     vi.mocked(isSmsVerificationProviderReady).mockReturnValue(true);
+    vi.mocked(getVerifiedPendingSignupPhone).mockResolvedValue(null);
     vi.mocked(findUserByIdentifier).mockResolvedValue(null);
     vi.mocked(createUserAccount).mockResolvedValue(createdPro);
   });
@@ -119,31 +130,51 @@ describe("signup SMS verification routing", () => {
     expect(createdPro.phoneVerifiedAt).toBeUndefined();
   });
 
-  it("routes a new account to OTP verification when the DB config is on", async () => {
+  it("does not create an account before the phone is verified", async () => {
     vi.mocked(getSmsVerificationConfig).mockResolvedValue({
       ...disabledSmsConfig,
       enabled: true,
       effectiveEnabled: true,
     });
-    vi.mocked(startSmsPhoneVerification).mockResolvedValue({
-      status: "sent",
-      challengeId: "challenge_1",
-      retryAfterSeconds: 60,
-      codeExpiresInSeconds: 300,
+
+    await expect(
+      signUpAction({ ...signupInput, interfaceLocale: "zh-HK" }),
+    ).resolves.toEqual({
+      ok: false,
+      error: "請先驗證呢個電話號碼，再建立帳戶。",
+    });
+
+    expect(getVerifiedPendingSignupPhone).toHaveBeenCalledWith(
+      signupInput.phone,
+    );
+    expect(createUserAccount).not.toHaveBeenCalled();
+    expect(createCredential).not.toHaveBeenCalled();
+    expect(signInAs).not.toHaveBeenCalled();
+  });
+
+  it("creates and signs in only after a matching phone verification", async () => {
+    const verifiedAt = "2026-08-30T11:00:00.000Z";
+    vi.mocked(getSmsVerificationConfig).mockResolvedValue({
+      ...disabledSmsConfig,
+      enabled: true,
+      effectiveEnabled: true,
+    });
+    vi.mocked(getVerifiedPendingSignupPhone).mockResolvedValue({
+      phone: signupInput.phone,
+      verifiedAt,
     });
 
     await expect(
       signUpAction({ ...signupInput, interfaceLocale: "zh-HK" }),
-    ).resolves.toEqual({ ok: true, target: "/auth/verify" });
+    ).resolves.toEqual({ ok: true, target: "/pro/billing" });
 
-    expect(createUserAccount).toHaveBeenCalledWith(
-      signupInput,
-      expect.objectContaining({
-        phoneVerificationRequiredAt: expect.any(String),
-      }),
+    expect(createUserAccount).toHaveBeenCalledWith(signupInput, {
+      phoneVerifiedAt: verifiedAt,
+    });
+    expect(consumePendingSignupPhoneVerification).toHaveBeenCalledWith(
+      signupInput.phone,
     );
-    expect(startSmsPhoneVerification).toHaveBeenCalledWith(createdPro);
-    expect(signInAs).not.toHaveBeenCalled();
+    expect(signInAs).toHaveBeenCalledWith(createdPro.id);
   });
 
   it("still rejects an invalid Hong Kong mobile number", async () => {
@@ -160,5 +191,55 @@ describe("signup SMS verification routing", () => {
 
     expect(findUserByIdentifier).not.toHaveBeenCalled();
     expect(createUserAccount).not.toHaveBeenCalled();
+  });
+
+  it("requests a pre-signup code without creating an account", async () => {
+    vi.mocked(getSmsVerificationConfig).mockResolvedValue({
+      ...disabledSmsConfig,
+      enabled: true,
+      effectiveEnabled: true,
+    });
+    vi.mocked(startSignupSmsPhoneVerification).mockResolvedValue({
+      status: "sent",
+      challengeId: "signup_challenge_1",
+      retryAfterSeconds: 60,
+      codeExpiresInSeconds: 300,
+      maskedPhone: "9*** 4567",
+      consolePocCode: "123456",
+    });
+
+    await expect(
+      requestSignupPhoneOtpAction({ phone: "91234567", locale: "zh-HK" }),
+    ).resolves.toMatchObject({
+      ok: true,
+      phone: "91234567",
+      maskedPhone: "9*** 4567",
+      consolePocCode: "123456",
+    });
+
+    expect(startSignupSmsPhoneVerification).toHaveBeenCalledWith("91234567");
+    expect(createUserAccount).not.toHaveBeenCalled();
+    expect(createCredential).not.toHaveBeenCalled();
+  });
+
+  it("binds OTP verification to the submitted phone", async () => {
+    vi.mocked(verifyPendingSignupSmsCode).mockResolvedValue({
+      status: "verified",
+      phone: "91234567",
+      verifiedAt: "2026-08-30T11:00:00.000Z",
+    });
+
+    await expect(
+      verifySignupPhoneOtpAction({
+        phone: "91234567",
+        code: "123456",
+        locale: "zh-HK",
+      }),
+    ).resolves.toMatchObject({ ok: true, phone: "91234567" });
+
+    expect(verifyPendingSignupSmsCode).toHaveBeenCalledWith(
+      "91234567",
+      "123456",
+    );
   });
 });

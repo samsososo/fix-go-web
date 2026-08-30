@@ -5,8 +5,10 @@ import { getLocale } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { SignupForm } from "@/features/auth/signup-form";
+import { getSmsVerificationConfig } from "@/lib/mock/db";
 import { listCategoryOptions } from "@/lib/mock/repositories";
 import { createPageMetadata } from "@/lib/seo";
+import { getPendingSignupSmsVerification } from "@/lib/sms-verification";
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = (await getLocale()) as "zh-HK" | "en";
@@ -15,7 +17,12 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function SignupPage() {
   const locale = await getLocale();
-  const categoryOptions = await listCategoryOptions(locale as "zh-HK" | "en");
+  const [categoryOptions, smsConfig, pendingSmsVerification] =
+    await Promise.all([
+      listCategoryOptions(locale as "zh-HK" | "en"),
+      getSmsVerificationConfig(),
+      getPendingSignupSmsVerification(),
+    ]);
   const rolePoints =
     locale === "en"
       ? [
@@ -90,7 +97,23 @@ export default async function SignupPage() {
                 </Link>
               </p>
             </div>
-            <SignupForm locale={locale} categoryOptions={categoryOptions} />
+            <SignupForm
+              locale={locale}
+              categoryOptions={categoryOptions}
+              smsVerification={{
+                enabled: smsConfig.effectiveEnabled,
+                initial: pendingSmsVerification
+                  ? {
+                      phone: pendingSmsVerification.phone,
+                      maskedPhone: pendingSmsVerification.maskedPhone,
+                      verified: pendingSmsVerification.verified,
+                      resendSeconds: pendingSmsVerification.resendSeconds,
+                      expirySeconds: pendingSmsVerification.expirySeconds,
+                      consolePocCode: pendingSmsVerification.consolePocCode,
+                    }
+                  : undefined,
+              }}
+            />
           </CardContent>
         </Card>
       </div>

@@ -1,8 +1,13 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  consumeVerifiedSignupPhone,
+  getSignupSmsVerificationChallenge,
+  getVerifiedSignupPhone,
   getSmsVerificationChallenge,
+  issueSignupSmsVerificationChallenge,
   issueSmsVerificationChallenge,
+  verifySignupSmsVerificationChallenge,
   verifySmsVerificationChallenge,
 } from "@/lib/mock/db";
 import {
@@ -191,5 +196,63 @@ describe("SMS verification challenge persistence", () => {
         maxAttempts: 5,
       }),
     ).resolves.toEqual({ status: "expired" });
+  });
+
+  it("verifies a signup phone before any account exists and consumes it once", async () => {
+    const issued = await issueSignupSmsVerificationChallenge({
+      phone: signupInput.phone,
+      code: "123456",
+      otpTtlSeconds: 300,
+      resendCooldownSeconds: 60,
+      maxSendsPerHour: 5,
+    });
+    expect(issued.status).toBe("sent");
+    if (issued.status !== "sent") {
+      throw new Error("Signup challenge was not created");
+    }
+
+    expect(
+      await getSignupSmsVerificationChallenge(issued.challengeId),
+    ).toMatchObject({
+      phone: signupInput.phone,
+      verifiedAt: undefined,
+    });
+    await expect(
+      verifySignupSmsVerificationChallenge({
+        challengeId: issued.challengeId,
+        phone: "91234567",
+        code: "123456",
+        maxAttempts: 5,
+      }),
+    ).resolves.toEqual({ status: "missing" });
+
+    const verified = await verifySignupSmsVerificationChallenge({
+      challengeId: issued.challengeId,
+      phone: signupInput.phone,
+      code: "123456",
+      maxAttempts: 5,
+    });
+    expect(verified).toMatchObject({
+      status: "verified",
+      phone: signupInput.phone,
+    });
+    await expect(
+      getVerifiedSignupPhone({
+        challengeId: issued.challengeId,
+        phone: signupInput.phone,
+      }),
+    ).resolves.toMatchObject({ phone: signupInput.phone });
+    await expect(
+      consumeVerifiedSignupPhone({
+        challengeId: issued.challengeId,
+        phone: signupInput.phone,
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      getVerifiedSignupPhone({
+        challengeId: issued.challengeId,
+        phone: signupInput.phone,
+      }),
+    ).resolves.toBeNull();
   });
 });
