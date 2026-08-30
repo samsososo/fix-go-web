@@ -1,12 +1,15 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  approveSignupSmsVerificationChallenge,
+  approveSmsVerificationChallenge,
   consumeVerifiedSignupPhone,
   getSignupSmsVerificationChallenge,
   getVerifiedSignupPhone,
   getSmsVerificationChallenge,
   issueSignupSmsVerificationChallenge,
   issueSmsVerificationChallenge,
+  rejectSignupSmsVerificationChallengeAttempt,
   verifySignupSmsVerificationChallenge,
   verifySmsVerificationChallenge,
 } from "@/lib/mock/db";
@@ -79,6 +82,55 @@ describe("SMS verification challenge persistence", () => {
         maxAttempts: 5,
       }),
     ).resolves.toEqual({ status: "missing" });
+  });
+
+  it("records provider decisions without trusting the submitted code locally", async () => {
+    const user = await createPendingUser();
+    const accountIssued = await issueSmsVerificationChallenge({
+      userId: user.id,
+      phone: user.phone,
+      code: "internal-provider-marker",
+      otpTtlSeconds: 300,
+      resendCooldownSeconds: 60,
+      maxSendsPerHour: 5,
+    });
+    if (accountIssued.status !== "sent") {
+      throw new Error("Account challenge was not created");
+    }
+    await expect(
+      approveSmsVerificationChallenge({
+        challengeId: accountIssued.challengeId,
+        maxAttempts: 5,
+      }),
+    ).resolves.toMatchObject({ status: "verified" });
+
+    const signupIssued = await issueSignupSmsVerificationChallenge({
+      phone: "91234567",
+      code: "internal-provider-marker",
+      otpTtlSeconds: 300,
+      resendCooldownSeconds: 60,
+      maxSendsPerHour: 5,
+    });
+    if (signupIssued.status !== "sent") {
+      throw new Error("Signup challenge was not created");
+    }
+    await expect(
+      rejectSignupSmsVerificationChallengeAttempt({
+        challengeId: signupIssued.challengeId,
+        phone: "91234567",
+        maxAttempts: 5,
+      }),
+    ).resolves.toEqual({ status: "invalid", attemptsRemaining: 4 });
+    await expect(
+      approveSignupSmsVerificationChallenge({
+        challengeId: signupIssued.challengeId,
+        phone: "91234567",
+        maxAttempts: 5,
+      }),
+    ).resolves.toMatchObject({
+      status: "verified",
+      phone: "91234567",
+    });
   });
 
   it("locks the challenge after the configured number of wrong codes", async () => {

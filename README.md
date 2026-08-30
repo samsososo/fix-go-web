@@ -118,6 +118,9 @@ Supported environment variables:
 - `SESSION_TTL_HOURS`
 - `ENABLE_DEMO_LOGIN`
 - `ENABLE_DATABASE_SEEDING`
+- `TWILIO_API_KEY`
+- `TWILIO_API_SECRET`
+- `TWILIO_VERIFY_SERVICE_SID`
 - `DEMO_PASSWORD`
 - `BOOTSTRAP_ADMIN_PASSWORD`
 - `STRIPE_SECRET_KEY`
@@ -148,6 +151,23 @@ STRIPE_PRO_MONTHLY_PRICE_ID=price_...
 The monthly price must be a reusable HKD 100 recurring monthly Price. The
 three-calendar-month trial is granted by application policy when a pro first
 binds a card, not configured on the Stripe Price itself.
+
+Twilio Verify is used for production signup phone verification. Use a
+Restricted API key with only `verification/create` and
+`verification-check/create` permissions. Store the key secret only in the
+deployment secret environment, never in Git:
+
+```bash
+TWILIO_API_KEY=SK...
+TWILIO_API_SECRET=...
+TWILIO_VERIFY_SERVICE_SID=VA...
+```
+
+The MongoDB `feature:smsVerification` document selects `twilio_verify` or the
+DEV/test-only `console` POC provider. Local and DEV use the DEV database
+document, while production uses the production database document. Keep the
+production document's `enabled` field false until the credentials and a real
+Hong Kong phone end-to-end test are ready.
 
 For production MongoDB, use a separate database and keep mock data disabled:
 

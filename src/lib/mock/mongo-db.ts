@@ -7,7 +7,7 @@ import {
   type PasswordResetRequest,
   type SecurityQuestionId,
 } from "@/lib/account-recovery";
-import { enableDatabaseSeeding, env, smsVerificationForceOff } from "@/lib/env";
+import { enableDatabaseSeeding, env } from "@/lib/env";
 import { createHongKongServiceAreas } from "@/lib/hk-service-areas";
 import { createOpaqueToken } from "@/lib/security";
 import {
@@ -120,6 +120,7 @@ type SmsVerificationChallengeDoc = {
   _id: string;
   userId: string;
   purpose?: "account" | "signup";
+  provider?: SmsVerificationConfig["provider"];
   phone: string;
   codeHash: string;
   codeSalt: string;
@@ -1191,7 +1192,7 @@ export async function getMongoSmsVerificationConfig(): Promise<SmsVerificationCo
     .collection<AppConfigDoc>("appConfig")
     .findOne({ _id: SMS_VERIFICATION_CONFIG_ID });
 
-  return resolveSmsVerificationConfig(config, smsVerificationForceOff);
+  return resolveSmsVerificationConfig(config);
 }
 
 export async function setMongoSmsVerificationEnabled(input: {
@@ -1207,7 +1208,7 @@ export async function setMongoSmsVerificationEnabled(input: {
   const currentDoc = await db
     .collection<AppConfigDoc>("appConfig")
     .findOne({ _id: SMS_VERIFICATION_CONFIG_ID });
-  const current = resolveSmsVerificationConfig(currentDoc, false);
+  const current = resolveSmsVerificationConfig(currentDoc);
   const next: SmsVerificationConfigDoc = {
     _id: SMS_VERIFICATION_CONFIG_ID,
     configType: "feature",
@@ -1226,7 +1227,7 @@ export async function setMongoSmsVerificationEnabled(input: {
     .collection<AppConfigDoc>("appConfig")
     .replaceOne({ _id: SMS_VERIFICATION_CONFIG_ID }, next, { upsert: true });
 
-  return resolveSmsVerificationConfig(next, smsVerificationForceOff);
+  return resolveSmsVerificationConfig(next);
 }
 
 export async function writeMongoDb(dbState: MockDb) {
@@ -2557,6 +2558,7 @@ async function recordSmsVerificationAttempt(
 export async function issueMongoSmsVerificationChallenge(input: {
   userId: string;
   phone: string;
+  provider?: SmsVerificationConfig["provider"];
   code: string;
   otpTtlSeconds: number;
   resendCooldownSeconds: number;
@@ -2579,7 +2581,12 @@ export async function issueMongoSmsVerificationChallenge(input: {
   );
   const now = new Date();
   let existing = await collection.findOne({ userId: input.userId });
-  if (existing && existing.expiresAt.getTime() <= now.getTime()) {
+  const provider = input.provider ?? "console";
+  if (
+    existing &&
+    (existing.expiresAt.getTime() <= now.getTime() ||
+      (existing.provider ?? "console") !== provider)
+  ) {
     await collection.deleteOne({ _id: existing._id });
     existing = null;
   }
@@ -2625,6 +2632,7 @@ export async function issueMongoSmsVerificationChallenge(input: {
     _id: existing?._id ?? createOpaqueToken(),
     userId: user.id,
     purpose: "account",
+    provider,
     phone: user.phone,
     codeHash: hashSmsVerificationCode(input.code, codeSalt),
     codeSalt,
@@ -2667,11 +2675,35 @@ export async function getMongoSmsVerificationChallenge(challengeId: string) {
   return {
     id: challenge._id,
     userId: challenge.userId,
+    provider: challenge.provider ?? "console",
     phone: challenge.phone,
     attempts: challenge.attempts,
     resendAvailableAt: challenge.resendAvailableAt.toISOString(),
     codeExpiresAt: challenge.codeExpiresAt.toISOString(),
   };
+}
+
+export async function discardMongoSmsVerificationChallenge(input: {
+  challengeId: string;
+  purpose: "account" | "signup";
+}) {
+  const purposeFilter =
+    input.purpose === "signup"
+      ? { purpose: "signup" as const }
+      : {
+          $or: [
+            { purpose: "account" as const },
+            { purpose: { $exists: false } },
+          ],
+        };
+  const deleted = await (await getMongoDb())
+    .collection<SmsVerificationChallengeDoc>("smsVerificationChallenges")
+    .deleteOne({
+      _id: input.challengeId,
+      ...purposeFilter,
+      verifiedAt: { $exists: false },
+    });
+  return deleted.deletedCount === 1;
 }
 
 export async function verifyMongoSmsVerificationChallenge(input: {
@@ -2750,11 +2782,105 @@ export async function verifyMongoSmsVerificationChallenge(input: {
     : { status: "missing" as const };
 }
 
+export async function rejectMongoSmsVerificationChallengeAttempt(input: {
+  challengeId: string;
+  maxAttempts: number;
+}) {
+  const db = await getMongoDb();
+  const collection = db.collection<SmsVerificationChallengeDoc>(
+    "smsVerificationChallenges",
+  );
+  const challenge = await collection.findOne({ _id: input.challengeId });
+  if (
+    !challenge ||
+    challenge.purpose === "signup" ||
+    challenge.expiresAt.getTime() <= Date.now()
+  ) {
+    return { status: "missing" as const };
+  }
+  if (challenge.attempts >= input.maxAttempts) {
+    return { status: "locked" as const };
+  }
+  if (challenge.codeExpiresAt.getTime() <= Date.now()) {
+    return { status: "expired" as const };
+  }
+
+  const nextAttempts = challenge.attempts + 1;
+  const updated = await collection.updateOne(
+    { _id: challenge._id, attempts: challenge.attempts },
+    { $inc: { attempts: 1 }, $set: { updatedAt: new Date() } },
+  );
+  if (updated.modifiedCount !== 1) {
+    return { status: "missing" as const };
+  }
+  await recordSmsVerificationAttempt(db, challenge.phone, false);
+  return nextAttempts >= input.maxAttempts
+    ? { status: "locked" as const }
+    : {
+        status: "invalid" as const,
+        attemptsRemaining: input.maxAttempts - nextAttempts,
+      };
+}
+
+export async function approveMongoSmsVerificationChallenge(input: {
+  challengeId: string;
+  maxAttempts: number;
+}) {
+  const db = await getMongoDb();
+  const collection = db.collection<SmsVerificationChallengeDoc>(
+    "smsVerificationChallenges",
+  );
+  const challenge = await collection.findOne({ _id: input.challengeId });
+  if (
+    !challenge ||
+    challenge.purpose === "signup" ||
+    challenge.expiresAt.getTime() <= Date.now()
+  ) {
+    return { status: "missing" as const };
+  }
+  if (challenge.attempts >= input.maxAttempts) {
+    return { status: "locked" as const };
+  }
+  if (challenge.codeExpiresAt.getTime() <= Date.now()) {
+    return { status: "expired" as const };
+  }
+
+  const claimed = await collection.deleteOne({
+    _id: challenge._id,
+    attempts: challenge.attempts,
+  });
+  if (claimed.deletedCount !== 1) {
+    return { status: "missing" as const };
+  }
+
+  const verifiedAt = new Date().toISOString();
+  const updated = await db.collection<ProfileDoc>("profile").updateOne(
+    {
+      _id: challenge.userId,
+      phone: challenge.phone,
+      phoneVerificationRequiredAt: { $exists: true },
+    },
+    { $set: { phoneVerifiedAt: verifiedAt } },
+  );
+  if (updated.matchedCount !== 1) {
+    return { status: "missing" as const };
+  }
+
+  await recordSmsVerificationAttempt(db, challenge.phone, true);
+  clearMongoReadCache();
+  clearMongoSessionUserCache();
+  const user = await findProfileById(db, challenge.userId);
+  return user
+    ? { status: "verified" as const, user }
+    : { status: "missing" as const };
+}
+
 const SIGNUP_PHONE_VERIFICATION_VALIDITY_MS = 30 * 60 * 1000;
 
 export async function issueMongoSignupSmsVerificationChallenge(input: {
   challengeId?: string;
   phone: string;
+  provider?: SmsVerificationConfig["provider"];
   code: string;
   otpTtlSeconds: number;
   resendCooldownSeconds: number;
@@ -2765,6 +2891,7 @@ export async function issueMongoSignupSmsVerificationChallenge(input: {
     "smsVerificationChallenges",
   );
   const now = new Date();
+  const provider = input.provider ?? "console";
   let existing = input.challengeId
     ? await collection.findOne({
         _id: input.challengeId,
@@ -2775,7 +2902,8 @@ export async function issueMongoSignupSmsVerificationChallenge(input: {
   if (
     existing &&
     (existing.phone !== input.phone ||
-      existing.expiresAt.getTime() <= now.getTime())
+      existing.expiresAt.getTime() <= now.getTime() ||
+      (existing.provider ?? "console") !== provider)
   ) {
     await collection.deleteOne({ _id: existing._id, purpose: "signup" });
     existing = null;
@@ -2837,6 +2965,7 @@ export async function issueMongoSignupSmsVerificationChallenge(input: {
     _id: existing?._id ?? createOpaqueToken(),
     userId: existing?.userId ?? `signup:${createOpaqueToken()}`,
     purpose: "signup",
+    provider,
     phone: input.phone,
     codeHash: hashSmsVerificationCode(input.code, codeSalt),
     codeSalt,
@@ -2881,6 +3010,7 @@ export async function getMongoSignupSmsVerificationChallenge(
 
   return {
     id: challenge._id,
+    provider: challenge.provider ?? "console",
     phone: challenge.phone,
     attempts: challenge.attempts,
     resendAvailableAt: challenge.resendAvailableAt.toISOString(),
@@ -2982,17 +3112,139 @@ export async function verifyMongoSignupSmsVerificationChallenge(input: {
   };
 }
 
+export async function rejectMongoSignupSmsVerificationChallengeAttempt(input: {
+  challengeId: string;
+  phone: string;
+  maxAttempts: number;
+}) {
+  const db = await getMongoDb();
+  const collection = db.collection<SmsVerificationChallengeDoc>(
+    "smsVerificationChallenges",
+  );
+  const challenge = await collection.findOne({
+    _id: input.challengeId,
+    purpose: "signup",
+    phone: input.phone,
+  });
+  const now = new Date();
+  if (!challenge || challenge.expiresAt.getTime() <= now.getTime()) {
+    return { status: "missing" as const };
+  }
+  if (challenge.attempts >= input.maxAttempts) {
+    return { status: "locked" as const };
+  }
+  if (challenge.codeExpiresAt.getTime() <= now.getTime()) {
+    return { status: "expired" as const };
+  }
+
+  const nextAttempts = challenge.attempts + 1;
+  const updated = await collection.updateOne(
+    { _id: challenge._id, attempts: challenge.attempts },
+    { $inc: { attempts: 1 }, $set: { updatedAt: now } },
+  );
+  if (updated.modifiedCount !== 1) {
+    return { status: "missing" as const };
+  }
+  await recordSmsVerificationAttempt(db, challenge.phone, false);
+  return nextAttempts >= input.maxAttempts
+    ? { status: "locked" as const }
+    : {
+        status: "invalid" as const,
+        attemptsRemaining: input.maxAttempts - nextAttempts,
+      };
+}
+
+export async function approveMongoSignupSmsVerificationChallenge(input: {
+  challengeId: string;
+  phone: string;
+  maxAttempts: number;
+}) {
+  const db = await getMongoDb();
+  const collection = db.collection<SmsVerificationChallengeDoc>(
+    "smsVerificationChallenges",
+  );
+  const challenge = await collection.findOne({
+    _id: input.challengeId,
+    purpose: "signup",
+    phone: input.phone,
+  });
+  const now = new Date();
+  if (!challenge || challenge.expiresAt.getTime() <= now.getTime()) {
+    return { status: "missing" as const };
+  }
+  if (
+    challenge.verifiedAt &&
+    challenge.verifiedExpiresAt &&
+    challenge.verifiedExpiresAt.getTime() > now.getTime()
+  ) {
+    return {
+      status: "verified" as const,
+      phone: challenge.phone,
+      verifiedAt: challenge.verifiedAt.toISOString(),
+    };
+  }
+  if (challenge.attempts >= input.maxAttempts) {
+    return { status: "locked" as const };
+  }
+  if (challenge.codeExpiresAt.getTime() <= now.getTime()) {
+    return { status: "expired" as const };
+  }
+
+  const verifiedExpiresAt = addMilliseconds(
+    now,
+    SIGNUP_PHONE_VERIFICATION_VALIDITY_MS,
+  );
+  const verified = await collection.updateOne(
+    {
+      _id: challenge._id,
+      purpose: "signup",
+      phone: input.phone,
+      attempts: challenge.attempts,
+      verifiedAt: { $exists: false },
+    },
+    {
+      $set: {
+        verifiedAt: now,
+        verifiedExpiresAt,
+        expiresAt: verifiedExpiresAt,
+        updatedAt: now,
+      },
+    },
+  );
+  if (verified.matchedCount !== 1) {
+    return { status: "missing" as const };
+  }
+
+  await recordSmsVerificationAttempt(db, challenge.phone, true);
+  return {
+    status: "verified" as const,
+    phone: challenge.phone,
+    verifiedAt: now.toISOString(),
+  };
+}
+
 export async function getMongoVerifiedSignupPhone(input: {
   challengeId: string;
   phone: string;
+  provider?: SmsVerificationConfig["provider"];
 }) {
   const now = new Date();
+  const providerFilter =
+    input.provider === "console" || input.provider === undefined
+      ? {
+          $or: [
+            { provider: "console" as const },
+            { provider: { $exists: false } },
+          ],
+        }
+      : { provider: input.provider };
   const challenge = await (await getMongoDb())
     .collection<SmsVerificationChallengeDoc>("smsVerificationChallenges")
     .findOne({
       _id: input.challengeId,
       purpose: "signup",
       phone: input.phone,
+      ...providerFilter,
       verifiedAt: { $exists: true },
       verifiedExpiresAt: { $gt: now },
       expiresAt: { $gt: now },

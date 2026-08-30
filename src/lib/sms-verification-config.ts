@@ -4,7 +4,7 @@ export const SMS_VERIFICATION_CONFIG_ID = "feature:smsVerification";
 
 export const smsVerificationConfigSchema = z.object({
   enabled: z.boolean(),
-  provider: z.literal("console"),
+  provider: z.enum(["console", "twilio_verify"]),
   otpTtlSeconds: z
     .number()
     .int()
@@ -23,7 +23,6 @@ export type SmsVerificationConfig = z.infer<typeof smsVerificationConfigSchema>;
 
 export type SmsVerificationConfigState = SmsVerificationConfig & {
   effectiveEnabled: boolean;
-  forceOff: boolean;
   updatedAt?: string;
   updatedBy?: string;
 };
@@ -39,7 +38,6 @@ export const defaultSmsVerificationConfig: SmsVerificationConfig = {
 
 export function resolveSmsVerificationConfig(
   value: unknown,
-  forceOff: boolean,
 ): SmsVerificationConfigState {
   const parsed = smsVerificationConfigSchema.safeParse(value);
   const config = parsed.success
@@ -52,8 +50,7 @@ export function resolveSmsVerificationConfig(
 
   return {
     ...config,
-    effectiveEnabled: config.enabled && !forceOff,
-    forceOff,
+    effectiveEnabled: config.enabled,
     updatedAt:
       typeof metadata.updatedAt === "string" ? metadata.updatedAt : undefined,
     updatedBy:

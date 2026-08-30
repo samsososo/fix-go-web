@@ -2,7 +2,10 @@ import { cookies } from "next/headers";
 
 import { env, shouldUseSecureCookies } from "@/lib/env";
 import {
+  approveSignupSmsVerificationChallenge,
+  approveSmsVerificationChallenge,
   consumeVerifiedSignupPhone,
+  discardSmsVerificationChallenge,
   findUserById,
   getSmsVerificationChallenge,
   getSmsVerificationConfig,
@@ -10,10 +13,17 @@ import {
   getVerifiedSignupPhone,
   issueSmsVerificationChallenge,
   issueSignupSmsVerificationChallenge,
+  rejectSignupSmsVerificationChallengeAttempt,
+  rejectSmsVerificationChallengeAttempt,
   verifySmsVerificationChallenge,
   verifySignupSmsVerificationChallenge,
 } from "@/lib/mock/db";
 import type { SmsVerificationConfigState } from "@/lib/sms-verification-config";
+import {
+  checkTwilioSmsVerification,
+  isTwilioVerifyConfigured,
+  sendTwilioSmsVerification,
+} from "@/lib/twilio-verify";
 import type { User } from "@/types/domain";
 
 export const CONSOLE_SMS_POC_CODE = "123456";
@@ -34,16 +44,37 @@ function pendingCookieOptions() {
 export function isSmsVerificationProviderReady(
   config: SmsVerificationConfigState,
 ) {
-  return config.provider === "console" && env.NODE_ENV !== "production";
+  if (config.provider === "console") {
+    return env.NODE_ENV === "test" || env.MONGODB_DATABASE === "hotfix_dev";
+  }
+  return config.provider === "twilio_verify" && isTwilioVerifyConfigured();
 }
 
-async function deliverVerificationCode(phone: string, code: string) {
-  if (env.NODE_ENV === "production") {
+function consolePocCode(config: SmsVerificationConfigState) {
+  return config.provider === "console" && isSmsVerificationProviderReady(config)
+    ? CONSOLE_SMS_POC_CODE
+    : undefined;
+}
+
+async function deliverVerificationCode(input: {
+  config: SmsVerificationConfigState;
+  phone: string;
+  code: string;
+  locale: "zh-HK" | "en";
+}) {
+  if (input.config.provider === "twilio_verify") {
+    await sendTwilioSmsVerification({
+      phone: input.phone,
+      locale: input.locale,
+    });
+    return;
+  }
+  if (!isSmsVerificationProviderReady(input.config)) {
     throw new Error("SMS verification provider is not configured.");
   }
 
-  const maskedPhone = `${phone.slice(0, 1)}***${phone.slice(-4)}`;
-  console.info(`[sms-poc] ${maskedPhone} verification code: ${code}`);
+  const maskedPhone = `${input.phone.slice(0, 1)}***${input.phone.slice(-4)}`;
+  console.info(`[sms-poc] ${maskedPhone} verification code: ${input.code}`);
 }
 
 async function storePendingChallenge(challengeId: string) {
@@ -83,6 +114,7 @@ export async function startSmsPhoneVerification(user: User) {
   const result = await issueSmsVerificationChallenge({
     userId: user.id,
     phone: user.phone,
+    provider: config.provider,
     code: CONSOLE_SMS_POC_CODE,
     otpTtlSeconds: config.otpTtlSeconds,
     resendCooldownSeconds: config.resendCooldownSeconds,
@@ -98,7 +130,21 @@ export async function startSmsPhoneVerification(user: User) {
     await storePendingChallenge(result.challengeId);
   }
   if (result.status === "sent") {
-    await deliverVerificationCode(user.phone, CONSOLE_SMS_POC_CODE);
+    try {
+      await deliverVerificationCode({
+        config,
+        phone: user.phone,
+        code: CONSOLE_SMS_POC_CODE,
+        locale: user.locale,
+      });
+    } catch {
+      await discardSmsVerificationChallenge({
+        challengeId: result.challengeId,
+        purpose: "account",
+      });
+      await clearPendingSmsVerification();
+      return { status: "provider_unavailable" as const };
+    }
     return {
       ...result,
       codeExpiresInSeconds: config.otpTtlSeconds,
@@ -120,15 +166,13 @@ export async function getPendingSmsVerification() {
     return null;
   }
   const challenge = await getSmsVerificationChallenge(challengeId);
-  if (!challenge) {
+  if (!challenge || challenge.provider !== config.provider) {
     return null;
   }
   return {
     ...challenge,
     maskedPhone: `${challenge.phone.slice(0, 1)}*** ${challenge.phone.slice(-4)}`,
-    consolePocCode: isSmsVerificationProviderReady(config)
-      ? CONSOLE_SMS_POC_CODE
-      : undefined,
+    consolePocCode: consolePocCode(config),
   };
 }
 
@@ -137,11 +181,53 @@ export async function verifyPendingSmsCode(code: string) {
   if (!config.effectiveEnabled) {
     return { status: "disabled" as const };
   }
+  if (!isSmsVerificationProviderReady(config)) {
+    return { status: "provider_unavailable" as const };
+  }
 
   const cookieStore = await cookies();
   const challengeId = cookieStore.get(PENDING_SMS_COOKIE_NAME)?.value;
   if (!challengeId) {
     return { status: "missing" as const };
+  }
+
+  const challenge = await getSmsVerificationChallenge(challengeId);
+  if (!challenge || challenge.provider !== config.provider) {
+    return { status: "missing" as const };
+  }
+
+  if (config.provider === "twilio_verify") {
+    if (challenge.attempts >= config.maxAttempts) {
+      return { status: "locked" as const };
+    }
+    if (Date.parse(challenge.codeExpiresAt) <= Date.now()) {
+      return { status: "expired" as const };
+    }
+    try {
+      const result = await checkTwilioSmsVerification({
+        phone: challenge.phone,
+        code,
+      });
+      if (result.status === "approved") {
+        const approved = await approveSmsVerificationChallenge({
+          challengeId,
+          maxAttempts: config.maxAttempts,
+        });
+        if (approved.status === "verified") {
+          await clearPendingSmsVerification();
+        }
+        return approved;
+      }
+      if (result.status === "invalid") {
+        return rejectSmsVerificationChallengeAttempt({
+          challengeId,
+          maxAttempts: config.maxAttempts,
+        });
+      }
+      return result;
+    } catch {
+      return { status: "provider_unavailable" as const };
+    }
   }
 
   const result = await verifySmsVerificationChallenge({
@@ -173,7 +259,10 @@ export async function resendPendingSmsCode() {
   return startSmsPhoneVerification(user);
 }
 
-export async function startSignupSmsPhoneVerification(phone: string) {
+export async function startSignupSmsPhoneVerification(
+  phone: string,
+  locale: "zh-HK" | "en" = "zh-HK",
+) {
   const config = await getSmsVerificationConfig();
   if (!config.effectiveEnabled) {
     return { status: "disabled" as const };
@@ -185,6 +274,7 @@ export async function startSignupSmsPhoneVerification(phone: string) {
   const result = await issueSignupSmsVerificationChallenge({
     challengeId: await getSignupChallengeId(),
     phone,
+    provider: config.provider,
     code: CONSOLE_SMS_POC_CODE,
     otpTtlSeconds: config.otpTtlSeconds,
     resendCooldownSeconds: config.resendCooldownSeconds,
@@ -195,13 +285,27 @@ export async function startSignupSmsPhoneVerification(phone: string) {
     await storeSignupChallenge(result.challengeId);
   }
   if (result.status === "sent") {
-    await deliverVerificationCode(phone, CONSOLE_SMS_POC_CODE);
+    try {
+      await deliverVerificationCode({
+        config,
+        phone,
+        code: CONSOLE_SMS_POC_CODE,
+        locale,
+      });
+    } catch {
+      await discardSmsVerificationChallenge({
+        challengeId: result.challengeId,
+        purpose: "signup",
+      });
+      await clearPendingSignupSmsVerification();
+      return { status: "provider_unavailable" as const };
+    }
   }
 
   return {
     ...result,
     maskedPhone: `${phone.slice(0, 1)}*** ${phone.slice(-4)}`,
-    consolePocCode: CONSOLE_SMS_POC_CODE,
+    consolePocCode: consolePocCode(config),
   };
 }
 
@@ -216,7 +320,7 @@ export async function getPendingSignupSmsVerification() {
     return null;
   }
   const challenge = await getSignupSmsVerificationChallenge(challengeId);
-  if (!challenge) {
+  if (!challenge || challenge.provider !== config.provider) {
     return null;
   }
   const now = Date.now();
@@ -237,9 +341,7 @@ export async function getPendingSignupSmsVerification() {
       0,
       Math.ceil((Date.parse(challenge.codeExpiresAt) - now) / 1000),
     ),
-    consolePocCode: isSmsVerificationProviderReady(config)
-      ? CONSOLE_SMS_POC_CODE
-      : undefined,
+    consolePocCode: consolePocCode(config),
   };
 }
 
@@ -248,10 +350,63 @@ export async function verifyPendingSignupSmsCode(phone: string, code: string) {
   if (!config.effectiveEnabled) {
     return { status: "disabled" as const };
   }
+  if (!isSmsVerificationProviderReady(config)) {
+    return { status: "provider_unavailable" as const };
+  }
 
   const challengeId = await getSignupChallengeId();
   if (!challengeId) {
     return { status: "missing" as const };
+  }
+
+  const challenge = await getSignupSmsVerificationChallenge(challengeId);
+  if (
+    !challenge ||
+    challenge.phone !== phone ||
+    challenge.provider !== config.provider
+  ) {
+    return { status: "missing" as const };
+  }
+
+  if (config.provider === "twilio_verify") {
+    const now = Date.now();
+    if (
+      challenge.verifiedAt &&
+      challenge.verifiedExpiresAt &&
+      Date.parse(challenge.verifiedExpiresAt) > now
+    ) {
+      return {
+        status: "verified" as const,
+        phone,
+        verifiedAt: challenge.verifiedAt,
+      };
+    }
+    if (challenge.attempts >= config.maxAttempts) {
+      return { status: "locked" as const };
+    }
+    if (Date.parse(challenge.codeExpiresAt) <= now) {
+      return { status: "expired" as const };
+    }
+    try {
+      const result = await checkTwilioSmsVerification({ phone, code });
+      if (result.status === "approved") {
+        return approveSignupSmsVerificationChallenge({
+          challengeId,
+          phone,
+          maxAttempts: config.maxAttempts,
+        });
+      }
+      if (result.status === "invalid") {
+        return rejectSignupSmsVerificationChallengeAttempt({
+          challengeId,
+          phone,
+          maxAttempts: config.maxAttempts,
+        });
+      }
+      return result;
+    } catch {
+      return { status: "provider_unavailable" as const };
+    }
   }
 
   return verifySignupSmsVerificationChallenge({
@@ -263,12 +418,29 @@ export async function verifyPendingSignupSmsCode(phone: string, code: string) {
 }
 
 export async function getVerifiedPendingSignupPhone(phone: string) {
+  const config = await getSmsVerificationConfig();
+  if (!config.effectiveEnabled || !isSmsVerificationProviderReady(config)) {
+    return null;
+  }
   const challengeId = await getSignupChallengeId();
   if (!challengeId) {
     return null;
   }
 
-  return getVerifiedSignupPhone({ challengeId, phone });
+  const challenge = await getSignupSmsVerificationChallenge(challengeId);
+  if (
+    !challenge ||
+    challenge.phone !== phone ||
+    challenge.provider !== config.provider
+  ) {
+    return null;
+  }
+
+  return getVerifiedSignupPhone({
+    challengeId,
+    phone,
+    provider: config.provider,
+  });
 }
 
 export async function consumePendingSignupPhoneVerification(phone: string) {

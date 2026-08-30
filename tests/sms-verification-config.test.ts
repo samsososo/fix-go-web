@@ -24,7 +24,6 @@ describe("SMS verification database configuration", () => {
     await expect(getSmsVerificationConfig()).resolves.toMatchObject({
       ...defaultSmsVerificationConfig,
       effectiveEnabled: false,
-      forceOff: false,
       updatedBy: "system",
     });
   });
@@ -74,32 +73,40 @@ describe("SMS verification database configuration", () => {
 });
 
 describe("SMS verification fail-safe resolution", () => {
+  it("accepts Twilio Verify as the production provider", () => {
+    expect(
+      resolveSmsVerificationConfig({
+        ...defaultSmsVerificationConfig,
+        provider: "twilio_verify",
+      }),
+    ).toMatchObject({
+      provider: "twilio_verify",
+      effectiveEnabled: false,
+    });
+  });
+
   it("falls back to disabled when a database document is malformed", () => {
     expect(
-      resolveSmsVerificationConfig(
-        {
-          ...defaultSmsVerificationConfig,
-          enabled: true,
-          maxAttempts: 0,
-        },
-        false,
-      ),
+      resolveSmsVerificationConfig({
+        ...defaultSmsVerificationConfig,
+        enabled: true,
+        maxAttempts: 0,
+      }),
     ).toMatchObject({
       ...defaultSmsVerificationConfig,
       effectiveEnabled: false,
     });
   });
 
-  it("lets the environment emergency switch override an enabled DB value", () => {
+  it("uses the database enabled value as the effective state", () => {
     expect(
-      resolveSmsVerificationConfig(
-        { ...defaultSmsVerificationConfig, enabled: true },
-        true,
-      ),
+      resolveSmsVerificationConfig({
+        ...defaultSmsVerificationConfig,
+        enabled: true,
+      }),
     ).toMatchObject({
       enabled: true,
-      effectiveEnabled: false,
-      forceOff: true,
+      effectiveEnabled: true,
     });
   });
 });

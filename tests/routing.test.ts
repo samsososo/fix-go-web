@@ -33,6 +33,7 @@ describe("routing helpers", () => {
       "/admin/requests",
       "/admin/quotes",
       "/admin/calendar",
+      "/admin/settings",
     ]);
   });
 

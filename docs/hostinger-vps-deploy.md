@@ -55,9 +55,19 @@ MONGODB_URI=mongodb+srv://...
 MONGODB_DATABASE=hotfix_prod
 ENABLE_DEMO_LOGIN=false
 ENABLE_DATABASE_SEEDING=false
+TWILIO_API_KEY=SK...
+TWILIO_API_SECRET=...
+TWILIO_VERIFY_SERVICE_SID=VA...
 DEMO_PASSWORD=strong-random-password
 BOOTSTRAP_ADMIN_PASSWORD=strong-random-password
 ```
+
+The Twilio values must be the production Verify Service and its Restricted API
+key. Never put the Client secret in Git, deployment logs, chat, or MongoDB.
+Before the first live OTP test, set the production database's
+`feature:smsVerification` document `provider` to `twilio_verify` while leaving
+`enabled: false`. The database `enabled` field is the rollout switch for the
+environment connected to that database.
 
 Deploy:
 

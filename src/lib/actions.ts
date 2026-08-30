@@ -725,7 +725,10 @@ export async function requestSignupPhoneOtpAction(input: {
     };
   }
 
-  const result = await startSignupSmsPhoneVerification(phone);
+  const result = await startSignupSmsPhoneVerification(
+    phone,
+    isEnglish ? "en" : "zh-HK",
+  );
   if (result.status === "sent" || result.status === "cooldown") {
     return {
       ok: true as const,
@@ -805,6 +808,9 @@ export async function verifySignupPhoneOtpAction(input: {
     disabled: isEnglish
       ? "Phone verification has been turned off."
       : "電話驗證已關閉。",
+    provider_unavailable: isEnglish
+      ? "SMS verification is temporarily unavailable."
+      : "SMS 驗證暫時未能使用，請稍後再試。",
   } as const;
 
   return { ok: false as const, error: errors[result.status] };
@@ -854,6 +860,9 @@ export async function verifyPhoneOtpAction(input: {
     disabled: isEnglish
       ? "SMS verification has been turned off. Please log in again."
       : "SMS 驗證已關閉，請重新登入。",
+    provider_unavailable: isEnglish
+      ? "SMS verification is temporarily unavailable. Please try again."
+      : "SMS 驗證暫時未能使用，請稍後再試。",
   } as const;
 
   return { ok: false as const, error: errors[result.status] };
@@ -1178,6 +1187,18 @@ export async function updateSmsVerificationConfigAction(input: {
   }
 
   try {
+    if (input.enabled) {
+      const current = await getSmsVerificationConfig();
+      if (!isSmsVerificationProviderReady(current)) {
+        return {
+          ok: false as const,
+          error:
+            input.locale === "en"
+              ? "The configured SMS provider is not ready."
+              : "目前設定嘅 SMS 供應商尚未準備好。",
+        };
+      }
+    }
     const config = await setSmsVerificationEnabled({
       enabled: input.enabled,
       updatedBy: admin.id,

@@ -47,7 +47,6 @@ describe("SMS verification login gate", () => {
       ...defaultSmsVerificationConfig,
       enabled: true,
       effectiveEnabled: true,
-      forceOff: false,
     });
     mocks.verifyUserCredentials.mockResolvedValue({
       ok: true,

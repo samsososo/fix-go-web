@@ -6,11 +6,13 @@ import { SmsVerificationConfigControl } from "@/features/admin/sms-verification-
 import { formatDateTime } from "@/lib/formatters";
 import { getSmsVerificationConfig } from "@/lib/mock/db";
 import { getAdminNav } from "@/lib/nav";
+import { isSmsVerificationProviderReady } from "@/lib/sms-verification";
 import { cn } from "@/lib/utils";
 
 export default async function AdminSettingsPage() {
   const locale = await getLocale();
   const config = await getSmsVerificationConfig();
+  const providerReady = isSmsVerificationProviderReady(config);
 
   return (
     <PortalShell
@@ -45,9 +47,13 @@ export default async function AdminSettingsPage() {
                 </span>
               </div>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
-                {locale === "en"
-                  ? "The signup verification UI and server gate are active. Development currently uses the console POC code; a real SMS provider is not connected yet."
-                  : "註冊驗證 UI 同 server gate 已接駁；development 暫時使用 console POC 測試碼，真 SMS 供應商尚未接駁。"}
+                {config.provider === "twilio_verify"
+                  ? locale === "en"
+                    ? "Signup verification sends and checks one-time codes through Twilio Verify. This database switch controls rollout for the connected environment."
+                    : "註冊驗證會透過 Twilio Verify 發送及核對一次性驗證碼；目前連接環境嘅推出狀態由呢個 DB 開關控制。"
+                  : locale === "en"
+                    ? "Development uses the console POC code. This provider is blocked in production."
+                    : "Development 使用 console POC 測試碼；正式環境唔會容許使用呢個 provider。"}
               </p>
             </div>
             <SmsVerificationConfigControl
@@ -56,11 +62,11 @@ export default async function AdminSettingsPage() {
             />
           </div>
 
-          {config.forceOff ? (
-            <div className="rounded-2xl border border-secondary/30 bg-secondary/10 p-4 text-sm leading-6">
+          {!providerReady ? (
+            <div className="rounded-2xl border border-danger/30 bg-danger/8 p-4 text-sm leading-6 text-danger">
               {locale === "en"
-                ? "The environment emergency switch is forcing SMS verification off. The database value is saved, but it cannot become effective until the override is removed."
-                : "環境緊急停止開關正強制關閉 SMS 驗證。DB 設定仍會保存，但移除 override 前唔會生效。"}
+                ? "The selected provider is unavailable. SMS verification cannot be enabled until its server credentials and environment are valid."
+                : "目前選擇嘅供應商未準備好；server credentials 同環境設定有效之前，SMS 驗證唔可以啟用。"}
             </div>
           ) : null}
 
@@ -70,8 +76,12 @@ export default async function AdminSettingsPage() {
               value={config.effectiveEnabled ? "ON" : "OFF"}
             />
             <ConfigItem
-              label={locale === "en" ? "POC provider" : "POC 供應方式"}
+              label={locale === "en" ? "Provider" : "供應商"}
               value={config.provider}
+            />
+            <ConfigItem
+              label={locale === "en" ? "Provider readiness" : "供應商狀態"}
+              value={providerReady ? "READY" : "NOT READY"}
             />
             <ConfigItem
               label={locale === "en" ? "Code lifetime" : "驗證碼有效時間"}

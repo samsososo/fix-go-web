@@ -96,7 +96,6 @@ const createdPro: User = {
 const disabledSmsConfig = {
   ...defaultSmsVerificationConfig,
   effectiveEnabled: false,
-  forceOff: false,
 };
 
 describe("signup SMS verification routing", () => {
@@ -217,7 +216,10 @@ describe("signup SMS verification routing", () => {
       consolePocCode: "123456",
     });
 
-    expect(startSignupSmsPhoneVerification).toHaveBeenCalledWith("91234567");
+    expect(startSignupSmsPhoneVerification).toHaveBeenCalledWith(
+      "91234567",
+      "zh-HK",
+    );
     expect(createUserAccount).not.toHaveBeenCalled();
     expect(createCredential).not.toHaveBeenCalled();
   });
