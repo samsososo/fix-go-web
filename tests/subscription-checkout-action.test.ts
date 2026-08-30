@@ -254,6 +254,59 @@ describe("pro card setup action", () => {
     expect(reserveProSubscriptionCheckout).not.toHaveBeenCalled();
   });
 
+  it("replaces a stale completed card-setup Checkout instead of waiting forever", async () => {
+    vi.mocked(ensureProSubscription).mockResolvedValue(
+      setupRequired({
+        stripeCustomerId: "cus_action_test",
+        checkoutSessionId: "cs_stale_action_test",
+        checkoutSessionExpiresAt: "2026-08-08T12:00:00.000Z",
+      }),
+    );
+    vi.mocked(getOrCreateStripeCustomerForPro).mockResolvedValue({
+      id: "cus_action_test",
+    } as never);
+    vi.mocked(setProStripeCustomer).mockResolvedValue(
+      setupRequired({ stripeCustomerId: "cus_action_test" }),
+    );
+    vi.mocked(reserveProSubscriptionCheckout).mockImplementation(
+      async (input) =>
+        setupRequired({
+          stripeCustomerId: "cus_action_test",
+          checkoutReservationId: input.reservationId,
+          checkoutReservationExpiresAt: input.reservationExpiresAt,
+        }),
+    );
+    vi.mocked(createCardSetupCheckoutSession).mockResolvedValue({
+      id: "cs_replacement_action_test",
+      url: "https://checkout.stripe.test/replacement",
+      expires_at: 2_000_000_000,
+    } as never);
+    vi.mocked(completeProSubscriptionCheckoutReservation).mockResolvedValue(
+      setupRequired({
+        stripeCustomerId: "cus_action_test",
+        checkoutSessionId: "cs_replacement_action_test",
+      }),
+    );
+
+    await expect(
+      startProSubscriptionCheckoutAction({ locale: "zh-HK" }),
+    ).resolves.toEqual({
+      ok: true,
+      url: "https://checkout.stripe.test/replacement",
+    });
+
+    expect(clearProSubscriptionCheckoutSession).toHaveBeenCalledWith(
+      "cs_stale_action_test",
+    );
+    expect(inspectOwnedCardSetupCheckoutSession).not.toHaveBeenCalled();
+    expect(createCardSetupCheckoutSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        proId: pro.id,
+        customerId: "cus_action_test",
+      }),
+    );
+  });
+
   it("does not offer another Checkout when any lifetime-trial history exists", async () => {
     vi.mocked(ensureProSubscription).mockResolvedValue(
       setupRequired({

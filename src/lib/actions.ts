@@ -90,8 +90,17 @@ async function reusableCheckout(input: {
   proId: string;
   stripeCustomerId?: string;
   checkoutSessionId?: string;
+  checkoutSessionExpiresAt?: string;
 }) {
   if (!input.stripeCustomerId || !input.checkoutSessionId) {
+    return { status: "none" as const };
+  }
+
+  const persistedExpiry = input.checkoutSessionExpiresAt
+    ? Date.parse(input.checkoutSessionExpiresAt)
+    : Number.NaN;
+  if (Number.isFinite(persistedExpiry) && persistedExpiry <= Date.now()) {
+    await clearProSubscriptionCheckoutSession(input.checkoutSessionId);
     return { status: "none" as const };
   }
 
@@ -284,6 +293,7 @@ export async function startProSubscriptionCheckoutAction(input: {
       proId: user.id,
       stripeCustomerId: subscription.stripeCustomerId,
       checkoutSessionId: subscription.checkoutSessionId,
+      checkoutSessionExpiresAt: subscription.checkoutSessionExpiresAt,
     });
     if (existingCheckout.status === "open") {
       return { ok: true as const, url: existingCheckout.url };
@@ -324,6 +334,7 @@ export async function startProSubscriptionCheckoutAction(input: {
             proId: user.id,
             stripeCustomerId: latest.stripeCustomerId,
             checkoutSessionId: latest.checkoutSessionId,
+            checkoutSessionExpiresAt: latest.checkoutSessionExpiresAt,
           })
         : { status: "none" as const };
       if (concurrentCheckout.status === "open") {
