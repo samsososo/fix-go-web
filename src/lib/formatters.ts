@@ -15,7 +15,7 @@ export function formatHongKongPhone(phone: string) {
   return `${digits.slice(0, 4)} ${digits.slice(4)}`;
 }
 
-export function formatWhatsAppUrl(phone: string | undefined) {
+export function formatWhatsAppUrl(phone: string | undefined, message?: string) {
   const digits = phone?.replace(/\D/g, "") ?? "";
   const whatsappPhone =
     digits.length === 8
@@ -24,7 +24,62 @@ export function formatWhatsAppUrl(phone: string | undefined) {
         ? digits
         : "";
 
-  return whatsappPhone ? `https://wa.me/${whatsappPhone}` : undefined;
+  if (!whatsappPhone) {
+    return undefined;
+  }
+
+  const trimmedMessage = message?.trim();
+  return trimmedMessage
+    ? `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(trimmedMessage)}`
+    : `https://wa.me/${whatsappPhone}`;
+}
+
+function compactWhatsAppValue(value: string, maxLength = 160) {
+  const compact = value.replace(/\s+/g, " ").trim();
+  return compact.length > maxLength
+    ? `${compact.slice(0, maxLength - 1)}…`
+    : compact;
+}
+
+export function formatRequestWhatsAppMessage(input: {
+  locale: string;
+  context: "lead" | "job";
+  title: string;
+  category?: string;
+  area?: string;
+  urgency?: string;
+  visit?: string;
+  reference: string;
+  detailUrl: string;
+}) {
+  const isEnglish = input.locale === "en";
+  const separator = isEnglish ? ": " : "：";
+  const lines = [
+    isEnglish
+      ? input.context === "job"
+        ? "Hi, I am a Hotfix24 professional following up on this confirmed job:"
+        : "Hi, I am a Hotfix24 professional following up on this service request:"
+      : input.context === "job"
+        ? "你好，我係快修24師傅，想跟進以下已確認工作："
+        : "你好，我係快修24師傅，想跟進以下維修請求：",
+    `${isEnglish ? "Request" : "工作"}${separator}${compactWhatsAppValue(input.title)}`,
+    input.category
+      ? `${isEnglish ? "Category" : "分類"}${separator}${compactWhatsAppValue(input.category, 80)}`
+      : undefined,
+    input.area
+      ? `${isEnglish ? "Area" : "地區"}${separator}${compactWhatsAppValue(input.area, 120)}`
+      : undefined,
+    input.urgency
+      ? `${isEnglish ? "Urgency" : "緊急程度"}${separator}${compactWhatsAppValue(input.urgency, 40)}`
+      : undefined,
+    input.visit
+      ? `${isEnglish ? "Visit" : "預約"}${separator}${compactWhatsAppValue(input.visit, 80)}`
+      : undefined,
+    `${isEnglish ? "Reference" : "參考編號"}${separator}${input.reference}`,
+    `${isEnglish ? "Details" : "詳情"}${separator}${input.detailUrl}`,
+  ];
+
+  return lines.filter(Boolean).join("\n");
 }
 
 export function formatUrgencyLabel(urgency: RequestUrgency, locale: string) {

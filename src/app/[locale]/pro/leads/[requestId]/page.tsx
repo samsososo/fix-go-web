@@ -13,9 +13,11 @@ import {
   formatDateTime,
   formatDurationMinutes,
   formatHongKongPhone,
+  formatRequestWhatsAppMessage,
   formatUrgencyLabel,
 } from "@/lib/formatters";
-import { formatDistrictName } from "@/lib/hk-locale";
+import { formatAreaName, formatDistrictName } from "@/lib/hk-locale";
+import { env } from "@/lib/env";
 import { getLeadDetail } from "@/lib/mock/repositories";
 import { getProNav } from "@/lib/nav";
 import { getProSubscriptionEntitlement } from "@/lib/pro-subscription-entitlement";
@@ -40,6 +42,19 @@ export default async function ProLeadDetailPage({
     redirect(`/pro/leads`);
   }
   const canCreateQuotes = subscriptionSnapshot.entitlement.canCreateQuotes;
+  const whatsappMessage = formatRequestWhatsAppMessage({
+    locale,
+    context: "lead",
+    title: lead.title,
+    category: lead.category?.name[locale as "zh-HK" | "en"],
+    area: [
+      formatDistrictName(lead.address.district, locale),
+      formatAreaName(lead.address.area, locale),
+    ].join(" · "),
+    urgency: formatUrgencyLabel(lead.urgency, locale),
+    reference: lead.id,
+    detailUrl: new URL(`/customer/requests/${lead.id}`, env.APP_URL).toString(),
+  });
 
   return (
     <PortalShell
@@ -124,6 +139,7 @@ export default async function ProLeadDetailPage({
             <WhatsAppContactLink
               phone={lead.customer.phone}
               locale={locale}
+              message={whatsappMessage}
               className="min-h-12 w-full justify-center"
             />
             {lead.attachments.length ? (

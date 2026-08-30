@@ -7,13 +7,15 @@ import { cn } from "@/lib/utils";
 export function WhatsAppContactLink({
   phone,
   locale,
+  message,
   className,
 }: {
   phone: string | undefined;
   locale: string;
+  message?: string;
   className?: string;
 }) {
-  const href = formatWhatsAppUrl(phone);
+  const href = formatWhatsAppUrl(phone, message);
   if (!href || !phone) {
     return null;
   }

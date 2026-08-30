@@ -20,9 +20,11 @@ import {
   formatDateTime,
   formatDurationMinutes,
   formatHongKongPhone,
+  formatRequestWhatsAppMessage,
   formatStatusLabel,
 } from "@/lib/formatters";
 import { formatAreaName, formatDistrictName } from "@/lib/hk-locale";
+import { env } from "@/lib/env";
 import { getProJobDetail } from "@/lib/mock/repositories";
 import { getProNav } from "@/lib/nav";
 import { formatCurrency } from "@/lib/utils";
@@ -58,6 +60,25 @@ export default async function ProJobDetailPage({
   const fullAddress = addressParts.join(" · ");
   const mapUrl = fullAddress
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`
+    : undefined;
+  const whatsappMessage = job.request
+    ? formatRequestWhatsAppMessage({
+        locale,
+        context: "job",
+        title: job.request.title,
+        area: [
+          formatDistrictName(job.request.address.district, locale),
+          formatAreaName(job.request.address.area, locale),
+        ].join(" · "),
+        visit: job.scheduledDate
+          ? formatDateTime(job.scheduledDate, locale)
+          : undefined,
+        reference: job.request.id,
+        detailUrl: new URL(
+          `/customer/orders/${job.id}`,
+          env.APP_URL,
+        ).toString(),
+      })
     : undefined;
 
   return (
@@ -145,6 +166,7 @@ export default async function ProJobDetailPage({
                 <WhatsAppContactLink
                   phone={job.customer.phone}
                   locale={locale}
+                  message={whatsappMessage}
                   className="mt-0 min-h-12 justify-center"
                 />
               </div>
