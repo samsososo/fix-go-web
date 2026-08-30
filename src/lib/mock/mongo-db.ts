@@ -7,6 +7,7 @@ import {
   type SecurityQuestionId,
 } from "@/lib/account-recovery";
 import { enableDatabaseSeeding, env } from "@/lib/env";
+import { createHongKongServiceAreas } from "@/lib/hk-service-areas";
 import { createOpaqueToken } from "@/lib/security";
 import {
   PRO_SUBSCRIPTION_AMOUNT_MINOR,
@@ -252,6 +253,7 @@ async function getMongoDb() {
     await migrateLegacySchema(db);
     await initializeMongo(db);
     await bootstrapIfNeeded(db);
+    await syncHongKongServiceAreas(db);
     await applyDataPatches(db);
     await migrateSubscriptionSchema(db);
     initialized = true;
@@ -962,6 +964,32 @@ async function bootstrapIfNeeded(db: Db) {
   }
 
   await setMetadata(db, "bootstrapped", "1");
+}
+
+async function syncHongKongServiceAreas(db: Db) {
+  const patchKey = "hong_kong_service_areas_v1";
+  if (await getMetadata(db, patchKey)) {
+    return;
+  }
+
+  const serviceAreas = createHongKongServiceAreas();
+  await db.collection<ServiceAreaConfigDoc>("appConfig").bulkWrite(
+    serviceAreas.map((serviceArea) => ({
+      updateOne: {
+        filter: { _id: `serviceArea:${serviceArea.district}` },
+        update: {
+          $set: {
+            configType: "serviceArea" as const,
+            key: serviceArea.district,
+            serviceArea,
+          },
+        },
+        upsert: true,
+      },
+    })),
+  );
+  await setMetadata(db, patchKey, "1");
+  clearMongoReadCache();
 }
 
 async function applyDataPatches(db: Db) {

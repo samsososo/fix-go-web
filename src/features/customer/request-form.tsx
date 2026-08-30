@@ -23,6 +23,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
 const REQUEST_STEPS = ["job", "address", "review"] as const;
+const CUSTOM_AREA_OPTION = "__custom_area__";
 
 function requestError(
   locale: string,
@@ -38,6 +39,7 @@ function requestError(
       ? {
           title: "Enter a title with at least 5 characters.",
           description: "Describe the problem in at least 20 characters.",
+          area: "Enter the area or neighbourhood.",
           buildingEstate: "Enter the building or estate name.",
           scheduledDate: "Choose a preferred appointment date and time.",
           budget: "Enter an amount of zero or above.",
@@ -46,6 +48,7 @@ function requestError(
       : {
           title: "請輸入至少 5 個字嘅標題。",
           description: "請用至少 20 個字描述問題。",
+          area: "請輸入分區或附近地名。",
           buildingEstate: "請輸入屋苑或大廈名稱。",
           scheduledDate: "請選擇預約日期及時間。",
           budget: "請輸入零或以上嘅金額。",
@@ -54,6 +57,7 @@ function requestError(
 
   if (field === "title") return messages.title;
   if (field === "description") return messages.description;
+  if (field === "area") return messages.area;
   if (field === "buildingEstate") return messages.buildingEstate;
   if (field === "scheduledDate") return messages.scheduledDate;
   if (field === "budgetMax" && error.message?.includes("Maximum budget")) {
@@ -85,6 +89,7 @@ export function RequestForm({
   const [isPending, startTransition] = useTransition();
   const [serverError, setServerError] = useState<string | null>(null);
   const [step, setStep] = useState(0);
+  const [usesCustomArea, setUsesCustomArea] = useState(false);
   const form = useForm<RequestFormValues, unknown, RequestFormInput>({
     resolver: zodResolver(requestFormSchema),
     defaultValues: {
@@ -415,7 +420,7 @@ export function RequestForm({
 
         {step === 1 ? (
           <div className="mt-6 space-y-5">
-            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+            <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
               <Field
                 label={locale === "en" ? "District" : "地區"}
                 error={requestError(
@@ -428,6 +433,7 @@ export function RequestForm({
                 <Select
                   {...form.register("address.district")}
                   onChange={(event) => {
+                    setUsesCustomArea(false);
                     form.setValue("address.district", event.target.value);
                     form.setValue(
                       "address.area",
@@ -435,6 +441,7 @@ export function RequestForm({
                         (entry) => entry.district === event.target.value,
                       )?.areas[0] ?? "",
                     );
+                    form.clearErrors("address.area");
                   }}
                 >
                   {districts.map((district) => (
@@ -444,23 +451,88 @@ export function RequestForm({
                   ))}
                 </Select>
               </Field>
-              <Field
-                label={locale === "en" ? "Area" : "分區"}
-                error={requestError(
-                  locale,
-                  "area",
-                  form.formState.errors.address?.area,
-                )}
-                required
-              >
-                <Select {...form.register("address.area")}>
-                  {areaOptions.map((area) => (
-                    <option key={area} value={area}>
-                      {formatAreaName(area, locale)}
+              {usesCustomArea ? (
+                <div className="space-y-2">
+                  <Field
+                    label={
+                      locale === "en"
+                        ? "Area (enter manually)"
+                        : "分區（自行輸入）"
+                    }
+                    hint={
+                      locale === "en"
+                        ? "Enter the estate, village or neighbourhood name."
+                        : "可輸入屋苑、鄉村或者附近地名。"
+                    }
+                    error={requestError(
+                      locale,
+                      "area",
+                      form.formState.errors.address?.area,
+                    )}
+                    required
+                  >
+                    <Input
+                      {...form.register("address.area")}
+                      id="custom-service-area"
+                      autoComplete="address-level2"
+                      autoFocus
+                      placeholder={
+                        locale === "en" ? "Enter your area" : "例如：白石角"
+                      }
+                    />
+                  </Field>
+                  <button
+                    type="button"
+                    className="min-h-11 rounded-full px-2 text-sm font-semibold text-primary"
+                    onClick={() => {
+                      setUsesCustomArea(false);
+                      form.setValue("address.area", areaOptions[0] ?? "");
+                      form.clearErrors("address.area");
+                    }}
+                  >
+                    {locale === "en"
+                      ? "Choose from the area list"
+                      : "返回分區列表"}
+                  </button>
+                </div>
+              ) : (
+                <Field
+                  label={locale === "en" ? "Area" : "分區"}
+                  error={requestError(
+                    locale,
+                    "area",
+                    form.formState.errors.address?.area,
+                  )}
+                  required
+                >
+                  <Select
+                    {...form.register("address.area")}
+                    onChange={(event) => {
+                      if (event.target.value === CUSTOM_AREA_OPTION) {
+                        setUsesCustomArea(true);
+                        form.setValue("address.area", "", {
+                          shouldDirty: true,
+                        });
+                        return;
+                      }
+                      form.setValue("address.area", event.target.value, {
+                        shouldDirty: true,
+                      });
+                    }}
+                  >
+                    {areaOptions.map((area) => (
+                      <option key={area} value={area}>
+                        {formatAreaName(area, locale)}
+                      </option>
+                    ))}
+                    <option value={CUSTOM_AREA_OPTION}>
+                      {locale === "en"
+                        ? "Other area / not listed"
+                        : "其他／未列出分區"}
                     </option>
-                  ))}
-                </Select>
-              </Field>
+                  </Select>
+                </Field>
+              )}
             </div>
 
             <div className="grid gap-4 sm:grid-cols-[1.4fr_0.6fr]">

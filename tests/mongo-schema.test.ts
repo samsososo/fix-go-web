@@ -33,13 +33,13 @@ describe("consolidated MongoDB schema", () => {
 
     expect(schema.counts.profile).toBe(4);
     expect(schema.counts.adminProfiles).toBe(1);
-    expect(schema.counts.appConfig).toBe(13);
+    expect(schema.counts.appConfig).toBe(23);
     expect(schema.counts.serviceCases).toBe(1);
     expect(schema.counts.proSubscriptions).toBe(2);
     expect(schema.counts.stripeWebhookEvents).toBe(0);
     expect(state.users).toHaveLength(5);
     expect(state.categories).toHaveLength(5);
-    expect(state.districts).toHaveLength(8);
+    expect(state.districts).toHaveLength(18);
     expect(state.requests).toHaveLength(1);
     expect(state.quotes).toHaveLength(1);
     expect(state.bookings).toHaveLength(1);

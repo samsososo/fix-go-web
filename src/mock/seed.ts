@@ -1,3 +1,4 @@
+import { createHongKongServiceAreas } from "@/lib/hk-service-areas";
 import { MockDb } from "@/types/domain";
 
 export function createSeedDb(): MockDb {
@@ -178,31 +179,7 @@ export function createSeedDb(): MockDb {
         ],
       },
     ],
-    districts: [
-      {
-        district: "Central and Western",
-        areas: ["Central", "Sheung Wan", "Sai Ying Pun"],
-      },
-      {
-        district: "Wan Chai",
-        areas: ["Wan Chai", "Causeway Bay", "Happy Valley"],
-      },
-      { district: "Eastern", areas: ["Quarry Bay", "Tai Koo", "Chai Wan"] },
-      {
-        district: "Kwun Tong",
-        areas: ["Kwun Tong", "Lam Tin", "Yau Tong"],
-      },
-      {
-        district: "Wong Tai Sin",
-        areas: ["Diamond Hill", "San Po Kong", "Chuk Yuen"],
-      },
-      { district: "Sha Tin", areas: ["Sha Tin", "Ma On Shan", "Fo Tan"] },
-      { district: "Tsuen Wan", areas: ["Tsuen Wan", "Kwai Fong", "Tsing Yi"] },
-      {
-        district: "Yuen Long",
-        areas: ["Yuen Long", "Tin Shui Wai", "Hung Shui Kiu"],
-      },
-    ],
+    districts: createHongKongServiceAreas(),
     addresses: [
       {
         id: "addr_seed_1",

@@ -1,4 +1,5 @@
 import { listCredentialedDemoUsers, readDb, withDb } from "@/lib/mock/db";
+import { createHongKongServiceAreas } from "@/lib/hk-service-areas";
 import {
   listMongoCategoryOptions,
   listMongoOpenLeadPreviewsForPro,
@@ -39,6 +40,10 @@ import {
   RequestFormInput,
   SignupInput,
 } from "@/lib/validation";
+
+const hongKongDistrictOrder = new Map(
+  createHongKongServiceAreas().map((entry, index) => [entry.district, index]),
+);
 
 function findUser(users: User[], userId: string) {
   const user = users.find((entry) => entry.id === userId);
@@ -170,7 +175,11 @@ export async function listPublicCategories() {
 
 export async function listDistricts() {
   const db = await readDb();
-  return db.districts;
+  return db.districts.toSorted(
+    (a, b) =>
+      (hongKongDistrictOrder.get(a.district) ?? Number.MAX_SAFE_INTEGER) -
+      (hongKongDistrictOrder.get(b.district) ?? Number.MAX_SAFE_INTEGER),
+  );
 }
 
 export async function listDemoUsers() {
