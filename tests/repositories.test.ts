@@ -9,6 +9,7 @@ import {
   listAdminRequests,
   listCustomerCalendarBookings,
   listRelevantLeads,
+  matchOpenLeadsForEligiblePro,
   listProCalendarBookings,
   submitProQuote,
 } from "@/lib/mock/repositories";
@@ -178,6 +179,72 @@ describe("marketplace repositories", () => {
         "zh-HK",
       ),
     ).rejects.toThrow("Lead not found");
+  });
+
+  it("shows matching locked previews before card setup without exposing details", async () => {
+    await setProSubscriptionAccess("user_pro_chan", "setup_required");
+    const request = await createCustomerRequest(
+      "user_customer_ben",
+      plumbingRequest,
+      "zh-HK",
+    );
+
+    expect(request.matchedProIds).not.toContain("user_pro_chan");
+    await expect(listRelevantLeads("user_pro_chan")).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: request.id,
+          categoryId: "plumbing",
+          existingQuote: undefined,
+        }),
+      ]),
+    );
+    await expect(
+      getLeadDetail("user_pro_chan", request.id),
+    ).resolves.toBeNull();
+  });
+
+  it("matches existing open specialty work when a pro gains new-work access", async () => {
+    await setProSubscriptionAccess("user_pro_chan", "setup_required");
+    const request = await createCustomerRequest(
+      "user_customer_ben",
+      plumbingRequest,
+      "zh-HK",
+    );
+    expect(request.matchedProIds).not.toContain("user_pro_chan");
+
+    await setProSubscriptionAccess("user_pro_chan", "active", {
+      stripeStatus: "active",
+      currentPeriodEndsAt: "2099-01-01T00:00:00.000Z",
+    });
+    await expect(
+      matchOpenLeadsForEligiblePro("user_pro_chan"),
+    ).resolves.toBeGreaterThan(0);
+
+    await expect(listRelevantLeads("user_pro_chan")).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: request.id })]),
+    );
+    await expect(
+      getLeadDetail("user_pro_chan", request.id),
+    ).resolves.toMatchObject({ id: request.id });
+  });
+
+  it("skips an orphaned open request without breaking the whole lead list", async () => {
+    const request = await createCustomerRequest(
+      "user_customer_ben",
+      plumbingRequest,
+      "zh-HK",
+    );
+    await withDb((db) => {
+      db.users = db.users.filter((user) => user.id !== request.customerId);
+      db.customerProfiles = db.customerProfiles.filter(
+        (profile) => profile.userId !== request.customerId,
+      );
+    });
+
+    await expect(listRelevantLeads("user_pro_chan")).resolves.not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: request.id })]),
+    );
   });
 
   it("lets a pro submit a quote and moves the request into quoted state", async () => {

@@ -2372,6 +2372,93 @@ const openMongoLeadStatuses: RequestStatus[] = [
   "quoted",
 ];
 
+export async function matchMongoOpenLeadsForPro(proId: string) {
+  const db = await getMongoDb();
+  const profile = await db.collection<ProfileDoc>("profile").findOne({
+    _id: proId,
+    role: "pro",
+    status: { $ne: "deleted" },
+  });
+  const categoryIds = profile?.provider?.serviceCategoryIds ?? [];
+  if (categoryIds.length === 0) {
+    return 0;
+  }
+
+  const result = await db.collection<ServiceCaseDoc>("serviceCases").updateMany(
+    {
+      categoryId: { $in: categoryIds },
+      status: { $in: openMongoLeadStatuses },
+      matchedProIds: { $ne: proId },
+    },
+    { $addToSet: { matchedProIds: proId } },
+  );
+  clearMongoReadCache();
+  return result.modifiedCount;
+}
+
+export async function listMongoOpenLeadPreviewsForPro(
+  proId: string,
+  categoryId?: string,
+) {
+  const db = await getMongoDb();
+  const profile = await db.collection<ProfileDoc>("profile").findOne({
+    _id: proId,
+    role: "pro",
+    status: { $ne: "deleted" },
+  });
+  const specialtyCategoryIds = profile?.provider?.serviceCategoryIds ?? [];
+  if (
+    specialtyCategoryIds.length === 0 ||
+    (categoryId && !specialtyCategoryIds.includes(categoryId))
+  ) {
+    return [];
+  }
+
+  const filter: Record<string, unknown> = {
+    categoryId: categoryId ?? { $in: specialtyCategoryIds },
+    status: { $in: openMongoLeadStatuses },
+  };
+  const cases = await db
+    .collection<ServiceCaseDoc>("serviceCases")
+    .find(filter)
+    .sort({ createdAt: -1 })
+    .toArray();
+  if (cases.length === 0) {
+    return [];
+  }
+
+  const customerIds = [...new Set(cases.map((row) => row.customerId))];
+  const categoryIds = [...new Set(cases.map((row) => row.categoryId))];
+  const [users, categoryDocs] = await Promise.all([
+    findProfilesByIds(db, customerIds),
+    db
+      .collection<ServiceCategoryConfigDoc>("appConfig")
+      .find({
+        configType: "serviceCategory",
+        key: { $in: categoryIds },
+      })
+      .toArray(),
+  ]);
+  const usersById = mapById(users);
+  const categoriesById = mapById(categoryDocs.map((row) => row.category));
+
+  return cases.flatMap((serviceCase) => {
+    const request = requestFromServiceCase(serviceCase);
+    const customer = usersById.get(request.customerId);
+    if (!customer) {
+      return [];
+    }
+    return [
+      {
+        ...request,
+        existingQuote: undefined,
+        customer,
+        category: categoriesById.get(request.categoryId) ?? null,
+      },
+    ];
+  });
+}
+
 export async function listMongoRelevantLeads(
   proId: string,
   categoryId?: string,
@@ -2411,18 +2498,22 @@ export async function listMongoRelevantLeads(
   const usersById = mapById(users);
   const categoriesById = mapById(categoryDocs.map((row) => row.category));
 
-  return cases.map((serviceCase) => {
+  return cases.flatMap((serviceCase) => {
     const request = requestFromServiceCase(serviceCase);
     const customer = usersById.get(request.customerId);
     if (!customer) {
-      throw new Error("User not found");
+      return [];
     }
-    return {
-      ...request,
-      existingQuote: serviceCase.quotes.find((quote) => quote.proId === proId),
-      customer,
-      category: categoriesById.get(request.categoryId) ?? null,
-    };
+    return [
+      {
+        ...request,
+        existingQuote: serviceCase.quotes.find(
+          (quote) => quote.proId === proId,
+        ),
+        customer,
+        category: categoriesById.get(request.categoryId) ?? null,
+      },
+    ];
   });
 }
 

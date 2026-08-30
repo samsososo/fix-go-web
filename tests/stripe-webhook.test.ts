@@ -246,6 +246,8 @@ function makeDependencies(
   );
   const findBySubscription: StripeWebhookDependencies["findProSubscriptionByStripeSubscriptionId"] =
     vi.fn(async () => lifecycleSubscription());
+  const matchOpenLeads: StripeWebhookDependencies["matchOpenLeadsForPro"] =
+    vi.fn(async () => 0);
   const retrieve: StripeWebhookDependencies["retrieveSucceededCardSetup"] =
     vi.fn(async () => ({
       setupIntent: { id: SETUP_INTENT_ID } as Stripe.SetupIntent,
@@ -292,6 +294,7 @@ function makeDependencies(
     findExistingMonthlyProSubscription: findExisting,
     findProSubscription: find,
     findProSubscriptionByStripeSubscriptionId: findBySubscription,
+    matchOpenLeadsForPro: matchOpenLeads,
     now: () => new Date("2026-08-09T12:00:01.000Z"),
     randomUUID: () => "lease_webhook_test",
     retrieveSucceededCardSetup: retrieve,
@@ -369,6 +372,7 @@ describe("Stripe Checkout webhook processing", () => {
       lastStripeEventCreatedAt: CARD_BOUND_AT,
       lastStripeSyncedAt: "2026-08-09T12:00:01.000Z",
     });
+    expect(dependencies.matchOpenLeadsForPro).toHaveBeenCalledWith(PRO_ID);
     expect(dependencies.completeStripeWebhookEvent).toHaveBeenCalledWith(
       "evt_webhook_test",
       "lease_webhook_test",

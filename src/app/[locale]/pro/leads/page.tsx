@@ -1,5 +1,11 @@
 import { getLocale } from "next-intl/server";
-import { ArrowRight, Clock3, MapPin, Paperclip } from "lucide-react";
+import {
+  ArrowRight,
+  Clock3,
+  LockKeyhole,
+  MapPin,
+  Paperclip,
+} from "lucide-react";
 
 import { EmptyState } from "@/components/shared/empty-state";
 import { PortalShell } from "@/components/shared/portal-shell";
@@ -30,6 +36,8 @@ export default async function ProLeadsPage({
   }
   const subscriptionSnapshot = await getProSubscriptionEntitlement(user.id);
   const canCreateQuotes = subscriptionSnapshot.entitlement.canCreateQuotes;
+  const isSetupRequired =
+    subscriptionSnapshot.entitlement.status === "setup_required";
 
   const categoryOptions = await listCategoryOptions(locale as "zh-HK" | "en");
   const activeCategory = categoryOptions.some((entry) => entry.id === category)
@@ -48,21 +56,57 @@ export default async function ProLeadsPage({
           ? locale === "en"
             ? "Job leads"
             : "工作機會"
-          : locale === "en"
-            ? "Quote records"
-            : "報價紀錄"
+          : isSetupRequired
+            ? locale === "en"
+              ? "Job lead preview"
+              : "工作機會預覽"
+            : locale === "en"
+              ? "Quote records"
+              : "報價紀錄"
       }
       subtitle={
         canCreateQuotes
           ? locale === "en"
             ? "Review open customer requests, filter by category, and submit a structured quote."
             : "查看開放服務需求，可按分類篩選並提交結構化報價。"
-          : locale === "en"
-            ? "New customer leads are hidden. You can still review quotes you previously submitted."
-            : "新客戶工作機會已隱藏；你仍可查看之前提交嘅報價紀錄。"
+          : isSetupRequired
+            ? locale === "en"
+              ? "Preview matching work. Set up your card to open details and submit quotes."
+              : "預覽符合專長嘅工作；綁定付款卡後先可以開啟詳情及報價。"
+            : locale === "en"
+              ? "New customer leads are hidden. You can still review quotes you previously submitted."
+              : "新客戶工作機會已隱藏；你仍可查看之前提交嘅報價紀錄。"
       }
       navItems={getProNav(locale, "leads")}
     >
+      {isSetupRequired ? (
+        <section className="mb-4 flex flex-col gap-3 rounded-2xl border border-warning/25 bg-warning/8 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-warning/12 text-warning">
+              <LockKeyhole className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <div>
+              <p className="font-semibold">
+                {locale === "en"
+                  ? "Job details are locked"
+                  : "工作詳情尚未解鎖"}
+              </p>
+              <p className="mt-1 text-sm leading-6 text-muted">
+                {locale === "en"
+                  ? "You can browse matching summaries now. Card setup unlocks customer details and quoting."
+                  : "你而家可以瀏覽符合專長嘅工作摘要；綁卡後先會顯示客戶資料及開放報價。"}
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/pro/billing"
+            locale={locale}
+            className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-primary px-4 text-sm font-bold !text-white"
+          >
+            {locale === "en" ? "Set up card" : "前往綁卡"}
+          </Link>
+        </section>
+      ) : null}
       <section className="mb-4 rounded-2xl border border-line/80 bg-card/90 p-3 sm:p-4">
         <div className="flex items-center justify-between gap-3 px-1">
           <p className="text-sm font-semibold text-muted">
@@ -106,14 +150,11 @@ export default async function ProLeadsPage({
       </section>
       <div className="grid gap-3 sm:gap-5">
         {leads.length ? (
-          leads.map((lead) => (
-            <Link
-              key={lead.id}
-              href={`/pro/leads/${lead.id}`}
-              locale={locale}
-              className="block"
-            >
-              <Card>
+          leads.map((lead) => {
+            const canOpenDetail =
+              canCreateQuotes || Boolean(lead.existingQuote);
+            const card = (
+              <Card className={cn(!canOpenDetail && "border-warning/20")}>
                 <CardContent className="space-y-3 p-4 sm:p-6">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -124,7 +165,11 @@ export default async function ProLeadsPage({
                     <StatusBadge status={lead.status} locale={locale} />
                   </div>
                   <p className="line-clamp-2 text-sm leading-6 text-muted">
-                    {lead.description}
+                    {canOpenDetail
+                      ? lead.description
+                      : locale === "en"
+                        ? "Set up your card to view the full job description, customer information and site details."
+                        : "綁定付款卡後即可查看完整工作描述、客戶資料及現場詳情。"}
                   </p>
                   <div className="flex flex-wrap gap-2 text-xs font-semibold text-foreground/68">
                     <span className="inline-flex items-center gap-1 rounded-full bg-surface-tint px-2.5 py-1.5">
@@ -138,7 +183,7 @@ export default async function ProLeadsPage({
                     <span className="rounded-full bg-surface-tint px-2.5 py-1.5">
                       {lead.category?.name[locale as "zh-HK" | "en"]}
                     </span>
-                    {lead.attachmentIds.length ? (
+                    {canOpenDetail && lead.attachmentIds.length ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-surface-tint px-2.5 py-1.5">
                         <Paperclip className="h-3.5 w-3.5 text-primary" />
                         {locale === "en"
@@ -170,15 +215,34 @@ export default async function ProLeadsPage({
                             ? "Quote"
                             : "報價"
                           : locale === "en"
-                            ? "View"
-                            : "查看"}
-                      <ArrowRight className="h-4 w-4" />
+                            ? "Set up card to view details"
+                            : "綁卡後查看詳情"}
+                      {canOpenDetail ? (
+                        <ArrowRight className="h-4 w-4" />
+                      ) : (
+                        <LockKeyhole className="h-4 w-4" />
+                      )}
                     </span>
                   </div>
                 </CardContent>
               </Card>
-            </Link>
-          ))
+            );
+
+            return canOpenDetail ? (
+              <Link
+                key={lead.id}
+                href={`/pro/leads/${lead.id}`}
+                locale={locale}
+                className="block"
+              >
+                {card}
+              </Link>
+            ) : (
+              <div key={lead.id} aria-disabled="true">
+                {card}
+              </div>
+            );
+          })
         ) : (
           <EmptyState
             locale={locale}
@@ -187,18 +251,26 @@ export default async function ProLeadsPage({
                 ? locale === "en"
                   ? "No open leads right now"
                   : "暫時未有開放工作機會"
-                : locale === "en"
-                  ? "No quote records to show"
-                  : "暫時未有報價紀錄"
+                : isSetupRequired
+                  ? locale === "en"
+                    ? "No matching job previews right now"
+                    : "暫時未有符合專長嘅工作預覽"
+                  : locale === "en"
+                    ? "No quote records to show"
+                    : "暫時未有報價紀錄"
             }
             description={
               canCreateQuotes
                 ? locale === "en"
                   ? "Try another category or check back when new customer requests arrive."
                   : "可以改用其他分類，或稍後查看新的客戶需求。"
-                : locale === "en"
-                  ? "Existing jobs and billing remain available from the pro workspace."
-                  : "你仍可喺師傅工作台處理現有訂單同管理月費。"
+                : isSetupRequired
+                  ? locale === "en"
+                    ? "Try another specialty category or check back when customers add new work."
+                    : "可以試下其他專長分類，或稍後再睇客戶新增嘅工作。"
+                  : locale === "en"
+                    ? "Existing jobs and billing remain available from the pro workspace."
+                    : "你仍可喺師傅工作台處理現有訂單同管理月費。"
             }
           />
         )}

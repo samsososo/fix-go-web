@@ -1,9 +1,11 @@
 import { listCredentialedDemoUsers, readDb, withDb } from "@/lib/mock/db";
 import {
   listMongoCategoryOptions,
+  listMongoOpenLeadPreviewsForPro,
   listMongoProCalendarBookings,
   listMongoProJobs,
   listMongoRelevantLeads,
+  matchMongoOpenLeadsForPro,
 } from "@/lib/mock/mongo-db";
 import {
   canTransitionBookingStatus,
@@ -572,6 +574,10 @@ export async function saveProProfile(userId: string, input: ProProfileInput) {
 
 export async function listRelevantLeads(proId: string, categoryId?: string) {
   const snapshot = await getProSubscriptionEntitlement(proId);
+  if (snapshot.entitlement.status === "setup_required") {
+    return listMongoOpenLeadPreviewsForPro(proId, categoryId);
+  }
+
   const leads = await listMongoRelevantLeads(
     proId,
     categoryId,
@@ -583,6 +589,11 @@ export async function listRelevantLeads(proId: string, categoryId?: string) {
   }
 
   return leads.filter((lead) => Boolean(lead.existingQuote));
+}
+
+export async function matchOpenLeadsForEligiblePro(proId: string) {
+  await assertProCanAcceptNewWork(proId, new Date().toISOString());
+  return matchMongoOpenLeadsForPro(proId);
 }
 
 export async function getLeadDetail(proId: string, requestId: string) {

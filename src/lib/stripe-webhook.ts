@@ -15,6 +15,7 @@ import {
   findProSubscriptionByStripeSubscriptionId,
   syncProSubscriptionLifecycle,
 } from "@/lib/mock/db";
+import { matchOpenLeadsForEligiblePro } from "@/lib/mock/repositories";
 import {
   createMonthlyProSubscription,
   findExistingMonthlyProSubscription,
@@ -93,6 +94,7 @@ export interface StripeWebhookDependencies {
   findProSubscriptionByStripeSubscriptionId: (
     subscriptionId: string,
   ) => Promise<ProSubscription | null>;
+  matchOpenLeadsForPro: typeof matchOpenLeadsForEligiblePro;
   now: () => Date;
   randomUUID: () => string;
   retrieveSucceededCardSetup: typeof retrieveSucceededCardSetup;
@@ -123,6 +125,7 @@ const defaultDependencies: StripeWebhookDependencies = {
   failStripeWebhookEvent,
   findProSubscription,
   findProSubscriptionByStripeSubscriptionId,
+  matchOpenLeadsForPro: matchOpenLeadsForEligiblePro,
   now: () => new Date(),
   randomUUID,
   retrieveSucceededCardSetup,
@@ -404,6 +407,7 @@ async function processCompletedCheckout(
     session,
   );
   if (subscription.trialConsumedAt && subscription.stripeSubscriptionId) {
+    await dependencies.matchOpenLeadsForPro(proId);
     return;
   }
   const setupIntentId = expandableId(session.setup_intent);
@@ -502,6 +506,7 @@ async function processCompletedCheckout(
   if (!activated) {
     processingError("subscription_activation_conflict");
   }
+  await dependencies.matchOpenLeadsForPro(proId);
 }
 
 async function processCompletedPaidReactivationCheckout(
@@ -515,6 +520,7 @@ async function processCompletedPaidReactivationCheckout(
     : null;
   const validated = validatePaidReactivationCheckout(local, session);
   if (validated.alreadyActivated) {
+    await dependencies.matchOpenLeadsForPro(validated.proId);
     return;
   }
 
@@ -581,6 +587,7 @@ async function processCompletedPaidReactivationCheckout(
   if (!activated) {
     processingError("reactivation_activation_conflict");
   }
+  await dependencies.matchOpenLeadsForPro(validated.proId);
 }
 
 function canonicalSubscriptionInput(
