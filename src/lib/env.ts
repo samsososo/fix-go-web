@@ -23,6 +23,9 @@ const envSchema = z.object({
   ENABLE_DATABASE_SEEDING: z
     .union([z.literal("true"), z.literal("false"), z.boolean()])
     .optional(),
+  SMS_VERIFICATION_FORCE_OFF: z
+    .union([z.literal("true"), z.literal("false"), z.boolean()])
+    .optional(),
   DEMO_PASSWORD: z.string().min(10).default("HotfixDemo123!"),
   BOOTSTRAP_ADMIN_PASSWORD: z.string().min(10).default("HotfixAdmin123!"),
   STRIPE_SECRET_KEY: z.preprocess(
@@ -73,6 +76,10 @@ export const enableDemoLogin = envBoolean(
 export const enableDatabaseSeeding = envBoolean(
   env.ENABLE_DATABASE_SEEDING,
   env.NODE_ENV !== "production",
+);
+export const smsVerificationForceOff = envBoolean(
+  env.SMS_VERIFICATION_FORCE_OFF,
+  false,
 );
 
 export function isProduction() {

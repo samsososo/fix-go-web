@@ -24,6 +24,7 @@ import {
   reserveProSubscriptionCheckout,
   reserveProSubscriptionReactivationCheckout,
   resetPasswordWithRecovery,
+  setSmsVerificationEnabled,
   setProStripeCustomer,
 } from "@/lib/mock/db";
 import {
@@ -876,4 +877,39 @@ export async function toggleProVerificationAction(input: {
   revalidatePath("/admin/pros");
   revalidatePath(`/admin/pros/${input.userId}`);
   return { ok: true };
+}
+
+export async function updateSmsVerificationConfigAction(input: {
+  locale: string;
+  enabled: boolean;
+}) {
+  const admin = await requireRole("admin", input.locale);
+  if (typeof input.enabled !== "boolean") {
+    return {
+      ok: false as const,
+      error:
+        input.locale === "en"
+          ? "Invalid SMS verification setting."
+          : "SMS 驗證設定無效。",
+    };
+  }
+
+  try {
+    const config = await setSmsVerificationEnabled({
+      enabled: input.enabled,
+      updatedBy: admin.id,
+    });
+    revalidatePath("/admin/settings");
+    return { ok: true as const, config };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : input.locale === "en"
+            ? "Unable to update SMS verification settings."
+            : "暫時未能更新 SMS 驗證設定。",
+    };
+  }
 }

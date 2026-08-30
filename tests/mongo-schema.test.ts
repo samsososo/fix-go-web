@@ -33,7 +33,7 @@ describe("consolidated MongoDB schema", () => {
 
     expect(schema.counts.profile).toBe(4);
     expect(schema.counts.adminProfiles).toBe(1);
-    expect(schema.counts.appConfig).toBe(23);
+    expect(schema.counts.appConfig).toBe(24);
     expect(schema.counts.serviceCases).toBe(1);
     expect(schema.counts.proSubscriptions).toBe(2);
     expect(schema.counts.stripeWebhookEvents).toBe(0);

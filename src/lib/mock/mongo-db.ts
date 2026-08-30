@@ -6,9 +6,16 @@ import {
   type PasswordResetRequest,
   type SecurityQuestionId,
 } from "@/lib/account-recovery";
-import { enableDatabaseSeeding, env } from "@/lib/env";
+import { enableDatabaseSeeding, env, smsVerificationForceOff } from "@/lib/env";
 import { createHongKongServiceAreas } from "@/lib/hk-service-areas";
 import { createOpaqueToken } from "@/lib/security";
+import {
+  defaultSmsVerificationConfig,
+  resolveSmsVerificationConfig,
+  SMS_VERIFICATION_CONFIG_ID,
+  type SmsVerificationConfig,
+  type SmsVerificationConfigState,
+} from "@/lib/sms-verification-config";
 import {
   PRO_SUBSCRIPTION_AMOUNT_MINOR,
   PRO_SUBSCRIPTION_CURRENCY,
@@ -140,7 +147,18 @@ type ServiceAreaConfigDoc = {
   serviceArea: DistrictAreaSeed;
 };
 
-type AppConfigDoc = ServiceCategoryConfigDoc | ServiceAreaConfigDoc;
+type SmsVerificationConfigDoc = SmsVerificationConfig & {
+  _id: typeof SMS_VERIFICATION_CONFIG_ID;
+  configType: "feature";
+  key: "smsVerification";
+  updatedAt: string;
+  updatedBy: string;
+};
+
+type AppConfigDoc =
+  | ServiceCategoryConfigDoc
+  | ServiceAreaConfigDoc
+  | SmsVerificationConfigDoc;
 
 type ServiceCaseDoc = MongoDoc<ServiceRequest> & {
   quotes: Quote[];
@@ -252,6 +270,7 @@ async function getMongoDb() {
   if (!initialized) {
     await migrateLegacySchema(db);
     await initializeMongo(db);
+    await ensureSmsVerificationConfig(db);
     await bootstrapIfNeeded(db);
     await syncHongKongServiceAreas(db);
     await applyDataPatches(db);
@@ -379,6 +398,31 @@ async function syncCollection<T extends object>(
   );
 }
 
+async function syncMarketplaceAppConfig(
+  db: Db,
+  rows: Array<ServiceCategoryConfigDoc | ServiceAreaConfigDoc>,
+) {
+  const collection = db.collection<AppConfigDoc>("appConfig");
+  const keys = rows.map((row) => row._id);
+
+  await collection.deleteMany({
+    configType: { $in: ["serviceCategory", "serviceArea"] },
+    _id: { $nin: keys },
+  });
+
+  if (rows.length > 0) {
+    await collection.bulkWrite(
+      rows.map((row) => ({
+        replaceOne: {
+          filter: { _id: row._id },
+          replacement: row,
+          upsert: true,
+        },
+      })),
+    );
+  }
+}
+
 function userFromProfileDoc(doc: ProfileDoc | AdminProfileDoc): User {
   const {
     _id: _discarded,
@@ -473,7 +517,9 @@ function buildProfileDocs(state: MockDb) {
   return { profiles, admins };
 }
 
-function buildAppConfigDocs(state: MockDb): AppConfigDoc[] {
+function buildAppConfigDocs(
+  state: MockDb,
+): Array<ServiceCategoryConfigDoc | ServiceAreaConfigDoc> {
   return [
     ...state.categories.map<ServiceCategoryConfigDoc>((category) => ({
       _id: `serviceCategory:${category.id}`,
@@ -488,6 +534,29 @@ function buildAppConfigDocs(state: MockDb): AppConfigDoc[] {
       serviceArea,
     })),
   ];
+}
+
+function buildDefaultSmsVerificationConfigDoc(
+  updatedAt = new Date().toISOString(),
+): SmsVerificationConfigDoc {
+  return {
+    _id: SMS_VERIFICATION_CONFIG_ID,
+    configType: "feature",
+    key: "smsVerification",
+    ...defaultSmsVerificationConfig,
+    updatedAt,
+    updatedBy: "system",
+  };
+}
+
+async function ensureSmsVerificationConfig(db: Db) {
+  await db
+    .collection<AppConfigDoc>("appConfig")
+    .updateOne(
+      { _id: SMS_VERIFICATION_CONFIG_ID },
+      { $setOnInsert: buildDefaultSmsVerificationConfigDoc() },
+      { upsert: true },
+    );
 }
 
 function buildServiceCaseDocs(state: MockDb): ServiceCaseDoc[] {
@@ -569,7 +638,7 @@ async function writeState(db: Db, state: MockDb) {
       admins,
       (row) => row.id,
     ),
-    syncCollection<AppConfigDoc>(db, "appConfig", appConfig, (row) => row._id),
+    syncMarketplaceAppConfig(db, appConfig),
     syncCollection<ServiceCaseDoc>(
       db,
       "serviceCases",
@@ -1086,6 +1155,50 @@ export async function readMongoDb() {
       mongoReadInflight = null;
     }
   }
+}
+
+export async function getMongoSmsVerificationConfig(): Promise<SmsVerificationConfigState> {
+  const db = await getMongoDb();
+  const config = await db
+    .collection<AppConfigDoc>("appConfig")
+    .findOne({ _id: SMS_VERIFICATION_CONFIG_ID });
+
+  return resolveSmsVerificationConfig(config, smsVerificationForceOff);
+}
+
+export async function setMongoSmsVerificationEnabled(input: {
+  enabled: boolean;
+  updatedBy: string;
+}): Promise<SmsVerificationConfigState> {
+  const updatedBy = input.updatedBy.trim();
+  if (!updatedBy) {
+    throw new Error("An administrator is required to update SMS settings.");
+  }
+
+  const db = await getMongoDb();
+  const currentDoc = await db
+    .collection<AppConfigDoc>("appConfig")
+    .findOne({ _id: SMS_VERIFICATION_CONFIG_ID });
+  const current = resolveSmsVerificationConfig(currentDoc, false);
+  const next: SmsVerificationConfigDoc = {
+    _id: SMS_VERIFICATION_CONFIG_ID,
+    configType: "feature",
+    key: "smsVerification",
+    enabled: input.enabled,
+    provider: current.provider,
+    otpTtlSeconds: current.otpTtlSeconds,
+    resendCooldownSeconds: current.resendCooldownSeconds,
+    maxAttempts: current.maxAttempts,
+    maxSendsPerHour: current.maxSendsPerHour,
+    updatedAt: new Date().toISOString(),
+    updatedBy,
+  };
+
+  await db
+    .collection<AppConfigDoc>("appConfig")
+    .replaceOne({ _id: SMS_VERIFICATION_CONFIG_ID }, next, { upsert: true });
+
+  return resolveSmsVerificationConfig(next, smsVerificationForceOff);
 }
 
 export async function writeMongoDb(dbState: MockDb) {
@@ -2850,6 +2963,13 @@ export async function resetMongoDb() {
     db.collection<AuthCredentialDoc>("authCredentials").deleteMany({}),
     db.collection<ProSubscriptionDoc>("proSubscriptions").deleteMany({}),
     db.collection<StripeWebhookEventDoc>("stripeWebhookEvents").deleteMany({}),
+    db
+      .collection<AppConfigDoc>("appConfig")
+      .replaceOne(
+        { _id: SMS_VERIFICATION_CONFIG_ID },
+        buildDefaultSmsVerificationConfigDoc(),
+        { upsert: true },
+      ),
   ]);
   await writeState(db, seed);
   await backfillProSubscriptions(db);

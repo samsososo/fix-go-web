@@ -16,6 +16,14 @@ vi.mock("@/lib/auth", () => ({
   signInWithCredentials: vi.fn(),
 }));
 
+vi.mock("@/lib/mock/db", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/mock/db")>();
+  return {
+    ...actual,
+    setSmsVerificationEnabled: vi.fn(),
+  };
+});
+
 vi.mock("@/lib/mock/repositories", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@/lib/mock/repositories")>();
@@ -40,7 +48,9 @@ import {
   toggleProVerificationAction,
   updateAdminRequestStatusAction,
   updateBookingStatusAction,
+  updateSmsVerificationConfigAction,
 } from "@/lib/actions";
+import { setSmsVerificationEnabled } from "@/lib/mock/db";
 import {
   acceptCustomerQuote,
   createCustomerRequest,
@@ -298,5 +308,14 @@ describe("session-bound marketplace actions", () => {
     });
     expect(toggleProVerification).toHaveBeenCalledWith("target_pro", true);
     expect(requireRole).toHaveBeenCalledWith("admin", "en");
+
+    await updateSmsVerificationConfigAction({
+      locale: "en",
+      enabled: true,
+    });
+    expect(setSmsVerificationEnabled).toHaveBeenCalledWith({
+      enabled: true,
+      updatedBy: admin.id,
+    });
   });
 });

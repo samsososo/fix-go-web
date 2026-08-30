@@ -90,5 +90,10 @@ export function getAdminNav(locale: string, current: string) {
       label: locale === "en" ? "Calendar" : "排程",
       active: current === "calendar",
     },
+    {
+      href: "/admin/settings",
+      label: locale === "en" ? "Settings" : "設定",
+      active: current === "settings",
+    },
   ];
 }
