@@ -7,6 +7,8 @@ services:
     env_file:
       - path: .env.dev
         required: true
+      - path: .env.mongodb.dev
+        required: true
     environment:
       NODE_ENV: production
       PORT: 3000
@@ -17,6 +19,7 @@ services:
       default:
         aliases:
           - hotfix-web
+      hotfix24-data:
 
   caddy:
     image: caddy:2-alpine
@@ -38,3 +41,7 @@ services:
 volumes:
   caddy_dev_data:
   caddy_dev_config:
+
+networks:
+  hotfix24-data:
+    external: true

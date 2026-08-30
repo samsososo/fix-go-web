@@ -63,6 +63,7 @@ Important implementation notes:
 ## Operational Documentation
 
 - [Business rules](docs/business-rules.zh-HK.md)
+- [Self-hosted MongoDB operations and MongoDB Compass access](docs/self-hosted-mongodb.zh-HK.md)
 - [Facebook Group Hong Kong job-lead workflow](docs/facebook-group-job-lead-workflow.zh-HK.md)
 - [AI agent runbook for Facebook job leads](docs/facebook-group-job-lead-agent-runbook.md)
 - [Managed Facebook Page Graph API sync](tools/facebook_page_sync/README.md)
@@ -134,10 +135,15 @@ MongoDB is required. Set `MONGODB_URI` before running the app locally or in depl
 For MongoDB development, set these values in `.env.dev`:
 
 ```bash
-MONGODB_URI=mongodb+srv://...
+MONGODB_URI=mongodb://hotfix_dev_app:<password>@127.0.0.1:27018/hotfix_dev?authSource=hotfix_dev&directConnection=true
 MONGODB_DATABASE=hotfix_dev
 ENABLE_DATABASE_SEEDING=true
 ```
+
+The local URI assumes the SSH tunnel documented in
+`docs/self-hosted-mongodb.zh-HK.md` is listening on port `27018`. The VPS Docker
+deployment loads a second ignored environment file so the application connects
+to the private Docker hostname instead of the tunnel.
 
 Stripe Billing configuration is environment-specific. Use sandbox values in
 `.env.dev`; never commit the real values:
@@ -172,7 +178,7 @@ Hong Kong phone end-to-end test are ready.
 For production MongoDB, use a separate database and keep mock data disabled:
 
 ```bash
-MONGODB_URI=mongodb+srv://...
+MONGODB_URI=mongodb://hotfix_prod_app:<password>@127.0.0.1:27018/hotfix_prod?authSource=hotfix_prod&directConnection=true
 MONGODB_DATABASE=hotfix_prod
 ENABLE_DEMO_LOGIN=false
 ENABLE_DATABASE_SEEDING=false

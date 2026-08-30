@@ -7,12 +7,17 @@ services:
     env_file:
       - path: .env.production
         required: true
+      - path: .env.mongodb.production
+        required: true
     environment:
       NODE_ENV: production
       PORT: 3000
       HOSTNAME: 0.0.0.0
     expose:
       - "3000"
+    networks:
+      - default
+      - hotfix24-data
 
   caddy:
     image: caddy:2-alpine
@@ -34,3 +39,7 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+
+networks:
+  hotfix24-data:
+    external: true

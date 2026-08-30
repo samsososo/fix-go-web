@@ -1,6 +1,8 @@
 # Hostinger VPS Deploy
 
-This app is ready to run on a Hostinger VPS with Docker, Caddy, and an external MongoDB database.
+This app is ready to run on a Hostinger VPS with Docker, Caddy, and the private
+self-hosted MongoDB service described in
+[`self-hosted-mongodb.zh-HK.md`](self-hosted-mongodb.zh-HK.md).
 
 ## Server Requirements
 
@@ -8,7 +10,7 @@ This app is ready to run on a Hostinger VPS with Docker, Caddy, and an external 
 - Docker Engine
 - Docker Compose plugin
 - Domain A record pointed to the VPS public IP
-- MongoDB Atlas or another external MongoDB server
+- The `hotfix24-data` Docker network and MongoDB service must be running
 
 ## One-Time VPS Setup
 
@@ -51,7 +53,7 @@ Required values:
 ```bash
 DOMAIN=your-domain.com
 APP_URL=https://your-domain.com
-MONGODB_URI=mongodb+srv://...
+MONGODB_URI=mongodb://hotfix_prod_app:...@127.0.0.1:27018/hotfix_prod?authSource=hotfix_prod&directConnection=true
 MONGODB_DATABASE=hotfix_prod
 ENABLE_DEMO_LOGIN=false
 ENABLE_DATABASE_SEEDING=false
@@ -61,6 +63,12 @@ TWILIO_VERIFY_SERVICE_SID=VA...
 DEMO_PASSWORD=strong-random-password
 BOOTSTRAP_ADMIN_PASSWORD=strong-random-password
 ```
+
+The checked-in Compose file also requires an ignored
+`.env.mongodb.production` file on the VPS. It contains only the private Docker
+connection override, using `hotfix24-mongo:27017`; see the MongoDB operations
+document. This keeps the local `.env.production` usable through an SSH tunnel
+without exposing MongoDB publicly.
 
 The Twilio values must be the production Verify Service and its Restricted API
 key. Never put the Client secret in Git, deployment logs, chat, or MongoDB.
@@ -98,8 +106,12 @@ docker compose -f docker-compose.hostinger.yml up -d --build
 docker image prune -f
 ```
 
-## MongoDB Atlas Notes
+## MongoDB Notes
 
-- Add the Hostinger VPS public IP in MongoDB Atlas Network Access.
-- Use a dedicated database user for this app.
-- Keep production data in a separate database from development data.
+- Never expose VPS port `27017` publicly. It must remain bound to
+  `127.0.0.1` only.
+- DEV and PROD use separate databases and separate least-privilege users.
+- Keep the retired managed databases until the migration has been verified and
+  the rollback window has passed.
+- Follow the backup, restore and MongoDB Compass procedures in
+  [`self-hosted-mongodb.zh-HK.md`](self-hosted-mongodb.zh-HK.md).

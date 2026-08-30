@@ -1,0 +1,44 @@
+services:
+  mongo:
+    image: mongo:8.0
+    container_name: hotfix24-mongo
+    restart: unless-stopped
+    env_file:
+      - path: .env.mongodb
+        required: true
+    command:
+      - mongod
+      - --auth
+      - --bind_ip_all
+      - --wiredTigerCacheSizeGB
+      - "1"
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - hotfix24_mongodb_data:/data/db
+    healthcheck:
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - "quit(db.adminCommand({ ping: 1 }).ok ? 0 : 2)"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+    networks:
+      - hotfix24-data
+
+volumes:
+  hotfix24_mongodb_data:
+    name: hotfix24_mongodb_data
+
+networks:
+  hotfix24-data:
+    name: hotfix24-data
