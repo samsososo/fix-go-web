@@ -37,8 +37,8 @@ function requestError(
   const messages =
     locale === "en"
       ? {
-          title: "Enter a title with at least 5 characters.",
-          description: "Describe the problem in at least 20 characters.",
+          title: "Enter a request title.",
+          description: "Describe the problem.",
           area: "Enter the area or neighbourhood.",
           buildingEstate: "Enter the building or estate name.",
           scheduledDate: "Choose a preferred appointment date and time.",
@@ -46,8 +46,8 @@ function requestError(
           generic: "Check this field and try again.",
         }
       : {
-          title: "請輸入至少 5 個字嘅標題。",
-          description: "請用至少 20 個字描述問題。",
+          title: "請輸入請求標題。",
+          description: "請描述問題。",
           area: "請輸入分區或附近地名。",
           buildingEstate: "請輸入屋苑或大廈名稱。",
           scheduledDate: "請選擇預約日期及時間。",

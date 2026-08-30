@@ -72,9 +72,9 @@ export const passwordResetSchema = z
   });
 
 export const addressSchema = z.object({
-  district: z.string().min(2),
-  area: z.string().min(2),
-  buildingEstate: z.string().min(2),
+  district: z.string().trim().min(1),
+  area: z.string().trim().min(1),
+  buildingEstate: z.string().trim().min(1),
   block: z.string().optional(),
   floor: z.string().optional(),
   flatRoom: z.string().optional(),
@@ -83,8 +83,8 @@ export const addressSchema = z.object({
 
 export const requestFormSchema = z
   .object({
-    title: z.string().min(5),
-    description: z.string().min(20),
+    title: z.string().trim().min(1),
+    description: z.string().trim().min(1),
     categoryId: z.string().min(1),
     subcategoryId: z.string().min(1),
     urgency: z.enum(["asap", "today", "tomorrow", "scheduled"]),
