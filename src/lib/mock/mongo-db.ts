@@ -1,3 +1,4 @@
+import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { Db, MongoClient } from "mongodb";
 
 import {
@@ -115,6 +116,23 @@ type SecurityAttemptDoc = {
   success?: boolean;
 };
 
+type SmsVerificationChallengeDoc = {
+  _id: string;
+  userId: string;
+  phone: string;
+  codeHash: string;
+  codeSalt: string;
+  attempts: number;
+  sendCount: number;
+  sendWindowStartedAt: Date;
+  lastSentAt: Date;
+  resendAvailableAt: Date;
+  codeExpiresAt: Date;
+  expiresAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 type LegacyLoginAttemptDoc = {
   identifier: string;
   attemptedAt: string | Date;
@@ -191,6 +209,7 @@ export const mongoSchemaCollections = [
   "accountRecovery",
   "userSessions",
   "securityAttempts",
+  "smsVerificationChallenges",
   "appConfig",
   "serviceCases",
   "userNotifications",
@@ -933,6 +952,12 @@ async function initializeMongo(db: Db) {
     }),
     db
       .collection<SecurityAttemptDoc>("securityAttempts")
+      .createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+    db
+      .collection<SmsVerificationChallengeDoc>("smsVerificationChallenges")
+      .createIndex({ userId: 1 }, { unique: true }),
+    db
+      .collection<SmsVerificationChallengeDoc>("smsVerificationChallenges")
       .createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
     db
       .collection<AppConfigDoc>("appConfig")
@@ -2491,6 +2516,228 @@ export async function findMongoUserById(userId: string) {
   return findProfileById(await getMongoDb(), userId);
 }
 
+function hashSmsVerificationCode(code: string, salt: string) {
+  return scryptSync(code, salt, 32).toString("base64url");
+}
+
+function smsVerificationCodesMatch(
+  code: string,
+  salt: string,
+  expectedHash: string,
+) {
+  try {
+    const actual = Buffer.from(hashSmsVerificationCode(code, salt));
+    const expected = Buffer.from(expectedHash);
+    return (
+      actual.length === expected.length && timingSafeEqual(actual, expected)
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function recordSmsVerificationAttempt(
+  db: Db,
+  phone: string,
+  success: boolean,
+) {
+  const attemptedAt = new Date();
+  await db.collection<SecurityAttemptDoc>("securityAttempts").insertOne({
+    attemptType: "smsVerification",
+    phone,
+    attemptedAt,
+    expiresAt: addMilliseconds(attemptedAt, 30 * 24 * 60 * 60 * 1000),
+    success,
+  });
+}
+
+export async function issueMongoSmsVerificationChallenge(input: {
+  userId: string;
+  phone: string;
+  code: string;
+  otpTtlSeconds: number;
+  resendCooldownSeconds: number;
+  maxSendsPerHour: number;
+}) {
+  const db = await getMongoDb();
+  const user = await findProfileById(db, input.userId);
+  if (
+    !user ||
+    user.role === "admin" ||
+    user.phone !== input.phone ||
+    !user.phoneVerificationRequiredAt ||
+    user.phoneVerifiedAt
+  ) {
+    return { status: "unavailable" as const };
+  }
+
+  const collection = db.collection<SmsVerificationChallengeDoc>(
+    "smsVerificationChallenges",
+  );
+  const now = new Date();
+  let existing = await collection.findOne({ userId: input.userId });
+  if (existing && existing.expiresAt.getTime() <= now.getTime()) {
+    await collection.deleteOne({ _id: existing._id });
+    existing = null;
+  }
+
+  if (existing && existing.resendAvailableAt.getTime() > now.getTime()) {
+    return {
+      status: "cooldown" as const,
+      challengeId: existing._id,
+      retryAfterSeconds: Math.max(
+        1,
+        Math.ceil(
+          (existing.resendAvailableAt.getTime() - now.getTime()) / 1000,
+        ),
+      ),
+    };
+  }
+
+  const sendWindowStartedAt =
+    existing &&
+    existing.sendWindowStartedAt.getTime() > now.getTime() - 60 * 60 * 1000
+      ? existing.sendWindowStartedAt
+      : now;
+  const previousSendCount =
+    existing && sendWindowStartedAt === existing.sendWindowStartedAt
+      ? existing.sendCount
+      : 0;
+  if (previousSendCount >= input.maxSendsPerHour) {
+    return {
+      status: "rate_limited" as const,
+      challengeId: existing?._id,
+      retryAfterSeconds: Math.max(
+        1,
+        Math.ceil(
+          (sendWindowStartedAt.getTime() + 60 * 60 * 1000 - now.getTime()) /
+            1000,
+        ),
+      ),
+    };
+  }
+
+  const codeSalt = randomBytes(16).toString("base64url");
+  const challenge: SmsVerificationChallengeDoc = {
+    _id: existing?._id ?? createOpaqueToken(),
+    userId: user.id,
+    phone: user.phone,
+    codeHash: hashSmsVerificationCode(input.code, codeSalt),
+    codeSalt,
+    attempts: 0,
+    sendCount: previousSendCount + 1,
+    sendWindowStartedAt,
+    lastSentAt: now,
+    resendAvailableAt: addMilliseconds(now, input.resendCooldownSeconds * 1000),
+    codeExpiresAt: addMilliseconds(now, input.otpTtlSeconds * 1000),
+    expiresAt: addMilliseconds(now, 24 * 60 * 60 * 1000),
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  };
+
+  if (existing) {
+    await collection.replaceOne({ _id: existing._id }, challenge);
+  } else {
+    await collection.insertOne(challenge);
+  }
+
+  return {
+    status: "sent" as const,
+    challengeId: challenge._id,
+    retryAfterSeconds: input.resendCooldownSeconds,
+  };
+}
+
+export async function getMongoSmsVerificationChallenge(challengeId: string) {
+  const challenge = await (await getMongoDb())
+    .collection<SmsVerificationChallengeDoc>("smsVerificationChallenges")
+    .findOne({ _id: challengeId, expiresAt: { $gt: new Date() } });
+  if (!challenge) {
+    return null;
+  }
+
+  return {
+    id: challenge._id,
+    userId: challenge.userId,
+    phone: challenge.phone,
+    attempts: challenge.attempts,
+    resendAvailableAt: challenge.resendAvailableAt.toISOString(),
+    codeExpiresAt: challenge.codeExpiresAt.toISOString(),
+  };
+}
+
+export async function verifyMongoSmsVerificationChallenge(input: {
+  challengeId: string;
+  code: string;
+  maxAttempts: number;
+}) {
+  const db = await getMongoDb();
+  const collection = db.collection<SmsVerificationChallengeDoc>(
+    "smsVerificationChallenges",
+  );
+  const challenge = await collection.findOne({ _id: input.challengeId });
+  if (!challenge || challenge.expiresAt.getTime() <= Date.now()) {
+    return { status: "missing" as const };
+  }
+  if (challenge.attempts >= input.maxAttempts) {
+    return { status: "locked" as const };
+  }
+  if (challenge.codeExpiresAt.getTime() <= Date.now()) {
+    return { status: "expired" as const };
+  }
+
+  if (
+    !smsVerificationCodesMatch(
+      input.code,
+      challenge.codeSalt,
+      challenge.codeHash,
+    )
+  ) {
+    const nextAttempts = challenge.attempts + 1;
+    await collection.updateOne(
+      { _id: challenge._id, attempts: challenge.attempts },
+      { $inc: { attempts: 1 }, $set: { updatedAt: new Date() } },
+    );
+    await recordSmsVerificationAttempt(db, challenge.phone, false);
+    return nextAttempts >= input.maxAttempts
+      ? { status: "locked" as const }
+      : {
+          status: "invalid" as const,
+          attemptsRemaining: input.maxAttempts - nextAttempts,
+        };
+  }
+
+  const claimed = await collection.deleteOne({
+    _id: challenge._id,
+    codeHash: challenge.codeHash,
+    attempts: challenge.attempts,
+  });
+  if (claimed.deletedCount !== 1) {
+    return { status: "missing" as const };
+  }
+
+  const verifiedAt = new Date().toISOString();
+  const updated = await db.collection<ProfileDoc>("profile").updateOne(
+    {
+      _id: challenge.userId,
+      phone: challenge.phone,
+      phoneVerificationRequiredAt: { $exists: true },
+    },
+    { $set: { phoneVerifiedAt: verifiedAt } },
+  );
+  if (updated.matchedCount !== 1) {
+    return { status: "missing" as const };
+  }
+
+  await recordSmsVerificationAttempt(db, challenge.phone, true);
+  clearMongoReadCache();
+  clearMongoSessionUserCache();
+  const user = await findProfileById(db, challenge.userId);
+  return user
+    ? { status: "verified" as const, user }
+    : { status: "missing" as const };
+}
+
 export async function listMongoCategoryOptions(locale: Locale) {
   const db = await getMongoDb();
   const rows = await db
@@ -2959,6 +3206,9 @@ export async function resetMongoDb() {
   await Promise.all([
     db.collection<UserSessionDoc>("userSessions").deleteMany({}),
     db.collection<SecurityAttemptDoc>("securityAttempts").deleteMany({}),
+    db
+      .collection<SmsVerificationChallengeDoc>("smsVerificationChallenges")
+      .deleteMany({}),
     db.collection<AccountRecoveryDoc>("accountRecovery").deleteMany({}),
     db.collection<AuthCredentialDoc>("authCredentials").deleteMany({}),
     db.collection<ProSubscriptionDoc>("proSubscriptions").deleteMany({}),

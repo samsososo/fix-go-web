@@ -19,6 +19,17 @@ vi.mock("@/lib/mock/db", async (importOriginal) => {
   return {
     ...actual,
     createCredential: vi.fn(),
+    getSmsVerificationConfig: vi.fn(),
+  };
+});
+
+vi.mock("@/lib/sms-verification", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/sms-verification")>();
+  return {
+    ...actual,
+    isSmsVerificationProviderReady: vi.fn(),
+    startSmsPhoneVerification: vi.fn(),
   };
 });
 
@@ -33,12 +44,17 @@ vi.mock("@/lib/mock/repositories", async (importOriginal) => {
 });
 
 import { signInAs } from "@/lib/auth";
-import { createCredential } from "@/lib/mock/db";
+import { createCredential, getSmsVerificationConfig } from "@/lib/mock/db";
 import {
   createUserAccount,
   findUserByIdentifier,
 } from "@/lib/mock/repositories";
 import { signUpAction } from "@/lib/actions";
+import {
+  isSmsVerificationProviderReady,
+  startSmsPhoneVerification,
+} from "@/lib/sms-verification";
+import { defaultSmsVerificationConfig } from "@/lib/sms-verification-config";
 import type { SignupInput } from "@/lib/validation";
 import type { User } from "@/types/domain";
 
@@ -67,9 +83,17 @@ const createdPro: User = {
   lastLoginAt: "2026-08-15T10:00:00.000Z",
 };
 
-describe("signup without SMS verification", () => {
+const disabledSmsConfig = {
+  ...defaultSmsVerificationConfig,
+  effectiveEnabled: false,
+  forceOff: false,
+};
+
+describe("signup SMS verification routing", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getSmsVerificationConfig).mockResolvedValue(disabledSmsConfig);
+    vi.mocked(isSmsVerificationProviderReady).mockReturnValue(true);
     vi.mocked(findUserByIdentifier).mockResolvedValue(null);
     vi.mocked(createUserAccount).mockResolvedValue(createdPro);
   });
@@ -93,6 +117,33 @@ describe("signup without SMS verification", () => {
     );
     expect(signInAs).toHaveBeenCalledWith(createdPro.id);
     expect(createdPro.phoneVerifiedAt).toBeUndefined();
+  });
+
+  it("routes a new account to OTP verification when the DB config is on", async () => {
+    vi.mocked(getSmsVerificationConfig).mockResolvedValue({
+      ...disabledSmsConfig,
+      enabled: true,
+      effectiveEnabled: true,
+    });
+    vi.mocked(startSmsPhoneVerification).mockResolvedValue({
+      status: "sent",
+      challengeId: "challenge_1",
+      retryAfterSeconds: 60,
+      codeExpiresInSeconds: 300,
+    });
+
+    await expect(
+      signUpAction({ ...signupInput, interfaceLocale: "zh-HK" }),
+    ).resolves.toEqual({ ok: true, target: "/auth/verify" });
+
+    expect(createUserAccount).toHaveBeenCalledWith(
+      signupInput,
+      expect.objectContaining({
+        phoneVerificationRequiredAt: expect.any(String),
+      }),
+    );
+    expect(startSmsPhoneVerification).toHaveBeenCalledWith(createdPro);
+    expect(signInAs).not.toHaveBeenCalled();
   });
 
   it("still rejects an invalid Hong Kong mobile number", async () => {

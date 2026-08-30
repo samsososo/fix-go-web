@@ -38,6 +38,7 @@ export interface User {
   locale: Locale;
   createdAt: string;
   lastLoginAt: string;
+  phoneVerificationRequiredAt?: string;
   phoneVerifiedAt?: string;
 }
 

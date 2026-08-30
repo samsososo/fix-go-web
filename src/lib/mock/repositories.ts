@@ -200,7 +200,10 @@ export async function findUserByIdentifier(identifier: string) {
 
 export async function createUserAccount(
   input: SignupInput,
-  options: { phoneVerifiedAt?: string } = {},
+  options: {
+    phoneVerificationRequiredAt?: string;
+    phoneVerifiedAt?: string;
+  } = {},
 ) {
   return withDb((db) => {
     const normalizedEmail = input.email?.trim().toLowerCase() || "";
@@ -223,6 +226,7 @@ export async function createUserAccount(
       locale: input.locale,
       createdAt: nowIso(),
       lastLoginAt: nowIso(),
+      phoneVerificationRequiredAt: options.phoneVerificationRequiredAt,
       phoneVerifiedAt: options.phoneVerifiedAt,
     };
 

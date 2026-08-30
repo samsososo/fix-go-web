@@ -7,6 +7,7 @@ import { env, shouldUseSecureCookies } from "@/lib/env";
 import {
   createSession,
   findUserById,
+  getSmsVerificationConfig,
   getSessionUser,
   invalidateSession,
   verifyUserCredentials,
@@ -41,6 +42,20 @@ export async function signInWithCredentials(
     return result;
   }
 
+  const smsConfig = await getSmsVerificationConfig();
+  if (
+    smsConfig.effectiveEnabled &&
+    result.user.phoneVerificationRequiredAt &&
+    !result.user.phoneVerifiedAt
+  ) {
+    return {
+      ok: true as const,
+      user: result.user,
+      isDemo: result.isDemo,
+      verificationRequired: true as const,
+    };
+  }
+
   const { sessionId } = await createSession(result.user.id);
   const cookieStore = await cookies();
   cookieStore.set(env.SESSION_COOKIE_NAME, sessionId, {
@@ -58,6 +73,14 @@ export async function signInAs(userId: string) {
   const user = await findUserById(userId);
   if (!user) {
     throw new Error("User not found");
+  }
+  const smsConfig = await getSmsVerificationConfig();
+  if (
+    smsConfig.effectiveEnabled &&
+    user.phoneVerificationRequiredAt &&
+    !user.phoneVerifiedAt
+  ) {
+    throw new Error("Phone verification is required.");
   }
 
   const { sessionId } = await createSession(user.id);

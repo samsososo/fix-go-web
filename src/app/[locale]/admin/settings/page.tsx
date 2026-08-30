@@ -46,8 +46,8 @@ export default async function AdminSettingsPage() {
               </div>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
                 {locale === "en"
-                  ? "This stage stores and controls the database setting only. SMS delivery and the signup verification gate are not connected yet."
-                  : "今個階段只會儲存及控制 DB 設定；SMS 發送同註冊驗證攔截暫時未接駁。"}
+                  ? "The signup verification UI and server gate are active. Development currently uses the console POC code; a real SMS provider is not connected yet."
+                  : "註冊驗證 UI 同 server gate 已接駁；development 暫時使用 console POC 測試碼，真 SMS 供應商尚未接駁。"}
               </p>
             </div>
             <SmsVerificationConfigControl

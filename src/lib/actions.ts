@@ -19,6 +19,7 @@ import {
   createCredential,
   ensureProSubscription,
   findProSubscription,
+  getSmsVerificationConfig,
   releaseProSubscriptionCheckout,
   releaseProSubscriptionReactivationCheckout,
   reserveProSubscriptionCheckout,
@@ -67,6 +68,12 @@ import {
   isProNewWorkRestrictedError,
 } from "@/lib/pro-subscription-entitlement";
 import { hasConsumedLifetimeTrial } from "@/lib/subscription-policy";
+import {
+  isSmsVerificationProviderReady,
+  resendPendingSmsCode,
+  startSmsPhoneVerification,
+  verifyPendingSmsCode,
+} from "@/lib/sms-verification";
 
 const CHECKOUT_RESERVATION_MS = 5 * 60 * 1000;
 
@@ -547,6 +554,27 @@ export async function startLoginAction(input: {
     return result;
   }
 
+  if ("verificationRequired" in result && result.verificationRequired) {
+    const verification = await startSmsPhoneVerification(result.user);
+    if (
+      verification.status === "sent" ||
+      verification.status === "cooldown" ||
+      verification.status === "rate_limited"
+    ) {
+      return { ok: true as const, target: "/auth/verify" };
+    }
+    if (verification.status !== "disabled") {
+      return {
+        ok: false as const,
+        error:
+          input.locale === "en"
+            ? "SMS verification is temporarily unavailable."
+            : "SMS 驗證暫時未能使用，請稍後再試。",
+      };
+    }
+    await signInAs(result.user.id);
+  }
+
   const subscription =
     result.user.role === "pro"
       ? await ensureProSubscription(result.user.id)
@@ -571,6 +599,18 @@ export async function signUpAction(
 
   const signupData = parsed.data;
   const isEnglish = input.interfaceLocale === "en";
+  const smsConfig = await getSmsVerificationConfig();
+  if (
+    smsConfig.effectiveEnabled &&
+    !isSmsVerificationProviderReady(smsConfig)
+  ) {
+    return {
+      ok: false as const,
+      error: isEnglish
+        ? "SMS verification is temporarily unavailable."
+        : "SMS 驗證暫時未能使用，請稍後再試。",
+    };
+  }
   const [phoneAccount, emailAccount] = await Promise.all([
     findUserByIdentifier(signupData.phone),
     signupData.email ? findUserByIdentifier(signupData.email) : null,
@@ -586,7 +626,11 @@ export async function signUpAction(
 
   let user;
   try {
-    user = await createUserAccount(signupData);
+    user = smsConfig.effectiveEnabled
+      ? await createUserAccount(signupData, {
+          phoneVerificationRequiredAt: new Date().toISOString(),
+        })
+      : await createUserAccount(signupData);
   } catch (error) {
     return {
       ok: false,
@@ -601,6 +645,21 @@ export async function signUpAction(
     securityQuestionId: signupData.securityQuestionId,
     securityAnswer: signupData.securityAnswer,
   });
+  if (smsConfig.effectiveEnabled) {
+    const verification = await startSmsPhoneVerification(user);
+    if (verification.status === "sent" || verification.status === "cooldown") {
+      revalidatePath("/");
+      return { ok: true as const, target: "/auth/verify" };
+    }
+    if (verification.status !== "disabled") {
+      return {
+        ok: false as const,
+        error: isEnglish
+          ? "Your account was created, but the verification code could not be sent. Log in to try again."
+          : "帳戶已建立，但暫時未能發送驗證碼。請登入後再試。",
+      };
+    }
+  }
   await signInAs(user.id);
 
   revalidatePath("/");
@@ -610,6 +669,92 @@ export async function signUpAction(
       user.role === "pro"
         ? billingPath(signupData.locale)
         : localizedRoleHomePath(user.role, signupData.locale),
+  };
+}
+
+export async function verifyPhoneOtpAction(input: {
+  code: string;
+  locale: string;
+}) {
+  const isEnglish = input.locale === "en";
+  const code = input.code.replace(/\D/g, "");
+  if (!/^\d{6}$/.test(code)) {
+    return {
+      ok: false as const,
+      error: isEnglish
+        ? "Enter the 6-digit verification code."
+        : "請輸入 6 位數字驗證碼。",
+    };
+  }
+
+  const result = await verifyPendingSmsCode(code);
+  if (result.status === "verified") {
+    await signInAs(result.user.id);
+    revalidatePath("/");
+    return {
+      ok: true as const,
+      target:
+        result.user.role === "pro"
+          ? billingPath(input.locale)
+          : localizedRoleHomePath(result.user.role, input.locale),
+    };
+  }
+
+  const errors = {
+    invalid: isEnglish
+      ? `Incorrect code. ${result.status === "invalid" ? result.attemptsRemaining : 0} attempts remaining.`
+      : `驗證碼不正確，仲有 ${result.status === "invalid" ? result.attemptsRemaining : 0} 次機會。`,
+    expired: isEnglish
+      ? "This code has expired. Request a new code."
+      : "驗證碼已過期，請重新發送。",
+    locked: isEnglish
+      ? "Too many incorrect attempts. Request a new code."
+      : "錯誤次數太多，請重新發送驗證碼。",
+    missing: isEnglish
+      ? "This verification session is no longer available. Log in to restart it."
+      : "驗證程序已失效，請重新登入再開始。",
+    disabled: isEnglish
+      ? "SMS verification has been turned off. Please log in again."
+      : "SMS 驗證已關閉，請重新登入。",
+  } as const;
+
+  return { ok: false as const, error: errors[result.status] };
+}
+
+export async function resendPhoneOtpAction(input: { locale: string }) {
+  const isEnglish = input.locale === "en";
+  const result = await resendPendingSmsCode();
+  if (result.status === "sent") {
+    return {
+      ok: true as const,
+      retryAfterSeconds: result.retryAfterSeconds,
+      codeExpiresInSeconds: result.codeExpiresInSeconds,
+    };
+  }
+  if (result.status === "cooldown") {
+    return {
+      ok: false as const,
+      retryAfterSeconds: result.retryAfterSeconds,
+      error: isEnglish
+        ? `Please wait ${result.retryAfterSeconds} seconds before resending.`
+        : `請等 ${result.retryAfterSeconds} 秒先再發送。`,
+    };
+  }
+  if (result.status === "rate_limited") {
+    return {
+      ok: false as const,
+      retryAfterSeconds: result.retryAfterSeconds,
+      error: isEnglish
+        ? "Too many codes have been sent. Please try again later."
+        : "已發送太多驗證碼，請稍後再試。",
+    };
+  }
+
+  return {
+    ok: false as const,
+    error: isEnglish
+      ? "Unable to resend the code. Log in to restart verification."
+      : "暫時未能重新發送，請登入後再開始驗證。",
   };
 }
 

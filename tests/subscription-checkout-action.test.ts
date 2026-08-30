@@ -50,6 +50,15 @@ vi.mock("@/lib/stripe-billing", async (importOriginal) => {
   };
 });
 
+vi.mock("@/lib/sms-verification", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/sms-verification")>();
+  return {
+    ...actual,
+    startSmsPhoneVerification: vi.fn(),
+  };
+});
+
 import { requireRole, signInAs, signInWithCredentials } from "@/lib/auth";
 import {
   completeProSubscriptionCheckoutReservation,
@@ -78,6 +87,7 @@ import {
   startProSubscriptionCheckoutAction,
 } from "@/lib/actions";
 import { env } from "@/lib/env";
+import { startSmsPhoneVerification } from "@/lib/sms-verification";
 import type { ProSubscription } from "@/lib/subscription-policy";
 import type { User } from "@/types/domain";
 
@@ -384,6 +394,35 @@ describe("pro card setup action", () => {
       ok: true,
       target: "/pro/billing",
     });
+  });
+
+  it("sends a pending new account to phone verification without billing access", async () => {
+    const pendingPro = {
+      ...pro,
+      phoneVerificationRequiredAt: "2026-08-30T10:00:00.000Z",
+    };
+    vi.mocked(signInWithCredentials).mockResolvedValue({
+      ok: true,
+      user: pendingPro,
+      isDemo: false,
+      verificationRequired: true,
+    });
+    vi.mocked(startSmsPhoneVerification).mockResolvedValue({
+      status: "sent",
+      challengeId: "challenge_1",
+      retryAfterSeconds: 60,
+      codeExpiresInSeconds: 300,
+    });
+
+    await expect(
+      startLoginAction({
+        identifier: pendingPro.phone,
+        password: "ValidPass123!",
+        locale: "zh-HK",
+      }),
+    ).resolves.toEqual({ ok: true, target: "/auth/verify" });
+    expect(startSmsPhoneVerification).toHaveBeenCalledWith(pendingPro);
+    expect(ensureProSubscription).not.toHaveBeenCalled();
   });
 
   it("applies the same setup redirect to a demo pro login", async () => {
