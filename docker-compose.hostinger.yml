@@ -1,8 +1,30 @@
 services:
-  web:
+  web-dev:
     build:
       context: .
-    image: fixgo:latest
+    image: fixgo-dev:latest
+    restart: unless-stopped
+    env_file:
+      - path: .env.dev
+        required: true
+      - path: .env.mongodb.dev
+        required: true
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    expose:
+      - "3000"
+    networks:
+      default:
+        aliases:
+          - hotfix-dev
+      hotfix24-data:
+
+  web-prod:
+    build:
+      context: .
+    image: fixgo-prod:latest
     restart: unless-stopped
     env_file:
       - path: .env.production
@@ -16,17 +38,17 @@ services:
     expose:
       - "3000"
     networks:
-      - default
-      - hotfix24-data
+      default:
+        aliases:
+          - hotfix-prod
+      hotfix24-data:
 
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
     depends_on:
-      - web
-    env_file:
-      - path: .env.production
-        required: true
+      - web-dev
+      - web-prod
     ports:
       - "80:80"
       - "443:443"
@@ -38,7 +60,9 @@ services:
 
 volumes:
   caddy_data:
+    name: fix-go-web_caddy_dev_data
   caddy_config:
+    name: fix-go-web_caddy_dev_config
 
 networks:
   hotfix24-data:

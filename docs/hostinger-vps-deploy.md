@@ -1,117 +1,122 @@
-# Hostinger VPS Deploy
+# Hostinger VPS：DEV／Production 分場部署
 
-This app is ready to run on a Hostinger VPS with Docker, Caddy, and the private
-self-hosted MongoDB service described in
-[`self-hosted-mongodb.zh-HK.md`](self-hosted-mongodb.zh-HK.md).
+快修24在同一部 VPS 運行兩個完全獨立的 Next.js service，再由單一 Caddy
+按 hostname 分流：
 
-## Server Requirements
+| 環境       | 網址                       | Env file          | MongoDB       | Docker service |
+| ---------- | -------------------------- | ----------------- | ------------- | -------------- |
+| DEV        | `https://dev.hotfix24.com` | `.env.dev`        | `hotfix_dev`  | `web-dev`      |
+| Production | `https://hotfix24.com`     | `.env.production` | `hotfix_prod` | `web-prod`     |
 
-- Hostinger VPS with Ubuntu
-- Docker Engine
-- Docker Compose plugin
-- Domain A record pointed to the VPS public IP
-- The `hotfix24-data` Docker network and MongoDB service must be running
+兩個 app container 不共用環境變數、session 或資料庫。Caddy 是唯一對外佔用
+80／443 的 service，並繼續代理同一 VPS 上的 Wonderwall 網站。
 
-## One-Time VPS Setup
+## 收費基準
 
-Install Docker:
+師傅月費固定為 HK$100，每月收取一次；首次成功綁卡後享有 3 個香港日曆月
+免費試用。DEV 使用 Stripe sandbox，Production 使用 Stripe live mode，兩邊的
+Price ID、secret key 及 webhook signing secret 必須分開。
 
-```bash
-sudo apt update
-sudo apt install -y ca-certificates curl
-sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-sudo chmod a+r /etc/apt/keyrings/docker.asc
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-sudo usermod -aG docker "$USER"
-```
+## DNS
 
-Log out and back in after adding your user to the Docker group.
+在 Hostinger DNS Zone 建立／確認以下 A records：
 
-Open firewall ports:
+| Type | Name  | Points to       |
+| ---- | ----- | --------------- |
+| A    | `@`   | `76.13.212.102` |
+| A    | `dev` | `76.13.212.102` |
 
-```bash
-sudo ufw allow OpenSSH
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
-sudo ufw --force enable
-```
+`www` 可使用 CNAME 指向 `hotfix24.com`；Caddy 會永久 redirect 到 apex domain。
+DNS 生效前，Caddy 無法為 `dev.hotfix24.com` 取得 TLS certificate。
 
-## App Setup
+## VPS 前置要求
 
-Create `.env.production` on the VPS from `.env.production.example` and fill in real values:
+- Ubuntu、Docker Engine 及 Docker Compose plugin
+- Firewall 開放 22、80/tcp、443/tcp 及 443/udp
+- 外部 Docker network `hotfix24-data`
+- `hotfix24-mongo` 正在該 network 運行
+- Repo 位於 `/root/fix-go-web`
 
-```bash
-cp .env.production.example .env.production
-nano .env.production
-```
+MongoDB 詳情見
+[`self-hosted-mongodb.zh-HK.md`](self-hosted-mongodb.zh-HK.md)。MongoDB 的
+27017 只可綁定 VPS `127.0.0.1`，不得公開到 Internet。
 
-Required values:
+## Environment files
 
-```bash
-DOMAIN=your-domain.com
-APP_URL=https://your-domain.com
-MONGODB_URI=mongodb://hotfix_prod_app:...@127.0.0.1:27018/hotfix_prod?authSource=hotfix_prod&directConnection=true
-MONGODB_DATABASE=hotfix_prod
-ENABLE_DEMO_LOGIN=false
-ENABLE_DATABASE_SEEDING=false
-TWILIO_API_KEY=SK...
-TWILIO_API_SECRET=...
-TWILIO_VERIFY_SERVICE_SID=VA...
-DEMO_PASSWORD=strong-random-password
-BOOTSTRAP_ADMIN_PASSWORD=strong-random-password
-```
+本機及 VPS 均需要以下 ignored files：
 
-The checked-in Compose file also requires an ignored
-`.env.mongodb.production` file on the VPS. It contains only the private Docker
-connection override, using `hotfix24-mongo:27017`; see the MongoDB operations
-document. This keeps the local `.env.production` usable through an SSH tunnel
-without exposing MongoDB publicly.
+- `.env.dev`：`DOMAIN=dev.hotfix24.com`、`APP_URL=https://dev.hotfix24.com`、
+  DEV MongoDB／Twilio／Stripe credentials。
+- `.env.production`：`DOMAIN=hotfix24.com`、`APP_URL=https://hotfix24.com`、
+  Production MongoDB／Twilio／Stripe credentials。
+- `.env.mongodb.dev`：DEV container 連接 `hotfix24-mongo:27017` 的 private override。
+- `.env.mongodb.production`：Production container 的 private MongoDB override。
 
-The Twilio values must be the production Verify Service and its Restricted API
-key. Never put the Client secret in Git, deployment logs, chat, or MongoDB.
-Before the first live OTP test, set the production database's
-`feature:smsVerification` document `provider` to `twilio_verify` while leaving
-`enabled: false`. The database `enabled` field is the rollout switch for the
-environment connected to that database.
+Env files 必須是 mode `600`，不得提交到 Git、貼到 chat 或寫入 logs。
 
-Deploy:
+Local `npm run dev -- -p 3001` 仍會讀取 `.env.dev` 的 DEV database／service
+credentials，但 script 會將 `APP_URL` 暫時 override 成
+`http://localhost:3001`，避免 browser callback 跳去 DEV domain。
+
+## 首次分場部署
+
+在 repo 已包含最新分場 Compose/Caddy 設定，而且兩份 env files 已放到 VPS 後：
 
 ```bash
-docker compose -f docker-compose.hostinger.yml up -d --build
+cd /root/fix-go-web
+docker compose -f docker-compose.hostinger.yml config --quiet
+docker compose -f docker-compose.hostinger.yml up -d --build --remove-orphans
+docker compose -f docker-compose.hostinger.yml exec -T caddy \
+  caddy validate --config /etc/caddy/Caddyfile
 ```
 
-Check status:
+檢查兩個 app 及 Caddy：
 
 ```bash
 docker compose -f docker-compose.hostinger.yml ps
-docker compose -f docker-compose.hostinger.yml logs -f web
+curl -fsS https://hotfix24.com/api/health
+curl -fsS https://dev.hotfix24.com/api/health
 ```
 
-Health check:
+核對 container 所用 database，但不要輸出 connection string：
 
 ```bash
-curl -fsS https://your-domain.com/api/health
+docker compose -f docker-compose.hostinger.yml exec -T web-dev \
+  sh -lc 'printf "%s\n" "$MONGODB_DATABASE"'
+docker compose -f docker-compose.hostinger.yml exec -T web-prod \
+  sh -lc 'printf "%s\n" "$MONGODB_DATABASE"'
 ```
 
-## Updates
+預期分別為 `hotfix_dev` 及 `hotfix_prod`。
 
-Pull the latest code and rebuild:
+## 日常部署
+
+只更新 DEV，並安全上傳本機 `.env.dev`：
 
 ```bash
-git pull
-docker compose -f docker-compose.hostinger.yml up -d --build
-docker image prune -f
+npm run deploy:dev
 ```
 
-## MongoDB Notes
+只更新 Production，並安全上傳本機 `.env.production`：
 
-- Never expose VPS port `27017` publicly. It must remain bound to
-  `127.0.0.1` only.
-- DEV and PROD use separate databases and separate least-privilege users.
-- Keep the retired managed databases until the migration has been verified and
-  the rollback window has passed.
-- Follow the backup, restore and MongoDB Compass procedures in
-  [`self-hosted-mongodb.zh-HK.md`](self-hosted-mongodb.zh-HK.md).
+```bash
+npm run deploy:production
+```
+
+兩個 scripts 都會原子替換遠端 env file、`git pull --ff-only`、只 rebuild
+目標 app，再 validate 及 reload 共用 Caddy。任何一步失敗都會停止，不會聲稱部署
+成功。
+
+## Stripe 分場注意
+
+- DEV webhook：`https://dev.hotfix24.com/api/stripe/webhook`
+- Production webhook：`https://hotfix24.com/api/stripe/webhook`
+- Stripe webhook 是訂閱狀態的主要依據。
+- Production live credentials 未配置及真人付款流程未驗證前，不應開放正式師傅
+  綁卡。
+
+## SMS 分場注意
+
+Local／DEV 連接 DEV DB；Production 連接 PROD DB。每個環境只由自己資料庫的
+`feature:smsVerification.enabled` 控制 SMS rollout。Production credentials、
+provider 及真人香港電話端到端測試完成前，PROD DB 必須保持 `enabled: false`。

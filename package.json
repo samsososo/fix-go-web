@@ -6,7 +6,7 @@
     "node": "24.x"
   },
   "scripts": {
-    "dev": "node scripts/run-with-env.mjs .env.dev ./node_modules/.bin/next dev",
+    "dev": "APP_URL=http://localhost:3001 DOMAIN=localhost node scripts/run-with-env.mjs .env.dev ./node_modules/.bin/next dev",
     "build": "next build && node scripts/prepare-standalone.mjs",
     "start": "HOSTNAME=0.0.0.0 node --env-file=.env.production .next/standalone/server.js",
     "db:reset": "node --env-file=.env.dev ./node_modules/tsx/dist/cli.mjs scripts/reset-db.ts",
@@ -16,6 +16,7 @@
     "qa:flows": "node --env-file=.env.dev ./node_modules/tsx/dist/cli.mjs scripts/qa-role-flows.ts",
     "qa:ui": "node --env-file=.env.dev ./node_modules/tsx/dist/cli.mjs scripts/qa-deep-ui.ts",
     "deploy:dev": "bash scripts/deploy-dev.sh",
+    "deploy:production": "bash scripts/deploy-production.sh",
     "lint": "eslint",
     "test": "NODE_ENV=test MONGODB_DATABASE=hotfix_test ENABLE_DATABASE_SEEDING=true node --env-file=.env.dev ./node_modules/vitest/vitest.mjs run",
     "test:watch": "NODE_ENV=test MONGODB_DATABASE=hotfix_test ENABLE_DATABASE_SEEDING=true node --env-file=.env.dev ./node_modules/vitest/vitest.mjs",
