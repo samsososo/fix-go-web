@@ -107,6 +107,40 @@ npm run deploy:production
 目標 app，再 validate 及 reload 共用 Caddy。任何一步失敗都會停止，不會聲稱部署
 成功。
 
+## 一次性建立 Production 管理員
+
+Production 不可開啟 demo seeding。首次公開前，在 Mac repo 建立一個不會上傳到
+VPS、亦已被 Git ignore 的 `.env.production.admin`：
+
+```dotenv
+PRODUCTION_ADMIN_1_FULL_NAME=<第一位管理員姓名>
+PRODUCTION_ADMIN_1_EMAIL=<第一位管理員登入電郵>
+PRODUCTION_ADMIN_1_PHONE=<第一位管理員香港手提電話>
+PRODUCTION_ADMIN_1_PASSWORD=<第一位管理員密碼，最少 8 個字元>
+PRODUCTION_ADMIN_2_FULL_NAME=<第二位管理員姓名>
+PRODUCTION_ADMIN_2_EMAIL=<第二位管理員登入電郵>
+PRODUCTION_ADMIN_2_PHONE=<第二位管理員香港手提電話>
+PRODUCTION_ADMIN_2_PASSWORD=<第二位管理員密碼，最少 8 個字元>
+```
+
+先經 SSH tunnel 連接 MongoDB，再執行 dry run：
+
+```bash
+PRODUCTION_ADMIN_DRY_RUN=true npm run db:provision-admin
+```
+
+確認輸出包含 `"readyToProvision":true` 後，才正式建立：
+
+```bash
+npm run db:provision-admin
+```
+
+Script 只容許 `NODE_ENV=production`、production database、demo／seeding 關閉、
+兩組不同而且並非範例的管理員登入資料，並只會在尚未有任何正式帳戶或工作
+資料時執行。兩個密碼只會由 `.env.production.admin` 讀取，不會印在 terminal。
+兩個 account 會以同一批操作建立；任何一步失敗均會刪除今次新增資料。成功後
+再次執行會因資料庫已非空而停止。
+
 ## Stripe 分場注意
 
 - DEV webhook：`https://dev.hotfix24.com/api/stripe/webhook`
