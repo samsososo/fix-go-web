@@ -458,13 +458,21 @@ export function SignupForm({
         </Field>
         <Field
           label={locale === "en" ? "Password" : "密碼"}
+          hint={
+            locale === "en"
+              ? "Use at least 8 characters."
+              : "密碼最少需要 8 個字元。"
+          }
           error={form.formState.errors.password?.message}
         >
           <Input
             {...form.register("password")}
             autoComplete="new-password"
+            minLength={8}
             type="password"
-            placeholder="Strong password"
+            placeholder={
+              locale === "en" ? "At least 8 characters" : "最少 8 個字元"
+            }
           />
         </Field>
         <Field
@@ -474,6 +482,7 @@ export function SignupForm({
           <Input
             {...form.register("confirmPassword")}
             autoComplete="new-password"
+            minLength={8}
             type="password"
             placeholder="Repeat password"
           />

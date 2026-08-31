@@ -24,11 +24,7 @@ export function ForgotPasswordForm({ locale }: { locale: string }) {
   const [isPending, startTransition] = useTransition();
   const [serverError, setServerError] = useState<string | null>(null);
   const [isComplete, setIsComplete] = useState(false);
-  const form = useForm<
-    PasswordResetFormValues,
-    unknown,
-    PasswordResetInput
-  >({
+  const form = useForm<PasswordResetFormValues, unknown, PasswordResetInput>({
     resolver: zodResolver(passwordResetSchema),
     defaultValues: {
       phone: "",
@@ -133,11 +129,17 @@ export function ForgotPasswordForm({ locale }: { locale: string }) {
       </Field>
       <Field
         label={locale === "en" ? "New password" : "新密碼"}
+        hint={
+          locale === "en"
+            ? "Use at least 8 characters."
+            : "密碼最少需要 8 個字元。"
+        }
         error={form.formState.errors.newPassword?.message}
       >
         <Input
           {...form.register("newPassword")}
           autoComplete="new-password"
+          minLength={8}
           type="password"
         />
       </Field>
@@ -148,6 +150,7 @@ export function ForgotPasswordForm({ locale }: { locale: string }) {
         <Input
           {...form.register("confirmPassword")}
           autoComplete="new-password"
+          minLength={8}
           type="password"
         />
       </Field>
@@ -162,11 +165,7 @@ export function ForgotPasswordForm({ locale }: { locale: string }) {
         type="submit"
       >
         <KeyRound aria-hidden="true" className="h-4 w-4" />
-        {isPending
-          ? "..."
-          : locale === "en"
-            ? "Reset password"
-            : "重設密碼"}
+        {isPending ? "..." : locale === "en" ? "Reset password" : "重設密碼"}
       </Button>
     </form>
   );

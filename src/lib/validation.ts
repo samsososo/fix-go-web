@@ -4,12 +4,7 @@ import { securityQuestionIds } from "@/lib/account-recovery";
 
 const hkPhoneRegex = /^(5|6|8|9)\d{7}$/;
 
-const strongPasswordSchema = z
-  .string()
-  .min(10, "Minimum 10 characters")
-  .regex(/[A-Z]/, "Must contain an uppercase letter")
-  .regex(/[a-z]/, "Must contain a lowercase letter")
-  .regex(/\d/, "Must contain a number");
+const passwordSchema = z.string().min(8, "Minimum 8 characters");
 
 const dateOfBirthSchema = z
   .string()
@@ -28,7 +23,7 @@ const dateOfBirthSchema = z
 
 export const loginSchema = z.object({
   identifier: z.string().min(4, "Required"),
-  password: z.string().min(10, "Minimum 10 characters"),
+  password: passwordSchema,
 });
 
 export const signupSchema = z
@@ -42,8 +37,8 @@ export const signupSchema = z
     dateOfBirth: dateOfBirthSchema,
     securityQuestionId: z.enum(securityQuestionIds),
     securityAnswer: z.string().trim().min(1, "Required").max(100),
-    password: strongPasswordSchema,
-    confirmPassword: z.string().min(10, "Confirm your password"),
+    password: passwordSchema,
+    confirmPassword: z.string().min(8, "Confirm your password"),
   })
   .refine(
     (value) => value.role !== "pro" || value.serviceCategoryIds.length > 0,
@@ -63,8 +58,8 @@ export const passwordResetSchema = z
     dateOfBirth: dateOfBirthSchema,
     securityQuestionId: z.enum(securityQuestionIds),
     securityAnswer: z.string().trim().min(1, "Required").max(100),
-    newPassword: strongPasswordSchema,
-    confirmPassword: z.string().min(10, "Confirm your password"),
+    newPassword: passwordSchema,
+    confirmPassword: z.string().min(8, "Confirm your password"),
   })
   .refine((value) => value.newPassword === value.confirmPassword, {
     message: "Passwords do not match",

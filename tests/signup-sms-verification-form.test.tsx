@@ -97,6 +97,11 @@ describe("signup phone verification form", () => {
     expect(
       screen.queryByRole("button", { name: "收取驗證碼" }),
     ).not.toBeInTheDocument();
+    expect(screen.getByText("密碼最少需要 8 個字元。")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("最少 8 個字元")).toHaveAttribute(
+      "minlength",
+      "8",
+    );
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "建立帳戶" })).toBeEnabled(),
     );
