@@ -7,7 +7,7 @@ import {
   PRO_SUBSCRIPTION_INTERVAL,
   PRO_SUBSCRIPTION_PLAN,
   PRO_SUBSCRIPTION_TRIAL_MONTHS,
-  addThreeHongKongCalendarMonths,
+  calculateProTrialEndsAt,
   calculateGracePeriodEndsAt,
   canGrantLifetimeTrial,
   createLifetimeTrialWindow,
@@ -43,51 +43,51 @@ describe("pro subscription plan", () => {
     expect(PRO_SUBSCRIPTION_AMOUNT_MINOR).toBe(10_000);
     expect(PRO_SUBSCRIPTION_CURRENCY).toBe("hkd");
     expect(PRO_SUBSCRIPTION_INTERVAL).toBe("month");
-    expect(PRO_SUBSCRIPTION_TRIAL_MONTHS).toBe(3);
+    expect(PRO_SUBSCRIPTION_TRIAL_MONTHS).toBe(1);
     expect(PRO_SUBSCRIPTION_GRACE_PERIOD_DAYS).toBe(14);
     expect(PRO_SUBSCRIPTION_PLAN).toEqual({
       code: "pro_monthly_v1",
       amountMinor: 10_000,
       currency: "hkd",
       interval: "month",
-      trialMonths: 3,
+      trialMonths: 1,
       gracePeriodDays: 14,
     });
   });
 });
 
-describe("Hong Kong calendar-month trial", () => {
-  it("adds three calendar months while preserving Hong Kong local time", () => {
-    expect(addThreeHongKongCalendarMonths("2026-02-10T01:15:30.250Z")).toBe(
-      "2026-05-10T01:15:30.250Z",
+describe("Hong Kong one-month trial", () => {
+  it("adds one month while preserving Hong Kong local time", () => {
+    expect(calculateProTrialEndsAt("2026-02-10T01:15:30.250Z")).toBe(
+      "2026-03-10T01:15:30.250Z",
     );
   });
 
   it("uses the Hong Kong date when the UTC date is still the previous day", () => {
     // 31 December 18:00 UTC is 1 January 02:00 in Hong Kong.
-    expect(addThreeHongKongCalendarMonths("2026-12-31T18:00:00.000Z")).toBe(
-      "2027-03-31T18:00:00.000Z",
+    expect(calculateProTrialEndsAt("2026-12-31T18:00:00.000Z")).toBe(
+      "2027-01-31T18:00:00.000Z",
     );
   });
 
-  it("clamps 31 January to 30 April", () => {
+  it("clamps 31 January to the final day of February", () => {
     // 02:30 UTC is 10:30 in Hong Kong.
-    expect(addThreeHongKongCalendarMonths("2026-01-31T02:30:00.000Z")).toBe(
-      "2026-04-30T02:30:00.000Z",
+    expect(calculateProTrialEndsAt("2026-01-31T02:30:00.000Z")).toBe(
+      "2026-02-28T02:30:00.000Z",
     );
   });
 
   it("clamps to 28 or 29 February as appropriate", () => {
-    expect(addThreeHongKongCalendarMonths("2026-11-30T04:00:00.000Z")).toBe(
+    expect(calculateProTrialEndsAt("2027-01-31T04:00:00.000Z")).toBe(
       "2027-02-28T04:00:00.000Z",
     );
-    expect(addThreeHongKongCalendarMonths("2027-11-30T04:00:00.000Z")).toBe(
+    expect(calculateProTrialEndsAt("2028-01-31T04:00:00.000Z")).toBe(
       "2028-02-29T04:00:00.000Z",
     );
   });
 
   it("rejects an invalid date instead of silently producing bad policy data", () => {
-    expect(() => addThreeHongKongCalendarMonths("not-a-date")).toThrow(
+    expect(() => calculateProTrialEndsAt("not-a-date")).toThrow(
       "value must be a valid ISO date-time",
     );
   });
@@ -102,7 +102,7 @@ describe("one lifetime trial", () => {
       trialConsumedAt: "2026-01-31T02:30:00.000Z",
       trialGrantedAt: "2026-01-31T02:30:00.000Z",
       trialStartedAt: "2026-01-31T02:30:00.000Z",
-      trialEndsAt: "2026-04-30T02:30:00.000Z",
+      trialEndsAt: "2026-02-28T02:30:00.000Z",
     });
   });
 

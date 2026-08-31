@@ -130,9 +130,9 @@ function activeSubscription(
     stripeStatus: "active",
     stripeLivemode: false,
     trialConsumedAt: "2026-08-09T10:00:00.000Z",
-    trialEndsAt: "2026-11-09T10:00:00.000Z",
-    currentPeriodStartedAt: "2026-11-09T10:00:00.000Z",
-    currentPeriodEndsAt: "2026-12-09T10:00:00.000Z",
+    trialEndsAt: "2026-09-09T10:00:00.000Z",
+    currentPeriodStartedAt: "2026-09-09T10:00:00.000Z",
+    currentPeriodEndsAt: "2026-10-09T10:00:00.000Z",
     ...overrides,
   });
 }
@@ -508,7 +508,7 @@ describe("pro subscription lifecycle actions", () => {
         customerId: "cus_action_test",
         subscriptionId: "sub_action_test",
         expectedPriceId: "price_action_test",
-        expectedTrialEndsAt: "2026-11-09T10:00:00.000Z",
+        expectedTrialEndsAt: "2026-09-09T10:00:00.000Z",
         expectedLivemode: false,
         allowHistoricalPriceId: true,
         cancelAtPeriodEnd: true,

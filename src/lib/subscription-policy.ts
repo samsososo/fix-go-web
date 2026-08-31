@@ -2,7 +2,7 @@ export const PRO_SUBSCRIPTION_PLAN_CODE = "pro_monthly_v1" as const;
 export const PRO_SUBSCRIPTION_AMOUNT_MINOR = 10_000 as const;
 export const PRO_SUBSCRIPTION_CURRENCY = "hkd" as const;
 export const PRO_SUBSCRIPTION_INTERVAL = "month" as const;
-export const PRO_SUBSCRIPTION_TRIAL_MONTHS = 3 as const;
+export const PRO_SUBSCRIPTION_TRIAL_MONTHS = 1 as const;
 export const PRO_SUBSCRIPTION_GRACE_PERIOD_DAYS = 14 as const;
 
 export const PRO_SUBSCRIPTION_PLAN = {
@@ -128,13 +128,11 @@ function daysInUtcMonth(year: number, zeroBasedMonth: number) {
 }
 
 /**
- * Adds three Hong Kong calendar months while preserving the Hong Kong local
+ * Calculates the configured trial end while preserving the Hong Kong local
  * time. Dates that do not exist in the target month are clamped to its final
- * day (for example, 31 January becomes 30 April).
+ * day (for example, 31 January becomes 28 February in a non-leap year).
  */
-export function addThreeHongKongCalendarMonths(
-  value: IsoDateTime,
-): IsoDateTime {
+export function calculateProTrialEndsAt(value: IsoDateTime): IsoDateTime {
   const timestamp = parseIsoDateTime(value, "value");
   const hongKongWallClock = new Date(timestamp + HONG_KONG_UTC_OFFSET_MS);
   const sourceYear = hongKongWallClock.getUTCFullYear();
@@ -219,7 +217,7 @@ export function createLifetimeTrialWindow(
     trialConsumedAt: normalizedCardBoundAt,
     trialGrantedAt: normalizedCardBoundAt,
     trialStartedAt: normalizedCardBoundAt,
-    trialEndsAt: addThreeHongKongCalendarMonths(normalizedCardBoundAt),
+    trialEndsAt: calculateProTrialEndsAt(normalizedCardBoundAt),
   };
 }
 

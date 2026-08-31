@@ -79,10 +79,10 @@ export function SubscriptionSetupButton({
         {isEnglish
           ? isReactivation
             ? "Stripe charges HK$100 now. Access returns only after payment is confirmed; the lifetime trial is not repeated."
-            : "No charge today. Your three-month free trial starts only after Stripe confirms your card setup."
+            : "No charge today. Your one-month free trial starts only after Stripe confirms your card setup."
           : isReactivation
             ? "Stripe 會即時收取 HK$100；確認付款後先恢復功能，而且不會再次獲得免費試用。"
-            : "今日不會收費；Stripe 確認綁卡成功後，3 個月免費試用先會開始。"}
+            : "今日不會收費；Stripe 確認綁卡成功後，1 個月免費試用先會開始。"}
       </p>
 
       {error ? (

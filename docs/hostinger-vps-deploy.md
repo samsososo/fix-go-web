@@ -13,7 +13,7 @@
 
 ## 收費基準
 
-師傅月費固定為 HK$100，每月收取一次；首次成功綁卡後享有 3 個香港日曆月
+師傅月費固定為 HK$100，每月收取一次；首次成功綁卡後享有 1 個月
 免費試用。DEV 使用 Stripe sandbox，Production 使用 Stripe live mode，兩邊的
 Price ID、secret key 及 webhook signing secret 必須分開。
 

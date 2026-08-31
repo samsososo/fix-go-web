@@ -46,7 +46,7 @@ async function activateLifecycleTestSubscription() {
     stripeSetupIntentId: "seti_lifecycle_test",
     stripePaymentMethodId: "pm_lifecycle_test",
     cardBoundAt: "2026-01-31T02:30:00.000Z",
-    trialEndsAt: "2026-04-30T02:30:00.000Z",
+    trialEndsAt: "2026-02-28T02:30:00.000Z",
   });
   await activateProTrialSubscription({
     proId,
@@ -57,7 +57,7 @@ async function activateLifecycleTestSubscription() {
     currentPeriodStartedAt: "2026-08-01T00:00:00.000Z",
     currentPeriodEndsAt: "2026-09-01T00:00:00.000Z",
     lastStripeEventId: "evt_lifecycle_activation",
-    lastStripeEventCreatedAt: "2026-04-30T02:30:00.000Z",
+    lastStripeEventCreatedAt: "2026-02-28T02:30:00.000Z",
     lastStripeSyncedAt: "2026-08-01T00:00:01.000Z",
   });
   return proId;
@@ -302,7 +302,7 @@ describe("pro subscription persistence", () => {
       stripeSetupIntentId: "seti_step2_test",
       stripePaymentMethodId: "pm_step2_test",
       cardBoundAt: "2026-01-31T02:30:00.000Z",
-      trialEndsAt: "2026-04-30T02:30:00.000Z",
+      trialEndsAt: "2026-02-28T02:30:00.000Z",
     };
     const trials = await Promise.all([
       consumeProLifetimeTrial(trialInput),
@@ -316,7 +316,7 @@ describe("pro subscription persistence", () => {
     expect(trials[0].subscription.trialConsumedAt).toBe(
       "2026-01-31T02:30:00.000Z",
     );
-    expect(trials[1].subscription.trialEndsAt).toBe("2026-04-30T02:30:00.000Z");
+    expect(trials[1].subscription.trialEndsAt).toBe("2026-02-28T02:30:00.000Z");
 
     await expect(
       consumeProLifetimeTrial({
@@ -332,7 +332,7 @@ describe("pro subscription persistence", () => {
       stripeStatus: "active" as const,
       stripeLivemode: false,
       currentPeriodStartedAt: "2026-01-31T02:30:00.000Z",
-      currentPeriodEndsAt: "2026-04-30T02:30:00.000Z",
+      currentPeriodEndsAt: "2026-02-28T02:30:00.000Z",
       lastStripeEventId: "evt_step2_test",
       lastStripeSyncedAt: "2026-01-31T02:30:01.000Z",
     };
@@ -343,7 +343,7 @@ describe("pro subscription persistence", () => {
       stripeSubscriptionId: "sub_step2_test",
       stripeStatus: "active",
       trialConsumedAt: "2026-01-31T02:30:00.000Z",
-      trialEndsAt: "2026-04-30T02:30:00.000Z",
+      trialEndsAt: "2026-02-28T02:30:00.000Z",
       lastStripeEventId: "evt_step2_test",
     });
 
@@ -413,7 +413,7 @@ describe("pro subscription persistence", () => {
         stripeSetupIntentId: "seti_partial_history",
         stripePaymentMethodId: "pm_partial_history",
         cardBoundAt: "2026-03-01T02:30:00.000Z",
-        trialEndsAt: "2026-06-01T02:30:00.000Z",
+        trialEndsAt: "2026-04-01T02:30:00.000Z",
       }),
     ).rejects.toThrow("does not match");
 

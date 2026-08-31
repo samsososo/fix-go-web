@@ -9,7 +9,7 @@ import {
   readDb,
   withDb,
 } from "@/lib/mock/db";
-import { addThreeHongKongCalendarMonths } from "@/lib/subscription-policy";
+import { calculateProTrialEndsAt } from "@/lib/subscription-policy";
 import type { ProSubscription } from "@/lib/subscription-policy";
 import type {
   Address,
@@ -796,7 +796,7 @@ async function seedTrialSubscriptions(pros: User[]) {
     const trialStartedAt = new Date(
       Date.now() - 7 * 24 * 60 * 60 * 1000,
     ).toISOString();
-    const trialEndsAt = addThreeHongKongCalendarMonths(trialStartedAt);
+    const trialEndsAt = calculateProTrialEndsAt(trialStartedAt);
     await collection.bulkWrite(
       pros.map((pro, index) => {
         const suffix = sequenceNumber(index);

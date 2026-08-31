@@ -107,8 +107,8 @@ export function SubscriptionStatusCard({
       : "付款卡已確認，Stripe 正在完成月費計劃設定，唔需要再次綁卡。"
     : needsSetup
       ? isEnglish
-        ? "Add a card through Stripe to begin your one-time, three-calendar-month free trial."
-        : "透過 Stripe 綁定付款卡，即可開始每位師傅一生一次、為期 3 個香港日曆月嘅免費試用。"
+        ? "Add a card through Stripe to begin your one-time, one-month free trial."
+        : "透過 Stripe 綁定付款卡，即可開始每位師傅一生一次、為期 1 個月嘅免費試用。"
       : status === "trialing"
         ? isEnglish
           ? `Your free trial ends on ${formatHongKongDate(subscription.trialEndsAt, locale)}. The first HK$100 monthly charge is due after the trial.`

@@ -22,7 +22,7 @@ import {
   PRO_SUBSCRIPTION_CURRENCY,
   PRO_SUBSCRIPTION_INTERVAL,
   PRO_SUBSCRIPTION_PLAN_CODE,
-  addThreeHongKongCalendarMonths,
+  calculateProTrialEndsAt,
   calculateGracePeriodEndsAt,
   type ProSubscription,
   type SubscriptionAccessStatus,
@@ -1740,12 +1740,10 @@ export async function consumeMongoProLifetimeTrial(input: {
     throw new TypeError("Card binding time must be a valid date-time.");
   }
   const normalizedCardBoundAt = cardBoundAt.toISOString();
-  const expectedTrialEndsAt = addThreeHongKongCalendarMonths(
-    normalizedCardBoundAt,
-  );
+  const expectedTrialEndsAt = calculateProTrialEndsAt(normalizedCardBoundAt);
   if (new Date(input.trialEndsAt).toISOString() !== expectedTrialEndsAt) {
     throw new Error(
-      "Trial end must be exactly three Hong Kong calendar months.",
+      "Trial end must match the one-month Hong Kong trial policy.",
     );
   }
 

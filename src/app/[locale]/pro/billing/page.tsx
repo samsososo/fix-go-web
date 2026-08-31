@@ -214,8 +214,8 @@ export default async function ProBillingPage({
                             ? "HK$100 monthly plan"
                             : "每月 HK$100 計劃"
                           : isEnglish
-                            ? "First 3 months free"
-                            : "首 3 個月免費"}
+                            ? "First month free"
+                            : "首 1 個月免費"}
                 </span>
               </div>
 
@@ -228,8 +228,8 @@ export default async function ProBillingPage({
                         ? "Monthly subscription"
                         : "月費訂閱"
                       : isEnglish
-                        ? "Three calendar months"
-                        : "3 個日曆月"
+                        ? "One month"
+                        : "1 個月"
                   }
                   description={
                     hasEstablishedPlan && !isTrialing

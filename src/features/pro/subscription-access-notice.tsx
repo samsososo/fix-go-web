@@ -45,8 +45,8 @@ export function SubscriptionAccessNotice({
             ? "Set up your card to start taking new work"
             : "綁定付款卡後即可開始接新工作",
           description: isEnglish
-            ? "Existing records remain available. Your three-calendar-month free trial starts only after Stripe confirms your card."
-            : "你仍可查看現有紀錄；Stripe 確認綁卡後，3 個日曆月免費試用先會開始。",
+            ? "Existing records remain available. Your one-month free trial starts only after Stripe confirms your card."
+            : "你仍可查看現有紀錄；Stripe 確認綁卡後，1 個月免費試用先會開始。",
           icon: <CreditCard className="h-5 w-5" aria-hidden="true" />,
           tone: "warning" as const,
         }
