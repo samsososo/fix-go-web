@@ -145,6 +145,47 @@ The local URI assumes the SSH tunnel documented in
 deployment loads a second ignored environment file so the application connects
 to the private Docker hostname instead of the tunnel.
 
+### Managed Facebook Pages to DEV staging
+
+The managed-Page importer reads only Pages returned by the token owner's
+official Meta Graph API `/me/accounts` access. It writes redacted,
+`pending_human_review` records to the separate `externalUnverifiedLeads`
+collection; it never creates a `ServiceRequest`, quote, booking, notification,
+or pro match.
+
+Configure the ignored, owner-only Page environment file:
+
+```bash
+umask 077
+cp tools/facebook_page_sync/.env.example tools/facebook_page_sync/.env
+chmod 600 tools/facebook_page_sync/.env
+```
+
+Enter the managed Page IDs and long-lived user token locally, then choose an
+approved retention period. Run the default MongoDB dry-run first:
+
+```bash
+npm run db:sync:facebook-pages -- --retention-days 30
+```
+
+After reviewing the count-only result, write idempotently to `hotfix_dev`:
+
+```bash
+npm run db:sync:facebook-pages -- --apply --retention-days 30
+```
+
+`30` is an operational example, not an approved retention policy. Replace it
+with the period approved for the run; it must be at least as long as the
+delivery window (seven days by default). The command fails closed unless both the
+configured database and the database named in `MONGODB_URI` are exactly
+`hotfix_dev`. MongoDB uses `expiresAt` as a TTL boundary, while every combined
+run securely prunes expired rows and no-longer-configured Pages from the raw
+SQLite cache. The SQLite path is restricted to the ignored,
+owner-only `data/private-runs/facebook-pages/` directory. The dry-run still
+refreshes and prunes that restricted cache, but performs zero MongoDB writes. See
+[`tools/facebook_page_sync/README.md`](tools/facebook_page_sync/README.md) for
+Meta permissions and token setup.
+
 Stripe Billing configuration is environment-specific. Use sandbox values in
 `.env.dev`; never commit the real values:
 

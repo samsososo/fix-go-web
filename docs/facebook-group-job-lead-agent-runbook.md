@@ -2,7 +2,7 @@
 document_kind: ai_agent_runbook
 scope: hong_kong_facebook_job_leads
 status: internal_prototype
-last_updated: 2026-08-16
+last_updated: 2026-09-01
 canonical_group_contact_policy: redacted
 human_document: docs/facebook-group-job-lead-workflow.zh-HK.md
 ---
@@ -188,7 +188,8 @@ cd tools/facebook_page_sync
 umask 077
 test -e .env || cp .env.example .env
 chmod 600 .env
-# The user enters FACEBOOK_PAGE_IDS and FACEBOOK_USER_ACCESS_TOKEN locally.
+# The user enters FACEBOOK_PAGE_IDS and FACEBOOK_USER_ACCESS_TOKEN locally;
+# FACEBOOK_GRAPH_API_VERSION defaults to v26.0 as of 2026-09-01.
 "$PYTHON_BIN" -m unittest discover -s tests -v
 "$PYTHON_BIN" sync.py --export-csv
 ```
@@ -200,10 +201,24 @@ Rules:
 - The tool stores the Page-authored `message` unchanged. Its SQLite/CSV outputs may therefore contain public contact data and MUST be handled as restricted source artifacts with owner-only permissions. If Page posts feed the Group-style lead workflow, create a separate redacted derived dataset first.
 - Respect structured retry and rate-limit handling already implemented in `sync.py`.
 - Treat one Page failure as isolated; do not discard successful Page transactions.
-- Confirm the Graph API version is still supported before a new production deployment. The current code is pinned to `v21.0`, which is not a permanent requirement.
+- Confirm the Graph API version is still supported before a new production deployment. The current default is configurable and set to `v26.0` as of 2026-09-01; it is not a permanent requirement.
 - Follow `tools/facebook_page_sync/README.md` for permissions and App Review.
 
 This route produces Page posts. It does not perform the Group lead classification below unless the user separately supplies a lawful Page-post dataset for that purpose.
+
+For the DEV-only redacted staging importer, first configure the owner-only Page `.env`, choose an explicitly approved retention period, and run a MongoDB dry-run:
+
+```bash
+npm run db:sync:facebook-pages -- --retention-days 30
+```
+
+Only after reviewing the count-only result may an authorized operator apply the idempotent upsert:
+
+```bash
+npm run db:sync:facebook-pages -- --apply --retention-days 30
+```
+
+`30` is an example rather than an approved policy. Replace it with the approved period for the run; it MUST NOT be shorter than the delivery window. The command MUST fail unless the configured database and the database encoded in `MONGODB_URI` are both exactly `hotfix_dev`. It writes only supported-contact-pattern-redacted, `pending_human_review` records to `externalUnverifiedLeads`; it MUST NOT write `serviceCases`, create notifications, match pros, or expose raw Page messages. `expiresAt` is enforced by a single-field TTL index. Every combined run also uses secure deletion and `VACUUM` to prune raw SQLite rows older than the approved period and rows belonging to no-longer-configured Pages. Its SQLite path MUST remain directly inside the ignored, owner-only `data/private-runs/facebook-pages/` directory. A dry-run still refreshes and prunes that cache but performs zero MongoDB writes.
 
 ## 8. Group route
 
@@ -557,9 +572,9 @@ An individual row with an unknown or cutoff-crossing date does not stop the whol
 
 ## 11. Product handoff boundary
 
-The current product model has no external-lead entity. The agent MUST NOT insert Facebook leads directly into `ServiceRequest`.
+The repository now has a DEV-only `externalUnverifiedLeads` staging collection for redacted managed-Page imports. It is deliberately outside `MockDb` and the customer/pro repositories, and is not a product-visible lead, formal request, quote, booking, notification, or pro match. The agent MUST NOT insert Facebook leads directly into `ServiceRequest`.
 
-If product integration is requested later, first design and obtain approval for a staging entity such as `external_unverified_lead` with:
+The staging record retains:
 
 - source and `stable_id`;
 - captured and expiry times;
@@ -569,7 +584,7 @@ If product integration is requested later, first design and obtain approval for 
 - retention/deletion state;
 - conversion link to a customer-created request, if consent is later obtained.
 
-Any distribution to pros must call the same subscription entitlement checks used by native leads. External data cannot restore `canCreateQuotes` or `canAcceptNewWork` for a restricted pro.
+Its initial verification, lawful-use, and outreach states remain pending or unauthorized. A changed source fingerprint resets all three approval states and requires review again; a deletion／expiry state cannot be revived by a later sync. Any later conversion or distribution requires separately approved consent, deletion, and outreach rules and must call the same subscription entitlement checks used by native leads. External data cannot restore `canCreateQuotes` or `canAcceptNewWork` for a restricted pro.
 
 ## 12. Git and cleanup
 

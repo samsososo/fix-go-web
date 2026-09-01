@@ -15,7 +15,9 @@ import logging
 import math
 import os
 import random
+import re
 import sqlite3
+import stat
 import sys
 import tempfile
 import time
@@ -26,11 +28,15 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
-GRAPH_API_VERSION = "v21.0"
-GRAPH_API_ROOT = f"https://graph.facebook.com/{GRAPH_API_VERSION}"
+GRAPH_API_ORIGIN = "https://graph.facebook.com"
+DEFAULT_GRAPH_API_VERSION = "v26.0"
+GRAPH_API_VERSION_PATTERN = re.compile(r"^v[1-9][0-9]*\.0$")
+RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+CSV_FORMULA_PREFIX_PATTERN = re.compile(r"^[\s\x00-\x1f\x7f-\x9f]*[=+\-@]")
+MINIMUM_PYTHON_VERSION = (3, 11)
 POST_FIELDS = ",".join(
     (
         "id",
@@ -48,6 +54,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ENV_FILE = Path(__file__).resolve().with_name(".env")
 DEFAULT_DB_PATH = PROJECT_ROOT / "data" / "facebook-page-posts.sqlite3"
 DEFAULT_CSV_PATH = PROJECT_ROOT / "data" / "facebook-page-posts.csv"
+RESTRICTED_LOG_FIELDS = frozenset({"page_name"})
 
 
 class ConfigurationError(ValueError):
@@ -81,6 +88,28 @@ class PaginationLoopError(RuntimeError):
     """Raised when Graph API returns the same paging URL twice."""
 
 
+class RejectRedirectHandler(HTTPRedirectHandler):
+    """Reject every redirect so bearer credentials never cross requests."""
+
+    def redirect_request(
+        self,
+        req: Any,
+        fp: Any,
+        code: int,
+        msg: str,
+        headers: Any,
+        newurl: str,
+    ) -> None:
+        return None
+
+
+NO_REDIRECT_OPENER = build_opener(RejectRedirectHandler())
+
+
+def open_url_without_redirect(request: Request, *, timeout: float) -> Any:
+    return NO_REDIRECT_OPENER.open(request, timeout=timeout)
+
+
 @dataclass(frozen=True)
 class Config:
     page_ids: tuple[str, ...]
@@ -91,6 +120,8 @@ class Config:
     base_backoff_seconds: float
     max_backoff_seconds: float
     initial_lookback_days: int | None = None
+    graph_api_version: str = DEFAULT_GRAPH_API_VERSION
+    run_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -134,7 +165,11 @@ class JsonLogFormatter(logging.Formatter):
             "message": record.getMessage(),
         }
         for key, value in record.__dict__.items():
-            if key not in STANDARD_LOG_RECORD_FIELDS and key != "event":
+            if (
+                key not in STANDARD_LOG_RECORD_FIELDS
+                and key != "event"
+                and key not in RESTRICTED_LOG_FIELDS
+            ):
                 payload[key] = value
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)
@@ -162,17 +197,61 @@ def log_event(
     logger.log(level, message, extra={"event": event, **fields})
 
 
+def ensure_supported_python(version_info: Sequence[int] | None = None) -> None:
+    current = version_info if version_info is not None else sys.version_info
+    if tuple(current[:2]) < MINIMUM_PYTHON_VERSION:
+        required = ".".join(str(value) for value in MINIMUM_PYTHON_VERSION)
+        actual = ".".join(str(value) for value in current[:2])
+        raise ConfigurationError(
+            f"Python {required} or later is required; found Python {actual}."
+        )
+
+
+def read_secure_env_text(path: Path) -> str:
+    flags = os.O_RDONLY
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    elif path.is_symlink():
+        raise ConfigurationError("Environment file must not be a symbolic link.")
+
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        raise ConfigurationError(f"Unable to open environment file: {path}.") from error
+
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise ConfigurationError("Environment file must be a regular file.")
+        if metadata.st_nlink != 1:
+            raise ConfigurationError("Environment file must have exactly one link.")
+        if stat.S_IMODE(metadata.st_mode) != 0o600:
+            raise ConfigurationError(
+                "Environment file permissions must be exactly 0600."
+            )
+        get_effective_uid = getattr(os, "geteuid", None)
+        if get_effective_uid is not None and metadata.st_uid != get_effective_uid():
+            raise ConfigurationError(
+                "Environment file must be owned by the current user."
+            )
+        with os.fdopen(descriptor, encoding="utf-8") as handle:
+            descriptor = -1
+            return handle.read()
+    except UnicodeDecodeError as error:
+        raise ConfigurationError("Environment file must be valid UTF-8.") from error
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
 def parse_dotenv(path: Path) -> dict[str, str]:
     """Parse the small KEY=VALUE subset needed by this standalone tool."""
 
-    if not path.exists():
-        raise ConfigurationError(
-            f"Environment file not found: {path}. Copy .env.example to .env."
-        )
-
     values: dict[str, str] = {}
     for line_number, raw_line in enumerate(
-        path.read_text(encoding="utf-8").splitlines(), start=1
+        read_secure_env_text(path).splitlines(), start=1
     ):
         line = raw_line.strip()
         if not line or line.startswith("#"):
@@ -205,7 +284,7 @@ def unique_page_ids(raw: str) -> tuple[str, ...]:
             continue
         if not page_id.isdigit():
             raise ConfigurationError(
-                f"Invalid Facebook Page ID {page_id!r}; Page IDs must be numeric."
+                "FACEBOOK_PAGE_IDS contains a non-numeric entry."
             )
         if page_id not in seen:
             seen.add(page_id)
@@ -213,6 +292,44 @@ def unique_page_ids(raw: str) -> tuple[str, ...]:
     if not values:
         raise ConfigurationError("FACEBOOK_PAGE_IDS must contain at least one Page ID.")
     return tuple(values)
+
+
+def normalize_graph_api_version(raw: str) -> str:
+    version = raw.strip()
+    if not GRAPH_API_VERSION_PATTERN.fullmatch(version):
+        raise ConfigurationError(
+            "Facebook Graph API version must use the form v<major>.0, "
+            "for example v26.0."
+        )
+    return version
+
+
+def normalize_run_id(raw: str | None) -> str | None:
+    if raw is None:
+        return None
+    value = raw
+    if not RUN_ID_PATTERN.fullmatch(value):
+        raise ConfigurationError(
+            "--run-id must be 1-128 characters using only letters, numbers, "
+            "periods, underscores, or hyphens, and must start with a letter "
+            "or number."
+        )
+    return value
+
+
+def build_graph_api_url(
+    graph_api_version: str,
+    path: str,
+    params: Mapping[str, Any] | None = None,
+) -> str:
+    normalized_path = path if path.startswith("/") else f"/{path}"
+    url = f"{GRAPH_API_ORIGIN}/{graph_api_version}{normalized_path}"
+    if params:
+        query = urlencode(
+            {key: value for key, value in params.items() if value is not None}
+        )
+        return f"{url}?{query}"
+    return url
 
 
 def resolve_env_path(raw: str | None, env_file: Path, fallback: Path) -> Path:
@@ -225,7 +342,9 @@ def resolve_env_path(raw: str | None, env_file: Path, fallback: Path) -> Path:
 
 
 def load_config(args: argparse.Namespace) -> Config:
-    env_file = Path(args.env_file).expanduser().resolve()
+    # Keep the final path component unresolved so O_NOFOLLOW can reject a
+    # symlink instead of silently opening its target.
+    env_file = Path(os.path.abspath(Path(args.env_file).expanduser()))
     file_values = parse_dotenv(env_file)
     values = {**file_values, **os.environ}
 
@@ -235,6 +354,12 @@ def load_config(args: argparse.Namespace) -> Config:
         raise ConfigurationError(
             "FACEBOOK_USER_ACCESS_TOKEN must be a long-lived user access token."
         )
+
+    graph_api_version = normalize_graph_api_version(
+        args.graph_api_version
+        or values.get("FACEBOOK_GRAPH_API_VERSION", DEFAULT_GRAPH_API_VERSION)
+    )
+    run_id = normalize_run_id(args.run_id)
 
     configured_db = args.database or values.get("FACEBOOK_SQLITE_PATH")
     database_path = (
@@ -287,6 +412,8 @@ def load_config(args: argparse.Namespace) -> Config:
         base_backoff_seconds=args.base_backoff,
         max_backoff_seconds=args.max_backoff,
         initial_lookback_days=initial_lookback_days,
+        graph_api_version=graph_api_version,
+        run_id=run_id,
     )
 
 
@@ -432,7 +559,7 @@ class GraphApiClient:
         *,
         sleep: Callable[[float], None] = time.sleep,
         random_uniform: Callable[[float, float], float] = random.uniform,
-        open_url: Callable[..., Any] = urlopen,
+        open_url: Callable[..., Any] = open_url_without_redirect,
     ) -> None:
         self.config = config
         self.logger = logger
@@ -440,16 +567,12 @@ class GraphApiClient:
         self.random_uniform = random_uniform
         self.open_url = open_url
 
-    @staticmethod
-    def url(path: str, params: Mapping[str, Any] | None = None) -> str:
-        normalized_path = path if path.startswith("/") else f"/{path}"
-        url = f"{GRAPH_API_ROOT}{normalized_path}"
-        if params:
-            query = urlencode(
-                {key: value for key, value in params.items() if value is not None}
-            )
-            return f"{url}?{query}"
-        return url
+    @property
+    def graph_api_version(self) -> str:
+        return self.config.graph_api_version
+
+    def url(self, path: str, params: Mapping[str, Any] | None = None) -> str:
+        return build_graph_api_url(self.graph_api_version, path, params)
 
     def _log_usage(self, headers: Mapping[str, Any], request_url: str) -> None:
         usage = parse_usage_headers(headers)
@@ -558,12 +681,20 @@ class GraphApiClient:
         raise last_error or GraphAPIError("Graph API request failed.")
 
 
-def sanitize_paging_url(value: str) -> str:
+def sanitize_paging_url(
+    value: str, graph_api_version: str | None = None
+) -> str:
     """Validate a Graph paging URL and remove any token from its query."""
 
     parts = urlsplit(value)
     if parts.scheme != "https" or parts.netloc != "graph.facebook.com":
         raise GraphAPIError("Graph API returned an untrusted paging.next URL.")
+    if graph_api_version is not None and not parts.path.startswith(
+        f"/{graph_api_version}/"
+    ):
+        raise GraphAPIError(
+            "Graph API returned paging.next for a different API version."
+        )
     filtered_query = urlencode(
         [
             (key, item)
@@ -575,12 +706,18 @@ def sanitize_paging_url(value: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, parts.path, filtered_query, ""))
 
 
-def next_page_url(payload: Mapping[str, Any]) -> str | None:
+def next_page_url(
+    payload: Mapping[str, Any], graph_api_version: str | None = None
+) -> str | None:
     paging = payload.get("paging")
     if not isinstance(paging, Mapping):
         return None
     value = paging.get("next")
-    return sanitize_paging_url(value) if isinstance(value, str) and value else None
+    return (
+        sanitize_paging_url(value, graph_api_version)
+        if isinstance(value, str) and value
+        else None
+    )
 
 
 def fetch_managed_pages(
@@ -616,7 +753,7 @@ def fetch_managed_pages(
                 page_name=page_name if isinstance(page_name, str) else page_id,
                 access_token=page_token,
             )
-        request_url = next_page_url(payload)
+        request_url = next_page_url(payload, client.graph_api_version)
     return pages
 
 
@@ -663,11 +800,16 @@ class SQLiteStore:
         path.parent.mkdir(parents=True, exist_ok=True)
         self.path = path
         self.connection = sqlite3.connect(path)
-        self.connection.row_factory = sqlite3.Row
-        self.connection.execute("PRAGMA journal_mode=WAL")
-        self.connection.execute("PRAGMA foreign_keys=ON")
-        self.connection.execute("PRAGMA busy_timeout=30000")
-        self._initialize()
+        try:
+            os.chmod(path, 0o600)
+            self.connection.row_factory = sqlite3.Row
+            self.connection.execute("PRAGMA journal_mode=WAL")
+            self.connection.execute("PRAGMA foreign_keys=ON")
+            self.connection.execute("PRAGMA busy_timeout=30000")
+            self._initialize()
+        except Exception:
+            self.connection.close()
+            raise
 
     def _initialize(self) -> None:
         self.connection.executescript(
@@ -692,12 +834,20 @@ class SQLiteStore:
             CREATE TABLE IF NOT EXISTS page_sync_state (
                 page_id TEXT PRIMARY KEY,
                 last_created_time TEXT,
-                last_successful_sync_at TEXT NOT NULL
+                last_successful_sync_at TEXT NOT NULL,
+                last_successful_run_id TEXT
             );
-
-            PRAGMA user_version=1;
             """
         )
+        state_columns = {
+            row[1]
+            for row in self.connection.execute("PRAGMA table_info(page_sync_state)")
+        }
+        if "last_successful_run_id" not in state_columns:
+            self.connection.execute(
+                "ALTER TABLE page_sync_state ADD COLUMN last_successful_run_id TEXT"
+            )
+        self.connection.execute("PRAGMA user_version=2")
         self.connection.commit()
 
     def close(self) -> None:
@@ -711,6 +861,16 @@ class SQLiteStore:
         if row is None:
             return None
         value = row["last_created_time"]
+        return value if isinstance(value, str) and value else None
+
+    def get_last_successful_run_id(self, page_id: str) -> str | None:
+        row = self.connection.execute(
+            "SELECT last_successful_run_id FROM page_sync_state WHERE page_id = ?",
+            (page_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        value = row["last_successful_run_id"]
         return value if isinstance(value, str) and value else None
 
     def upsert_post(
@@ -778,17 +938,20 @@ class SQLiteStore:
         page_id: str,
         last_created_time: str | None,
         synced_at: str,
+        run_id: str | None,
     ) -> None:
         self.connection.execute(
             """
             INSERT INTO page_sync_state (
-                page_id, last_created_time, last_successful_sync_at
-            ) VALUES (?, ?, ?)
+                page_id, last_created_time, last_successful_sync_at,
+                last_successful_run_id
+            ) VALUES (?, ?, ?, ?)
             ON CONFLICT(page_id) DO UPDATE SET
                 last_created_time = excluded.last_created_time,
-                last_successful_sync_at = excluded.last_successful_sync_at
+                last_successful_sync_at = excluded.last_successful_sync_at,
+                last_successful_run_id = excluded.last_successful_run_id
             """,
-            (page_id, last_created_time, synced_at),
+            (page_id, last_created_time, synced_at, run_id),
         )
 
 
@@ -799,6 +962,7 @@ def sync_page(
     logger: logging.Logger,
     *,
     initial_lookback_days: int | None = None,
+    run_id: str | None = None,
     now: datetime | None = None,
 ) -> PageSyncResult:
     checkpoint = store.get_checkpoint(page.page_id)
@@ -859,9 +1023,9 @@ def sync_page(
                 if newest_dt is None or created_dt > newest_dt:
                     newest_dt = created_dt
                     newest_checkpoint = created_time
-            request_url = next_page_url(payload)
+            request_url = next_page_url(payload, client.graph_api_version)
 
-        store.save_checkpoint(page.page_id, newest_checkpoint, synced_at)
+        store.save_checkpoint(page.page_id, newest_checkpoint, synced_at, run_id)
 
     log_event(
         logger,
@@ -869,7 +1033,6 @@ def sync_page(
         "page_sync_complete",
         "Completed Facebook Page post synchronization.",
         page_id=page.page_id,
-        page_name=page.page_name,
         fetched_posts=fetched_posts,
         stored_posts=stored_posts,
         previous_checkpoint=checkpoint,
@@ -896,6 +1059,7 @@ def sync_requested_pages(
     logger: logging.Logger,
     *,
     initial_lookback_days: int | None = None,
+    run_id: str | None = None,
     now: datetime | None = None,
 ) -> tuple[list[PageSyncResult], list[str]]:
     shared_sync_time = now or datetime.now(timezone.utc)
@@ -921,6 +1085,7 @@ def sync_requested_pages(
                     page,
                     logger,
                     initial_lookback_days=initial_lookback_days,
+                    run_id=run_id,
                     now=shared_sync_time,
                 )
             )
@@ -928,7 +1093,6 @@ def sync_requested_pages(
             failures.append(page_id)
             fields: dict[str, Any] = {
                 "page_id": page_id,
-                "page_name": page.page_name,
                 "error_type": type(error).__name__,
             }
             if isinstance(error, GraphAPIError):
@@ -965,7 +1129,7 @@ CSV_FIELDS = (
 
 
 def csv_safe(value: Any) -> Any:
-    if isinstance(value, str) and value.startswith(("=", "+", "-", "@")):
+    if isinstance(value, str) and CSV_FORMULA_PREFIX_PATTERN.match(value):
         return f"'{value}"
     return value
 
@@ -1031,6 +1195,20 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help="SQLite path; overrides FACEBOOK_SQLITE_PATH.",
     )
     parser.add_argument(
+        "--graph-api-version",
+        help=(
+            "Meta Graph API version; overrides FACEBOOK_GRAPH_API_VERSION "
+            f"(default: {DEFAULT_GRAPH_API_VERSION})."
+        ),
+    )
+    parser.add_argument(
+        "--run-id",
+        help=(
+            "Optional safe run identifier stored on each successfully synced "
+            "Page checkpoint."
+        ),
+    )
+    parser.add_argument(
         "--export-csv",
         nargs="?",
         const=str(DEFAULT_CSV_PATH),
@@ -1059,10 +1237,12 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
 
 def run(argv: Sequence[str] | None = None) -> int:
+    os.umask(0o077)
     parser = build_argument_parser()
     args = parser.parse_args(argv)
     logger = configure_logging(args.log_level)
     try:
+        ensure_supported_python()
         config = load_config(args)
         csv_output_path = (
             Path(args.export_csv).expanduser().resolve()
@@ -1089,10 +1269,11 @@ def run(argv: Sequence[str] | None = None) -> int:
             logging.INFO,
             "sync_started",
             "Starting Facebook Page post synchronization.",
-            graph_api_version=GRAPH_API_VERSION,
+            graph_api_version=config.graph_api_version,
             requested_page_count=len(config.page_ids),
             initial_lookback_days=config.initial_lookback_days,
             database_path=str(config.database_path),
+            run_id=config.run_id,
         )
         managed_pages = fetch_managed_pages(client, config.user_access_token)
         results, failures = sync_requested_pages(
@@ -1102,6 +1283,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             store,
             logger,
             initial_lookback_days=config.initial_lookback_days,
+            run_id=config.run_id,
         )
 
         csv_export_failed = False
@@ -1125,7 +1307,6 @@ def run(argv: Sequence[str] | None = None) -> int:
                     "Unable to export synchronized Facebook Page posts to CSV.",
                     output_path=str(csv_output_path),
                     error_type=type(error).__name__,
-                    error_message=str(error),
                 )
 
         log_event(

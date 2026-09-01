@@ -1,14 +1,17 @@
 # Facebook Page post sync
 
 This standalone Python 3 tool synchronizes posts from Facebook Pages managed by
-the token owner through the official Meta Graph API **v21.0**. It does not read
-Facebook Groups, reuse browser cookies, or store access tokens in SQLite.
+the token owner through the official Meta Graph API. The default version is
+**v26.0**. It does not read Facebook Groups, reuse browser cookies, or store
+access tokens in SQLite.
 
 ## What it does
 
 - Reads Page IDs and a long-lived user access token from a local `.env` file.
 - Calls `GET /me/accounts` and follows `paging.next` to obtain Page access
   tokens for the requested Pages.
+- Uses the configured Graph API version for every newly constructed request and
+  rejects a `paging.next` URL that switches to a different version.
 - Calls `GET /{page-id}/posts` with:
 
   ```text
@@ -37,25 +40,38 @@ Facebook Groups, reuse browser cookies, or store access tokens in SQLite.
   jitter. `Retry-After` is respected when present.
 - Rolls back a failed Page sync and continues with the remaining Pages.
 - Emits one structured JSON log object per line. Tokens and query strings are
-  never logged.
+  never logged, and raw Page display names are omitted.
+- Rejects every HTTP redirect so an authorization header is never forwarded to
+  a redirect target.
+- Requires Python 3.11 or later, sets process `umask 077`, requires the local
+  `.env` to be a regular current-user-owned `0600` file, and forces the SQLite
+  database file to mode `0600`.
 
 ## Setup
 
-No third-party Python packages are required. Python 3.11 or later is
-recommended.
+No third-party Python packages are required. Python 3.11 or later is required.
 
 ```bash
+PYTHON_BIN="$(command -v python3)"
+"$PYTHON_BIN" --version
 cd tools/facebook_page_sync
+umask 077
 cp .env.example .env
+chmod 600 .env
 ```
+
+The script refuses to read an `.env` that is a symlink, hard-linked,
+non-regular file, owned by another user, or has permissions other than exactly
+`0600`.
 
 Edit `.env`:
 
 ```dotenv
 FACEBOOK_PAGE_IDS=123456789012345,987654321098765
 FACEBOOK_USER_ACCESS_TOKEN=your_long_lived_user_token
+FACEBOOK_GRAPH_API_VERSION=v26.0
 FACEBOOK_INITIAL_LOOKBACK_DAYS=14
-FACEBOOK_SQLITE_PATH=../../data/facebook-page-posts.sqlite3
+FACEBOOK_SQLITE_PATH=../../data/private-runs/facebook-pages/posts.sqlite3
 ```
 
 The token must belong to a Facebook user who has the necessary task access to
@@ -65,9 +81,11 @@ exchange. Meta says long-lived user tokens generally last about 60 days but can
 expire earlier, so replace the token and re-run if Graph returns OAuth error
 code `190`.
 
-The API version is deliberately pinned to `v21.0` as requested. Meta currently
-labels v21 as outdated, so check its changelog and test a supported version
-before Meta retires this one.
+The default API version is `v26.0`, current as of 2026-09-01. Set
+`FACEBOOK_GRAPH_API_VERSION` or pass `--graph-api-version` to use another
+supported version. The CLI flag takes precedence over the environment file.
+Versions must use Meta's `v<major>.0` format. Recheck Meta's changelog and test
+the configured version before every production deployment.
 
 Run a sync:
 
@@ -91,7 +109,9 @@ Useful overrides:
 
 ```bash
 python3 sync.py \
-  --database ../../data/facebook-page-posts.sqlite3 \
+  --database ../../data/private-runs/facebook-pages/posts.sqlite3 \
+  --graph-api-version v26.0 \
+  --run-id 123e4567-e89b-12d3-a456-426614174000 \
   --initial-lookback-days 14 \
   --timeout 30 \
   --max-attempts 6 \
@@ -113,7 +133,11 @@ Page failed. Configuration errors use status `2`.
 - `synced_at`
 
 `page_sync_state` stores `last_created_time` and
-`last_successful_sync_at` independently for every Page. A checkpoint is updated
+`last_successful_sync_at` independently for every Page. When `--run-id` is
+provided, the same transaction also stores it as `last_successful_run_id`.
+Run IDs must be 1–128 safe-token characters and are intended for an orchestrator
+to identify exactly which Pages succeeded in its run. Existing version-1
+SQLite files are migrated in place to schema version 2. A checkpoint is updated
 only after all pages of that Page's response have completed. A mid-run error
 rolls back that Page without affecting Pages already completed.
 
@@ -127,11 +151,12 @@ Only the requested post fields and aggregate counts are stored; response data
 for individual reactions or comments is deliberately discarded.
 
 The CSV is written atomically as UTF-8 with a BOM for spreadsheet
-compatibility. Cells beginning with `=`, `+`, `-`, or `@` are prefixed with an
-apostrophe to prevent formula injection. SQLite retains the original requested
-field values; the complete raw Graph response is deliberately not persisted.
-The export path is rejected if it would overwrite the SQLite database or its
-WAL, shared-memory, or rollback-journal files.
+compatibility. Cells whose first non-whitespace／control character is `=`, `+`,
+`-`, or `@` are prefixed with an apostrophe to prevent formula injection,
+including values hidden behind tabs or line breaks. SQLite retains the original
+requested field values; the complete raw Graph response is deliberately not
+persisted. The export path is rejected if it would overwrite the SQLite
+database or its WAL, shared-memory, or rollback-journal files.
 
 ## Required Meta permissions
 
@@ -150,12 +175,12 @@ access to Pages the user does not manage.
 Official references:
 
 - [Page access tokens and `/me/accounts`](https://developers.facebook.com/documentation/facebook-login/guides/access-tokens#pagetokens)
-- [Graph API v21.0 user accounts edge](https://developers.facebook.com/docs/graph-api/reference/v21.0/user/accounts/)
-- [Graph API v21.0 Page feed/posts reference](https://developers.facebook.com/docs/graph-api/reference/v21.0/page/feed/)
-- [Graph API v21.0 Post fields](https://developers.facebook.com/docs/graph-api/reference/v21.0/post/)
+- [Graph API v26.0 user accounts edge](https://developers.facebook.com/docs/graph-api/reference/v26.0/user/accounts/)
+- [Graph API v26.0 Page feed/posts reference](https://developers.facebook.com/docs/graph-api/reference/v26.0/page/feed/)
+- [Graph API v26.0 Post fields](https://developers.facebook.com/docs/graph-api/reference/v26.0/post/)
 - [Graph API pagination](https://developers.facebook.com/docs/graph-api/results/)
 - [Graph API rate limiting](https://developers.facebook.com/docs/graph-api/overview/rate-limiting/)
-- [Graph API v21.0 changelog](https://developers.facebook.com/docs/graph-api/changelog/version21.0/)
+- [Graph API v26.0 changelog](https://developers.facebook.com/docs/graph-api/changelog/version26.0/)
 - [`pages_show_list`](https://developers.facebook.com/docs/permissions#pages_show_list),
   [`pages_read_engagement`](https://developers.facebook.com/docs/permissions#pages_read_engagement),
   and [`pages_read_user_content`](https://developers.facebook.com/docs/permissions#pages_read_user_content)
@@ -202,6 +227,45 @@ Before submitting, make at least one successful API call that exercises each
 requested Advanced Access permission within the preceding 30 days. Meta notes
 that the dashboard can take up to two days to reflect those calls. Use separate,
 specific justification and end-to-end screencast evidence for each permission.
+
+## Import redacted posts to the DEV database
+
+From the repository root, the combined command first runs this Python sync and
+then derives redacted staging records for MongoDB. It defaults to zero MongoDB
+writes:
+
+```bash
+npm run db:sync:facebook-pages -- --retention-days 30
+```
+
+Apply only after reviewing the count-only dry-run:
+
+```bash
+npm run db:sync:facebook-pages -- --apply --retention-days 30
+```
+
+Replace `30` with the approved retention period for that run. It must be at
+least as long as the delivery window (`7` days by default). The importer fails
+closed unless both the configured database and the database in
+`MONGODB_URI` are exactly `hotfix_dev`. It stores only a redacted summary,
+source identity, redacted Page name, permalink, explicit money text, detected
+contact types, aggregate engagement, timestamps, hashes, and review／retention
+states in `externalUnverifiedLeads`. It never copies the raw Page message or
+supported direct-contact patterns to MongoDB and never writes `serviceCases`.
+Content changes atomically reset verification, lawful-use, and outreach states.
+MongoDB enforces `expiresAt` with a TTL index and a refresh cannot extend an
+existing expiry or revive a deleted／expired record.
+
+The combined command supplies an exact run ID so a failed Page cannot reuse an
+older checkpoint as current data. On a Page's first combined run it bounds the
+raw source lookback to 14 days, the wider delivery window, or a shorter approved
+retention period as applicable; it never requests an unbounded initial archive.
+It restricts SQLite to a direct child of the
+ignored, owner-only `data/private-runs/facebook-pages/` directory, serializes
+local runs with a lock, and securely deletes／vacuums expired rows plus rows for
+Pages removed from the configured allowlist. The SQLite cache still contains
+raw Page messages inside the approved retention window; never commit or share
+it. The standalone Python command does not perform this combined-import prune.
 
 ## Tests
 

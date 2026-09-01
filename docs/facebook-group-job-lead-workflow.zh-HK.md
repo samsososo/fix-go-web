@@ -1,6 +1,6 @@
 # Facebook Group 香港工作線索資料流程
 
-最後更新：2026-08-16
+最後更新：2026-09-01
 
 狀態：內部原型記錄；未取得 Meta 明確書面許可前，不得重複或擴展為 Facebook Group 自動收集
 
@@ -23,7 +23,7 @@
 | Facebook Groups                   | 預設由使用者人手瀏覽後提供 export／screenshots／明確 URLs，再由系統離線處理；任何 Playwright、bot 或 programmatic browser collection 都要先有 Meta 明確書面許可 | 今次兩個香港群組的 browser-assisted 資料只屬一次性本機原型記錄，不構成重跑授權      | Page API 不涵蓋 Groups；不得以「低量」或「有人監督」當成免除 Meta 自動收集條款 |
 | 使用者提供的 CSV／JSON／Excel     | 離線清理及篩選                                                                                                                                                  | 只有保存 immutable input、來源時間及 hash 後才可重現                                | 必須保存來源識別及資料使用權限                                                 |
 
-Page API 工具固定使用 Graph API `v21.0`，而該版本已在工具 README 標示為過時。每次準備投入新環境前，必須先核對 Meta 當時仍支援的版本、permissions 及 App Review 要求，不能把 `v21.0` 當成永久規格。
+Page API 工具預設使用截至 2026-09-01 的 Graph API `v26.0`，亦可由環境或 CLI 明確指定版本。每次準備投入新環境前，仍必須先核對 Meta 當時支援的版本、permissions 及 App Review 要求，不能把任何預設版本當成永久規格。
 
 Meta 已在 Graph API v19.0 changelog 公布移除 Groups API、`publish_to_groups` 及 `groups_access_member_info`，並由 2024-04-22 起套用至所有 API versions。因此截至本文件日期，沒有一般商業用途的官方 Graph API 路徑可以批量讀取任意公開或已加入 Group 的 posts；Page API 及 Page Public Content Access 都不是替代方案。
 
@@ -187,7 +187,8 @@ Facebook lead 是外部、未驗證線索，不能直接建立現有 `ServiceReq
 - 現有 `ServiceRequest` 需要平台 customer、地址、分類、狀態及其他正式欄位。
 - 外部發帖人的 Facebook contact 不等於已驗證的快修24 customer phone。
 - 不得用 Meta Platform Data 判斷某人是否合資格受聘、是否應獲聘用，或決定其聘用條款；如日後的 matching 會影響 employment decision，必須先另行完成政策及法律評估。
-- 如日後要匯入產品，應先另設 `external_unverified_lead` staging model，經人工確認及取得合適同意後才轉成正式 request。
+- Repository 已有 DEV-only `externalUnverifiedLeads` staging collection，只接受 managed Page 官方 API 產生並已遮蔽受支援直接聯絡格式的 records。所有 records 初始均為 `pending_human_review`／`pending_review`／`not_authorized`，而且不屬於 `MockDb` 正式 marketplace state。`expiresAt` 由 MongoDB TTL index 執行上限，而 combined importer 每次亦會用同一批准日數 secure-delete／VACUUM raw SQLite 過期 rows，並移除已不在 allowlist 的 Pages。
+- Staging record 只有在日後另行批准 conversion、consent、retention 及 outreach 流程後，才可考慮轉成正式 request；目前 importer 不設轉換功能。
 - 外部 lead 不得繞過 [`docs/business-rules.zh-HK.md`](business-rules.zh-HK.md) 的師傅訂閱及新工作權限。被限制建立報價或接受新工作的師傅，仍不可接收這些 leads 作為繞過途徑。
 
 ## 現有本機 artifacts
@@ -225,7 +226,7 @@ Facebook lead 是外部、未驗證線索，不能直接建立現有 `ServiceReq
 - 批准香港私隱、用途限制、retention、刪除及 outbound contact policy。
 - 決定 explicit group allowlist、更新頻率及停止條件。
 - 建立 tracked、可測試的 ETL；fixtures 必須是 synthetic，不能提交真實帖文或聯絡資料。
-- 建立 `external_unverified_lead` staging model 及人工審批流程。
+- 為現有 DEV-only `externalUnverifiedLeads` staging model 批准人工審批、consent、outreach 及正式 request conversion 流程；每次匯入仍須由 operator 明確提供已批准 retention 日數，批准前維持隔離及不可派發。
 - 定義 quantity、precision、contactability、duplicate、staleness 及 conversion metrics。
 
 AI 執行步驟及 stop conditions 見 [`facebook-group-job-lead-agent-runbook.md`](facebook-group-job-lead-agent-runbook.md)。

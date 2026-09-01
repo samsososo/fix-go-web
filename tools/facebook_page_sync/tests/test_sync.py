@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import contextlib
+import csv
 import json
 import io
 import logging
 import sqlite3
 import sys
 import tempfile
+import threading
 import unittest
 from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from unittest import mock
@@ -21,14 +24,32 @@ sys.path.insert(0, str(TOOL_ROOT))
 import sync  # noqa: E402
 
 
+def api_url(
+    path: str,
+    params: dict[str, Any] | None = None,
+    graph_api_version: str = sync.DEFAULT_GRAPH_API_VERSION,
+) -> str:
+    return sync.build_graph_api_url(graph_api_version, path, params)
+
+
+def write_secure_env(path: Path, content: str) -> None:
+    path.write_text(content, encoding="utf-8")
+    path.chmod(0o600)
+
+
 class FakeClient:
-    def __init__(self, responses: dict[str, dict[str, Any] | Exception]) -> None:
+    def __init__(
+        self,
+        responses: dict[str, dict[str, Any] | Exception],
+        *,
+        graph_api_version: str = sync.DEFAULT_GRAPH_API_VERSION,
+    ) -> None:
         self.responses = responses
+        self.graph_api_version = graph_api_version
         self.calls: list[tuple[str, str]] = []
 
-    @staticmethod
-    def url(path: str, params: dict[str, Any] | None = None) -> str:
-        return sync.GraphApiClient.url(path, params)
+    def url(self, path: str, params: dict[str, Any] | None = None) -> str:
+        return api_url(path, params, self.graph_api_version)
 
     def get_json(self, url: str, token: str) -> dict[str, Any]:
         self.calls.append((url, token))
@@ -44,6 +65,32 @@ def quiet_logger() -> logging.Logger:
     logger.addHandler(logging.NullHandler())
     logger.propagate = False
     return logger
+
+
+class StructuredLoggingTests(unittest.TestCase):
+    def test_formatter_omits_raw_page_name(self) -> None:
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        handler.setFormatter(sync.JsonLogFormatter())
+        logger = logging.getLogger(f"facebook_page_sync_log_test_{id(object())}")
+        logger.handlers.clear()
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+
+        sync.log_event(
+            logger,
+            logging.INFO,
+            "page_sync_complete",
+            "Completed Facebook Page post synchronization.",
+            page_id="123",
+            page_name="Sensitive Page Display Name",
+        )
+
+        payload = json.loads(stream.getvalue())
+        self.assertEqual(payload["page_id"], "123")
+        self.assertNotIn("page_name", payload)
+        self.assertNotIn("Sensitive Page Display Name", stream.getvalue())
 
 
 class UsageHeaderTests(unittest.TestCase):
@@ -75,10 +122,10 @@ class UsageHeaderTests(unittest.TestCase):
 
 class ManagedPageTests(unittest.TestCase):
     def test_me_accounts_follows_paging_next(self) -> None:
-        first = sync.GraphApiClient.url(
+        first = api_url(
             "/me/accounts", {"fields": "id,name,access_token,tasks", "limit": 100}
         )
-        second = "https://graph.facebook.com/v21.0/me/accounts?after=cursor"
+        second = "https://graph.facebook.com/v26.0/me/accounts?after=cursor"
         client = FakeClient(
             {
                 first: {
@@ -99,6 +146,28 @@ class ManagedPageTests(unittest.TestCase):
             ["user-token", "user-token"],
         )
 
+    def test_client_builds_all_new_urls_with_configured_version(self) -> None:
+        config = sync.Config(
+            page_ids=("1",),
+            user_access_token="user-token",
+            database_path=Path("unused.sqlite3"),
+            timeout_seconds=1,
+            max_attempts=1,
+            base_backoff_seconds=1,
+            max_backoff_seconds=1,
+            graph_api_version="v25.0",
+        )
+        client = sync.GraphApiClient(config, quiet_logger())
+
+        self.assertEqual(
+            client.url("/me/accounts"),
+            "https://graph.facebook.com/v25.0/me/accounts",
+        )
+        self.assertEqual(
+            client.url("/123/posts", {"limit": 100}),
+            "https://graph.facebook.com/v25.0/123/posts?limit=100",
+        )
+
 
 class SQLiteSyncTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -111,11 +180,46 @@ class SQLiteSyncTests(unittest.TestCase):
         self.store.close()
         self.temp_dir.cleanup()
 
+    def test_sqlite_database_is_owner_only(self) -> None:
+        self.assertEqual(self.store.path.stat().st_mode & 0o777, 0o600)
+
+    def test_schema_migrates_run_id_checkpoint_column(self) -> None:
+        legacy_path = Path(self.temp_dir.name) / "legacy.sqlite3"
+        connection = sqlite3.connect(legacy_path)
+        connection.execute(
+            """
+            CREATE TABLE page_sync_state (
+                page_id TEXT PRIMARY KEY,
+                last_created_time TEXT,
+                last_successful_sync_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute("PRAGMA user_version=1")
+        connection.commit()
+        connection.close()
+
+        migrated = sync.SQLiteStore(legacy_path)
+        try:
+            columns = {
+                row[1]
+                for row in migrated.connection.execute(
+                    "PRAGMA table_info(page_sync_state)"
+                )
+            }
+            version = migrated.connection.execute("PRAGMA user_version").fetchone()[0]
+        finally:
+            migrated.close()
+
+        self.assertIn("last_successful_run_id", columns)
+        self.assertEqual(version, 2)
+        self.assertEqual(legacy_path.stat().st_mode & 0o777, 0o600)
+
     def test_sync_is_paginated_and_incremental(self) -> None:
-        first_url = sync.GraphApiClient.url(
+        first_url = api_url(
             "/123/posts", {"fields": sync.POST_FIELDS, "limit": 100}
         )
-        second_url = "https://graph.facebook.com/v21.0/123/posts?after=cursor"
+        second_url = "https://graph.facebook.com/v26.0/123/posts?after=cursor"
         first_client = FakeClient(
             {
                 first_url: {
@@ -145,19 +249,24 @@ class SQLiteSyncTests(unittest.TestCase):
         )
 
         first_result = sync.sync_page(
-            first_client, self.store, self.page, self.logger
+            first_client,
+            self.store,
+            self.page,
+            self.logger,
+            run_id="run-first",
         )
 
         self.assertEqual(first_result.stored_posts, 2)
         self.assertEqual(
             self.store.get_checkpoint("123"), "2026-08-15T10:00:00+0000"
         )
+        self.assertEqual(self.store.get_last_successful_run_id("123"), "run-first")
         stored = self.store.connection.execute(
             "SELECT COUNT(*) FROM posts"
         ).fetchone()[0]
         self.assertEqual(stored, 2)
 
-        incremental_url = sync.GraphApiClient.url(
+        incremental_url = api_url(
             "/123/posts",
             {
                 "fields": sync.POST_FIELDS,
@@ -190,12 +299,14 @@ class SQLiteSyncTests(unittest.TestCase):
             self.page,
             self.logger,
             initial_lookback_days=14,
+            run_id="run-second",
         )
 
         self.assertEqual(second_result.stored_posts, 1)
         self.assertEqual(
             self.store.get_checkpoint("123"), "2026-08-16T10:00:00+0000"
         )
+        self.assertEqual(self.store.get_last_successful_run_id("123"), "run-second")
         stored = self.store.connection.execute(
             "SELECT COUNT(*) FROM posts"
         ).fetchone()[0]
@@ -204,7 +315,7 @@ class SQLiteSyncTests(unittest.TestCase):
     def test_initial_lookback_only_stores_posts_from_last_14_days(self) -> None:
         reference_time = datetime(2026, 8, 15, 12, 0, tzinfo=timezone.utc)
         lower_bound = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
-        request_url = sync.GraphApiClient.url(
+        request_url = api_url(
             "/123/posts",
             {
                 "fields": sync.POST_FIELDS,
@@ -272,11 +383,11 @@ class SQLiteSyncTests(unittest.TestCase):
         since = int(lower_bound.timestamp()) - 1
         first_page = sync.PageAccess("1", "First", "token-1")
         second_page = sync.PageAccess("2", "Second", "token-2")
-        first_url = sync.GraphApiClient.url(
+        first_url = api_url(
             "/1/posts",
             {"fields": sync.POST_FIELDS, "limit": 100, "since": since},
         )
-        second_url = sync.GraphApiClient.url(
+        second_url = api_url(
             "/2/posts",
             {"fields": sync.POST_FIELDS, "limit": 100, "since": since},
         )
@@ -307,15 +418,28 @@ class SQLiteSyncTests(unittest.TestCase):
     def test_failed_page_rolls_back_and_other_page_continues(self) -> None:
         failing_page = sync.PageAccess("1", "Failing", "token-1")
         working_page = sync.PageAccess("2", "Working", "token-2")
-        failing_url = sync.GraphApiClient.url(
+        failing_url = api_url(
             "/1/posts", {"fields": sync.POST_FIELDS, "limit": 100}
         )
-        working_url = sync.GraphApiClient.url(
+        failing_second_url = api_url(
+            "/1/posts", {"fields": sync.POST_FIELDS, "limit": 100, "after": "p2"}
+        )
+        working_url = api_url(
             "/2/posts", {"fields": sync.POST_FIELDS, "limit": 100}
         )
         client = FakeClient(
             {
-                failing_url: sync.GraphAPIError("failed", graph_code=4),
+                failing_url: {
+                    "data": [
+                        {
+                            "id": "1_partial",
+                            "message": "must roll back",
+                            "created_time": "2026-08-15T09:00:00+0000",
+                        }
+                    ],
+                    "paging": {"next": failing_second_url},
+                },
+                failing_second_url: sync.GraphAPIError("failed", graph_code=4),
                 working_url: {
                     "data": [
                         {
@@ -334,19 +458,25 @@ class SQLiteSyncTests(unittest.TestCase):
             client,
             self.store,
             self.logger,
+            run_id="batch-safe-id",
         )
 
         self.assertEqual(failures, ["1"])
         self.assertEqual([result.page_id for result in results], ["2"])
         self.assertIsNone(self.store.get_checkpoint("1"))
+        self.assertIsNone(self.store.get_last_successful_run_id("1"))
         self.assertEqual(
             self.store.get_checkpoint("2"),
             "2026-08-15T10:00:00+0000",
         )
-        row = self.store.connection.execute(
-            "SELECT post_id FROM posts"
-        ).fetchone()
-        self.assertEqual(row["post_id"], "2_1")
+        self.assertEqual(
+            self.store.get_last_successful_run_id("2"),
+            "batch-safe-id",
+        )
+        rows = self.store.connection.execute(
+            "SELECT post_id FROM posts ORDER BY post_id"
+        ).fetchall()
+        self.assertEqual([row["post_id"] for row in rows], ["2_1"])
 
     def test_csv_export_prevents_formula_injection(self) -> None:
         with self.store.connection:
@@ -354,7 +484,7 @@ class SQLiteSyncTests(unittest.TestCase):
                 self.page,
                 {
                     "id": "123_1",
-                    "message": "=SUM(1,1)",
+                    "message": " \t\r\n=SUM(1,1)",
                     "created_time": "2026-08-15T10:00:00+0000",
                 },
                 "2026-08-15T11:00:00+00:00",
@@ -364,8 +494,23 @@ class SQLiteSyncTests(unittest.TestCase):
         count = sync.export_csv(self.store, output)
 
         self.assertEqual(count, 1)
-        content = output.read_text(encoding="utf-8-sig")
-        self.assertIn("'=SUM(1,1)", content)
+        with output.open(encoding="utf-8-sig", newline="") as handle:
+            rows = list(csv.DictReader(handle))
+        self.assertEqual(rows[0]["message"], "' \t\r\n=SUM(1,1)")
+
+    def test_csv_safe_handles_whitespace_and_control_prefixes(self) -> None:
+        dangerous = (
+            "=SUM(1,1)",
+            "  +cmd",
+            "\t-formula",
+            "\r\n@formula",
+            "\x1f=hidden",
+            "\x7f+hidden",
+        )
+        for value in dangerous:
+            with self.subTest(value=repr(value)):
+                self.assertEqual(sync.csv_safe(value), f"'{value}")
+        self.assertEqual(sync.csv_safe(" ordinary text"), " ordinary text")
 
     def test_csv_export_cannot_overwrite_sqlite_files(self) -> None:
         protected_paths = (
@@ -384,14 +529,75 @@ class SQLiteSyncTests(unittest.TestCase):
 
 
 class RunConfigurationTests(unittest.TestCase):
+    def test_python_version_and_umask_fail_closed(self) -> None:
+        sync.ensure_supported_python((3, 11, 0))
+        with self.assertRaises(sync.ConfigurationError):
+            sync.ensure_supported_python((3, 10, 99))
+
+        with (
+            mock.patch.object(sync.sys, "version_info", (3, 10, 99)),
+            mock.patch.object(sync.os, "umask") as umask,
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            exit_code = sync.run([])
+
+        self.assertEqual(exit_code, 2)
+        umask.assert_called_once_with(0o077)
+
+    def test_env_file_must_be_regular_owner_only_0600(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            env_path = root / ".env"
+            write_secure_env(
+                env_path,
+                "FACEBOOK_PAGE_IDS=1\n"
+                "FACEBOOK_USER_ACCESS_TOKEN=test-user-token\n",
+            )
+            self.assertEqual(sync.parse_dotenv(env_path)["FACEBOOK_PAGE_IDS"], "1")
+
+            env_path.chmod(0o640)
+            with self.assertRaises(sync.ConfigurationError):
+                sync.parse_dotenv(env_path)
+
+            env_path.unlink()
+            env_path.mkdir()
+            with self.assertRaises(sync.ConfigurationError):
+                sync.parse_dotenv(env_path)
+
+            env_path.rmdir()
+            target_path = root / "actual.env"
+            write_secure_env(
+                target_path,
+                "FACEBOOK_PAGE_IDS=1\n"
+                "FACEBOOK_USER_ACCESS_TOKEN=test-user-token\n",
+            )
+            env_path.symlink_to(target_path)
+            parser = sync.build_argument_parser()
+            with (
+                mock.patch.dict(sync.os.environ, {}, clear=True),
+                self.assertRaises(sync.ConfigurationError),
+            ):
+                sync.load_config(
+                    parser.parse_args(["--env-file", str(env_path)])
+                )
+
+    def test_run_id_validation(self) -> None:
+        run_id = "123e4567-e89b-12d3-a456-426614174000"
+        self.assertEqual(sync.normalize_run_id(run_id), run_id)
+        self.assertIsNone(sync.normalize_run_id(None))
+        for value in ("", " unsafe", "unsafe/value", "x" * 129):
+            with self.subTest(value=value):
+                with self.assertRaises(sync.ConfigurationError):
+                    sync.normalize_run_id(value)
+
     def test_env_lookback_and_cli_override_are_validated(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             env_path = Path(directory) / ".env"
-            env_path.write_text(
+            write_secure_env(
+                env_path,
                 "FACEBOOK_PAGE_IDS=1,2\n"
                 "FACEBOOK_USER_ACCESS_TOKEN=test-user-token\n"
                 "FACEBOOK_INITIAL_LOOKBACK_DAYS=14\n",
-                encoding="utf-8",
             )
             parser = sync.build_argument_parser()
 
@@ -413,11 +619,11 @@ class RunConfigurationTests(unittest.TestCase):
             self.assertEqual(env_config.initial_lookback_days, 14)
             self.assertEqual(cli_config.initial_lookback_days, 7)
 
-            env_path.write_text(
+            write_secure_env(
+                env_path,
                 "FACEBOOK_PAGE_IDS=1,2\n"
                 "FACEBOOK_USER_ACCESS_TOKEN=test-user-token\n"
                 "FACEBOOK_INITIAL_LOOKBACK_DAYS=0\n",
-                encoding="utf-8",
             )
             with mock.patch.dict(sync.os.environ, {}, clear=True):
                 with self.assertRaises(sync.ConfigurationError):
@@ -425,15 +631,68 @@ class RunConfigurationTests(unittest.TestCase):
                         parser.parse_args(["--env-file", str(env_path)])
                     )
 
+    def test_graph_api_version_defaults_and_cli_overrides_env(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            env_path = Path(directory) / ".env"
+            write_secure_env(
+                env_path,
+                "FACEBOOK_PAGE_IDS=1\n"
+                "FACEBOOK_USER_ACCESS_TOKEN=test-user-token\n"
+                "FACEBOOK_GRAPH_API_VERSION=v25.0\n",
+            )
+            parser = sync.build_argument_parser()
+
+            with mock.patch.dict(sync.os.environ, {}, clear=True):
+                env_config = sync.load_config(
+                    parser.parse_args(["--env-file", str(env_path)])
+                )
+                cli_config = sync.load_config(
+                    parser.parse_args(
+                        [
+                            "--env-file",
+                            str(env_path),
+                            "--graph-api-version",
+                            "v24.0",
+                            "--run-id",
+                            "config-test-run",
+                        ]
+                    )
+                )
+
+            self.assertEqual(env_config.graph_api_version, "v25.0")
+            self.assertEqual(cli_config.graph_api_version, "v24.0")
+            self.assertEqual(cli_config.run_id, "config-test-run")
+
+            write_secure_env(
+                env_path,
+                "FACEBOOK_PAGE_IDS=1\n"
+                "FACEBOOK_USER_ACCESS_TOKEN=test-user-token\n",
+            )
+            with mock.patch.dict(sync.os.environ, {}, clear=True):
+                default_config = sync.load_config(
+                    parser.parse_args(["--env-file", str(env_path)])
+                )
+
+            self.assertEqual(
+                default_config.graph_api_version,
+                sync.DEFAULT_GRAPH_API_VERSION,
+            )
+
+    def test_graph_api_version_rejects_invalid_values(self) -> None:
+        for value in ("26.0", "v26", "v0.0", "v26.1", "v26.0?debug=true"):
+            with self.subTest(value=value):
+                with self.assertRaises(sync.ConfigurationError):
+                    sync.normalize_graph_api_version(value)
+
     def test_csv_database_collision_exits_before_network_or_database_open(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             database_path = root / "posts.sqlite3"
             env_path = root / ".env"
-            env_path.write_text(
+            write_secure_env(
+                env_path,
                 "FACEBOOK_PAGE_IDS=123\n"
                 "FACEBOOK_USER_ACCESS_TOKEN=test-user-token\n",
-                encoding="utf-8",
             )
 
             with contextlib.redirect_stdout(io.StringIO()):
@@ -526,7 +785,7 @@ class RetryTests(unittest.TestCase):
             open_url=opener,
         )
 
-        result = client.get_json("https://graph.facebook.com/v21.0/test", "token")
+        result = client.get_json("https://graph.facebook.com/v26.0/test", "token")
 
         self.assertEqual(result, {"data": []})
         self.assertEqual(calls, 2)
@@ -542,18 +801,61 @@ class RetryTests(unittest.TestCase):
         self.assertTrue(sync.is_retryable(sync.GraphAPIError("x", http_status=503)))
         self.assertFalse(sync.is_retryable(sync.GraphAPIError("x", graph_code=190)))
 
+    def test_default_http_client_rejects_redirect_without_forwarding_token(self) -> None:
+        requests: list[tuple[str, str | None]] = []
+
+        class RedirectServerHandler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                requests.append((self.path, self.headers.get("Authorization")))
+                if self.path == "/start":
+                    self.send_response(302)
+                    self.send_header("Location", "/sink")
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"data": []}')
+
+            def log_message(self, _format: str, *_args: Any) -> None:
+                return None
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), RedirectServerHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            client = sync.GraphApiClient(self.make_config(), quiet_logger())
+            with self.assertRaises(sync.GraphAPIError) as raised:
+                client.get_json(
+                    f"http://127.0.0.1:{server.server_port}/start",
+                    "private-bearer-token",
+                )
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+        self.assertEqual(raised.exception.http_status, 302)
+        self.assertEqual(requests, [("/start", "Bearer private-bearer-token")])
+
     def test_paging_url_drops_access_token_and_rejects_other_hosts(self) -> None:
         value = sync.sanitize_paging_url(
-            "https://graph.facebook.com/v21.0/1/posts?after=abc&access_token=secret"
+            "https://graph.facebook.com/v26.0/1/posts?after=abc&access_token=secret",
+            "v26.0",
         )
         self.assertEqual(
-            value, "https://graph.facebook.com/v21.0/1/posts?after=abc"
+            value, "https://graph.facebook.com/v26.0/1/posts?after=abc"
         )
         with self.assertRaises(sync.GraphAPIError):
             sync.sanitize_paging_url("https://example.com/steal?after=abc")
         with self.assertRaises(sync.GraphAPIError):
             sync.sanitize_paging_url(
-                "https://graph.facebook.com:444/v21.0/1/posts?after=abc"
+                "https://graph.facebook.com:444/v26.0/1/posts?after=abc"
+            )
+        with self.assertRaises(sync.GraphAPIError):
+            sync.sanitize_paging_url(
+                "https://graph.facebook.com/v25.0/1/posts?after=abc",
+                "v26.0",
             )
 
 
