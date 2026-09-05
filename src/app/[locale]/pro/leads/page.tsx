@@ -12,6 +12,8 @@ import { PortalShell } from "@/components/shared/portal-shell";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Link } from "@/i18n/navigation";
+import { FacebookGroupLeads } from "@/features/pro/facebook-group-leads";
+import { listFacebookGroupSnapshots } from "@/lib/facebook-group-snapshots";
 import { getCurrentUser } from "@/lib/auth";
 import { formatUrgencyLabel } from "@/lib/formatters";
 import { formatDistrictName } from "@/lib/hk-locale";
@@ -47,6 +49,9 @@ export default async function ProLeadsPage({
     user.id,
     activeCategory === "all" ? undefined : activeCategory,
   );
+
+  const facebookLeads =
+    activeCategory === "all" ? await listFacebookGroupSnapshots() : [];
 
   return (
     <PortalShell
@@ -114,8 +119,8 @@ export default async function ProLeadsPage({
           </p>
           <p className="text-xs font-semibold text-primary">
             {locale === "en"
-              ? `${leads.length} results`
-              : `${leads.length} 個結果`}
+              ? `${leads.length + facebookLeads.length} results`
+              : `${leads.length + facebookLeads.length} 個結果`}
           </p>
         </div>
         <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
@@ -243,7 +248,7 @@ export default async function ProLeadsPage({
               </div>
             );
           })
-        ) : (
+        ) : facebookLeads.length ? null : (
           <EmptyState
             locale={locale}
             title={
@@ -275,6 +280,7 @@ export default async function ProLeadsPage({
           />
         )}
       </div>
+      <FacebookGroupLeads leads={facebookLeads} locale={locale} />
     </PortalShell>
   );
 }

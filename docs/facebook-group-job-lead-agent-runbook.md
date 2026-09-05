@@ -25,6 +25,17 @@ private data. DEV targeting, explicit retention, pending human review, and the
 formal service-case boundary remain enforced. Content fingerprints include the
 full original message, including contacts beyond the summary length limit.
 
+## Authorized DEV Group snapshot display (2026-09-05)
+
+The user authorized displaying the imported `externalFacebookGroupSnapshots`
+on the DEV pro leads page with visible contact details. This overrides the
+prototype isolation/redaction requirements for this specific DEV display only.
+The server must verify the DEV URI/database, pro role, valid subscription policy,
+and both new-work entitlements before querying contact-bearing snapshots.
+Keep unknown-date and incomplete-text labels, render text safely, and use only
+validated Facebook group/post links. Do not create marketplace requests, quotes,
+bookings or outreach messages. Production must not query this collection.
+
 ## 1. Read before acting
 
 The agent MUST read, in this order:
