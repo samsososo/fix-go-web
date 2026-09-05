@@ -22,6 +22,6 @@
 ## Facebook 工作線索資料
 
 - 處理 Facebook Page／Group 工作線索、外部 lead 匯入、聯絡資料或相關 Excel 前，必須先閱讀 `docs/facebook-group-job-lead-workflow.zh-HK.md` 及 `docs/facebook-group-job-lead-agent-runbook.md`。
-- Facebook Pages 官方 Graph API 與 Facebook Groups 人手提供／獲 Meta 明確授權的收集流程是兩條不同路線，不得互相代替或聲稱有相同存取權限。
+- Facebook Pages 官方 Graph API 與 Facebook Groups 人手提供／使用者指定範圍的瀏覽器覆核流程是兩條不同路線，不得互相代替或聲稱有相同存取權限。
 - 外部 Facebook lead 只屬未驗證線索，不得直接建立正式 `ServiceRequest`、quote 或 booking，亦不得繞過師傅訂閱權限。
 - 不得提交 `data/`、screenshots、CSV／SQLite／Excel exports、browser profile、tokens 或 raw 聯絡資料；stage 及 push 前必須再次檢查 working tree。

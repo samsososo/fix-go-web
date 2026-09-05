@@ -2,7 +2,7 @@
 
 最後更新：2026-09-01
 
-狀態：內部原型記錄；未取得 Meta 明確書面許可前，不得重複或擴展為 Facebook Group 自動收集
+狀態：內部原型記錄；瀏覽器覆核範圍按使用者當次要求及執行規則處理
 
 ## 2026-09-05：獲授權保留 Page 聯絡資料
 
@@ -26,11 +26,11 @@ canonical 規則、待人工覆核狀態、禁止直接建立正式工作單、�
 
 ## 兩條資料來源必須分開
 
-| 資料來源                          | 可用方法                                                                                                                                                        | 現況                                                                                | 不可混淆的限制                                                                 |
-| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| 由快修24帳戶管理的 Facebook Pages | 官方 Meta Graph API                                                                                                                                             | Repository 已有 [`tools/facebook_page_sync`](../tools/facebook_page_sync/README.md) | 只可讀取 token 擁有人獲授權管理的 Pages，不能用來讀 Groups                     |
-| Facebook Groups                   | 預設由使用者人手瀏覽後提供 export／screenshots／明確 URLs，再由系統離線處理；任何 Playwright、bot 或 programmatic browser collection 都要先有 Meta 明確書面許可 | 今次兩個香港群組的 browser-assisted 資料只屬一次性本機原型記錄，不構成重跑授權      | Page API 不涵蓋 Groups；不得以「低量」或「有人監督」當成免除 Meta 自動收集條款 |
-| 使用者提供的 CSV／JSON／Excel     | 離線清理及篩選                                                                                                                                                  | 只有保存 immutable input、來源時間及 hash 後才可重現                                | 必須保存來源識別及資料使用權限                                                 |
+| 資料來源                          | 可用方法                                                                                  | 現況                                                                                   | 不可混淆的限制                                                            |
+| --------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| 由快修24帳戶管理的 Facebook Pages | 官方 Meta Graph API                                                                       | Repository 已有 [`tools/facebook_page_sync`](../tools/facebook_page_sync/README.md)    | 只可讀取 token 擁有人獲授權管理的 Pages，不能用來讀 Groups                |
+| Facebook Groups                   | 使用者提供 export／screenshots 作離線處理，或要求對帳戶已有存取權的內容作有限度瀏覽器覆核 | 今次兩個香港群組的 browser-assisted 資料只屬一次性本機原型記錄，新工作範圍由使用者指定 | Page API 不涵蓋 Groups；repository 規則不授予額外存取權，亦不取代平台條款 |
+| 使用者提供的 CSV／JSON／Excel     | 離線清理及篩選                                                                            | 只有保存 immutable input、來源時間及 hash 後才可重現                                   | 必須保存來源識別及資料使用權限                                            |
 
 Page API 工具預設使用截至 2026-09-01 的 Graph API `v26.0`，亦可由環境或 CLI 明確指定版本。每次準備投入新環境前，仍必須先核對 Meta 當時支援的版本、permissions 及 App Review 要求，不能把任何預設版本當成永久規格。
 
@@ -49,7 +49,7 @@ Facebook Group UI（今次一次性 browser-assisted prototype）
 
 14 日來源窗提供日期校正及覆核緩衝；最終工作清單只保留以同一個 `source_generated_at` 為終點的精確 7×24 小時窗口。所有可比較時間應以 UTC 保存，香港顯示及人工理解則使用 `Asia/Hong_Kong`。
 
-以上流程是今次 artifact 的 provenance，不是已批准的日常收集方案。後續如未有 Meta 明確書面許可，只可處理使用者人手取得並有權使用的輸入檔；不得由 agent 控制 browser 重跑 Group collection。
+以上流程是今次 artifact 的 provenance，不是已實作的日常收集方案。Repository 不再以 Meta 明確書面許可作有限度瀏覽器覆核的先決條件；新工作須按使用者指定範圍及帳戶已有存取權進行，並遵守執行規則的瀏覽器限制。
 
 ### 2026-08-15 單次 snapshot
 
@@ -222,7 +222,7 @@ Facebook lead 是外部、未驗證線索，不能直接建立現有 `ServiceReq
 2. 現有 finalizer 硬編碼兩個 `GROUP_NAMES`，而 7 日 extractor 又依來源資料首次出現次序選「頭兩個 group」。正式化前必須改成同一份必填 allowlist，並驗證 manifest、input 及 finalizer supported IDs 完全一致。
 3. 現有 extractor 只接受帖文正文出現的聯絡訊號，但 final human rule 亦接受可用 permalink 作 fallback；這是 automatic candidates 與最終 Excel 不一致的其中一個原因。
 4. 現有 selected export payload 沒有 `stable_id`／source lineage，Excel 亦沒有已提交的 deterministic builder；下次應保留不含 raw contact 的 private selection manifest 及輸入 hash。
-5. Group scripts 位於 ignored `data/`，沒有 clone／CI 可重現性。只有在取得合適 Meta 授權及內部批准後，才考慮遷移到 tracked `tools/facebook_group_leads/` 並加入 synthetic tests。
+5. Group scripts 位於 ignored `data/`，沒有 clone／CI 可重現性。如使用者要求正式化，可考慮遷移到 tracked `tools/facebook_group_leads/` 並加入 synthetic tests。
 6. 現有 Group CSV writer 未處理 spreadsheet formula injection；修正及加測試前，不得直接用 Excel 開啟新 run 的 Group CSV。
 7. 現有 contact regex 只能保證已支援格式的 leak count，不能證明匿名化；姓名、permalink、混合 Unicode 或 obfuscated contact 仍可能識別個人。
 8. 今次有大量截斷內容及缺 permalink；現有數量不能代表完整 coverage。Facebook UI 搜尋排序及可見結果亦不保證完整。
@@ -231,7 +231,7 @@ Facebook lead 是外部、未驗證線索，不能直接建立現有 `ServiceReq
 
 ## 正式化前的決策門檻
 
-- 確認 Meta 允許的 Group data access 方式，或取得明確書面自動收集許可。
+- 確認來源的實際存取方式、帳戶權限及適用平台條款。
 - 批准香港私隱、用途限制、retention、刪除及 outbound contact policy。
 - 決定 explicit group allowlist、更新頻率及停止條件。
 - 建立 tracked、可測試的 ETL；fixtures 必須是 synthetic，不能提交真實帖文或聯絡資料。

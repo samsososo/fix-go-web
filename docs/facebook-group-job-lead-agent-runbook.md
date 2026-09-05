@@ -51,8 +51,6 @@ The agent MUST:
 
 The agent MUST NOT:
 
-- build or run an unattended Facebook Group crawler without documented Meta permission for that collection;
-- use Playwright, browser bots, crawlers, or any programmatic browser navigation to collect Facebook Group data without documented Meta express written permission, even if the run is low-volume, supervised, or uses the user's own signed-in account;
 - implement stealth, fingerprint spoofing, proxy rotation, randomized evasion, CAPTCHA bypass, account-challenge bypass, or any method intended to avoid Facebook detection;
 - extract cookies, browser storage, access tokens, hidden endpoints, or credentials from a signed-in session;
 - reuse the managed-Page Graph API tool as a Facebook Group scraper;
@@ -68,13 +66,12 @@ If a user requests automated collection designed to avoid detection, the agent M
 
 Choose exactly one route before collecting data:
 
-| Condition                                                                                                        | Route                         | Allowed action                                                                                                                             |
-| ---------------------------------------------------------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| The user manages the Page and has a valid user access token                                                      | `managed_page_graph_api`      | Use `tools/facebook_page_sync/` and the documented official Graph API flow                                                                 |
-| The content is in a Facebook Group and no Meta automated-collection authorization is documented                  | `offline_input`               | Ask the user to browse manually and supply an export, screenshots, or specific source files; process them offline                          |
-| The content is in a Facebook Group and Meta express written authorization covering this collection is documented | `group_authorized_collection` | Follow the written scope exactly; use only visible, read-only collection and the controls below                                            |
-| The user supplies JSON, CSV, SQLite, screenshots, or Excel                                                       | `offline_input`               | Process locally; if a field needs Facebook verification, ask the user unless documented Meta authorization permits agent-controlled access |
-| Source type, permission, account ownership, or requested scope is unclear                                        | none                          | `STOP` and ask for clarification                                                                                                           |
+| Condition                                                                               | Route                         | Allowed action                                                                          |
+| --------------------------------------------------------------------------------------- | ----------------------------- | --------------------------------------------------------------------------------------- |
+| The user manages the Page and has a valid user access token                             | `managed_page_graph_api`      | Use `tools/facebook_page_sync/` and the documented official Graph API flow              |
+| The user requests bounded browser review of a Group already accessible to their account | `group_authorized_collection` | Use visible, read-only review within the requested scope and the browser controls below |
+| The user supplies JSON, CSV, SQLite, screenshots, or Excel                              | `offline_input`               | Process locally; source verification follows the same browser controls                  |
+| Source type, account access, or requested scope is unclear                              | none                          | `STOP` and ask for clarification                                                        |
 
 Never claim the Page API can read arbitrary Pages or Groups. `GET /me/accounts` only resolves Pages available to the authorized user and the current tool does not implement Group access.
 
@@ -96,7 +93,7 @@ group_allowlist: [<explicit group ids>] # group route only
 page_allowlist: [<explicit page ids>] # page route only
 output_columns: [title, 工作內容, 聯絡方式, 錢]
 raw_contact_delivery_authorized: false | true
-meta_automated_collection_authorization: absent | <non-secret approval reference>
+user_authorized_collection_scope: <requested sources and bounded review scope>
 ```
 
 `source_generated_at` MUST be fixed for the entire run. The 7-day cutoff is:
@@ -234,11 +231,9 @@ npm run db:sync:facebook-pages -- --apply --retention-days 30
 
 ## 8. Group route
 
-### 8.1 Authorization gate and browser boundary
+### 8.1 Browser review scope and boundaries
 
-Without a non-secret reference to Meta's express written authorization for the exact automated collection, the agent MUST NOT control a browser to collect Facebook Group data. The user may browse manually and provide files for offline processing.
-
-If valid authorization is documented, the browser step remains a supervised, read-only research activity and MUST stay within the approved purpose, sources, fields, rate, retention period, and user population.
+The repository does not require Meta express written authorization as a prerequisite for bounded browser review. Review must be requested by the user, use content already accessible to their account, and remain within the requested purpose, sources, fields, rate, retention period, and user population. This repository rule does not grant platform access or override applicable platform terms. The user may also provide files for offline processing.
 
 Allowed:
 
@@ -258,7 +253,7 @@ Not allowed:
 
 If Facebook presents a login expiry, checkpoint, CAPTCHA, block, or permission error, `STOP` and let the user resolve it.
 
-The 2026-08-15 browser-assisted snapshot is provenance for an existing local artifact only. It is not proof of Meta authorization and MUST NOT be treated as permission to repeat the collection.
+The 2026-08-15 browser-assisted snapshot is provenance for an existing local artifact only. It does not define the scope of a new collection request.
 
 ### 8.2 Partial capture contract
 
