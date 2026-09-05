@@ -1,6 +1,7 @@
 import { MongoClient } from "mongodb";
 
 import { getCurrentUser } from "@/lib/auth";
+import { cleanFacebookPostText } from "@/lib/facebook-post-text";
 import { env } from "@/lib/env";
 import { validateHotfixDevMongoTarget } from "@/lib/external-unverified-leads";
 import { getProSubscriptionEntitlement } from "@/lib/pro-subscription-entitlement";
@@ -49,7 +50,7 @@ export function toFacebookGroupSnapshot(
   return {
     id: row._id,
     sourceName: row.sourceName,
-    message: row.sourceMessage,
+    message: cleanFacebookPostText(row.sourceMessage),
     sourceUrl,
     permalink: groupUrl(row.sourcePermalink, true),
     truncated: row.truncated === true,

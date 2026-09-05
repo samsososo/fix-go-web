@@ -50,7 +50,10 @@ export function FacebookGroupLeads({
               </div>
               <h3 className="font-semibold">{lead.sourceName}</h3>
               <p className="line-clamp-3 whitespace-pre-line break-words text-sm leading-6 text-muted">
-                {lead.message}
+                {lead.message ||
+                  (en
+                    ? "Post text unavailable. Open the source to review."
+                    : "未能擷取正文，請前往來源查看。")}
               </p>
               <details className="text-sm">
                 <summary className="cursor-pointer font-semibold text-primary">
@@ -58,8 +61,11 @@ export function FacebookGroupLeads({
                     ? "Show captured text and contacts"
                     : "查看已收集內容及聯絡資料"}
                 </summary>
-                <p className="mt-3 whitespace-pre-wrap break-words leading-6">
-                  {lead.message}
+                <p className="mt-3 max-h-96 overflow-y-auto whitespace-pre-wrap break-words leading-6">
+                  {lead.message ||
+                    (en
+                      ? "Post text unavailable. Open the source to review."
+                      : "未能擷取正文，請前往來源查看。")}
                 </p>
               </details>
               <a
