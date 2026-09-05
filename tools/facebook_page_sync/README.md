@@ -5,6 +5,18 @@ the token owner through the official Meta Graph API. The default version is
 **v26.0**. It does not read Facebook Groups, reuse browser cookies, or store
 access tokens in SQLite.
 
+## Authorized contact-preserving DEV imports
+
+Add `--preserve-contacts` to the combined DEV command when the user authorizes
+retaining Page contacts. Use it for both dry-run and apply, together with an
+approved `--retention-days` value. The importer stores the complete original
+message in `sourceMessage`, preserves contact routes in the summary, and sets
+`redactionState: contacts_preserved`. This option overrides the redacted-only
+staging descriptions below; the default still redacts. Logs contain counts only.
+The unique source identity and pending-review status remain unchanged. Changes
+to the full original message trigger re-review, even beyond the summary limit.
+Switching back to the default removes `sourceMessage` on an eligible refresh.
+
 ## What it does
 
 - Reads Page IDs and a long-lived user access token from a local `.env` file.

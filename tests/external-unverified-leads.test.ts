@@ -229,6 +229,63 @@ function asMongoCollection(collection: InMemoryExternalLeadCollection) {
 }
 
 describe("external unverified lead mapping", () => {
+  it("preserves original contact routes when explicitly requested without treating phones as money", () => {
+    const row = sourceRow();
+    const doc = mapFacebookPageRowToExternalLead(row, {
+      ...importOptions,
+      preserveContacts: true,
+    });
+    expect(doc.sourceMessage).toBe(row.message);
+    expect(doc.workSummary).toContain(syntheticContactValues().whatsAppLink);
+    expect(doc.redactionState).toBe("contacts_preserved");
+    expect(doc.moneyText).toEqual(["日薪 HK$1,200", "$100"]);
+    expect(doc._id).toBe(mapRow()._id);
+    expect(doc.verificationState).toBe("pending_human_review");
+  });
+
+  it("includes contacts beyond the summary limit in the content fingerprint", async () => {
+    const message = "搵水喉師傅處理漏水。".repeat(150);
+    const options = { ...importOptions, preserveContacts: true };
+    const first = mapFacebookPageRowToExternalLead(
+      sourceRow({ message: message + "61234567" }),
+      options,
+    );
+    const next = mapFacebookPageRowToExternalLead(
+      sourceRow({ message: message + "62345678" }),
+      options,
+    );
+    expect(first.workSummary).toBe(next.workSummary);
+    expect(first.contentSha256).not.toBe(next.contentSha256);
+    const collection = new InMemoryExternalLeadCollection();
+    await upsertExternalUnverifiedLeads(
+      asMongoCollection(collection),
+      [first],
+      sourceGeneratedAt,
+    );
+    await upsertExternalUnverifiedLeads(
+      asMongoCollection(collection),
+      [next],
+      sourceGeneratedAt,
+    );
+    expect(collection.docs.size).toBe(1);
+    expect(collection.docs.get(first._id)?.needsReReview).toBe(true);
+  });
+
+  it("passes the contact preservation option through the sync command", () => {
+    expect(parseCliOptions(["--preserve-contacts"]).preserveContacts).toBe(
+      true,
+    );
+    const result = deriveLeads({
+      rows: [sourceRow()],
+      runId: importOptions.runId,
+      runStartedAt: sourceGeneratedAt,
+      retentionDays: 30,
+      windowDays: 7,
+      preserveContacts: true,
+    });
+    expect(result.leads[0].sourceMessage).toBe(sourceRow().message);
+  });
+
   it("maps a managed Page row to a deterministic, redacted staging document", () => {
     const contacts = syntheticContactValues();
     const doc = mapRow();
@@ -373,6 +430,29 @@ describe("external unverified lead mapping", () => {
 });
 
 describe("external unverified lead persistence helpers", () => {
+  it("removes the original message when switching an eligible lead back to redaction", async () => {
+    const collection = new InMemoryExternalLeadCollection();
+    const preserved = mapFacebookPageRowToExternalLead(sourceRow(), {
+      ...importOptions,
+      preserveContacts: true,
+    });
+    await upsertExternalUnverifiedLeads(
+      asMongoCollection(collection),
+      [preserved],
+      sourceGeneratedAt,
+    );
+    await upsertExternalUnverifiedLeads(
+      asMongoCollection(collection),
+      [mapRow()],
+      sourceGeneratedAt,
+    );
+    expect(collection.docs.size).toBe(1);
+    expect(collection.docs.get(preserved._id)?.sourceMessage).toBeUndefined();
+    expect(collection.docs.get(preserved._id)?.redactionState).toBe(
+      "supported_contact_patterns_redacted",
+    );
+  });
+
   it("declares unique, review-queue, and expiresAt TTL indexes", async () => {
     const createIndexes = vi.fn(async (indexes) =>
       indexes.map((index: { name: string }) => index.name),

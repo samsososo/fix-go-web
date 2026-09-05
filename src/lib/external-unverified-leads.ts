@@ -51,6 +51,7 @@ const mapOptionsSchema = z
     sourceGeneratedAt: dateInputSchema,
     windowDays: z.number().int().min(1).max(31),
     retentionDays: z.number().int().min(1).max(365),
+    preserveContacts: z.boolean().default(false),
     importedAt: dateInputSchema.optional(),
     runId: z
       .string()
@@ -111,7 +112,11 @@ const externalUnverifiedLeadDocumentSchema = z
         (values) => new Set(values).size === values.length,
         "contactTypes must be unique",
       ),
-    redactionState: z.literal("supported_contact_patterns_redacted"),
+    sourceMessage: z.string().min(1).max(100_000).optional(),
+    redactionState: z.enum([
+      "supported_contact_patterns_redacted",
+      "contacts_preserved",
+    ]),
     verificationState: z.literal("pending_human_review"),
     lawfulUseState: z.literal("pending_review"),
     outreachState: z.literal("not_authorized"),
@@ -381,6 +386,7 @@ function contentFingerprint(input: {
   workSummary: string;
   moneyText: string[];
   contactTypes: ExternalLeadContactType[];
+  sourceMessage?: string;
 }) {
   return sha256(
     JSON.stringify([
@@ -389,6 +395,7 @@ function contentFingerprint(input: {
       input.workSummary,
       input.moneyText,
       input.contactTypes,
+      ...(input.sourceMessage === undefined ? [] : [input.sourceMessage]),
     ]),
   );
 }
@@ -410,14 +417,23 @@ function validateExternalLeadDocument(value: unknown) {
   ) {
     throw new Error("sourcePermalink is not a canonical Facebook URL.");
   }
-  assertNoRawDirectContacts(doc.sourcePageName, "sourcePageName");
-  assertNoRawDirectContacts(doc.title, "title");
-  assertNoRawDirectContacts(doc.workSummary, "workSummary");
+  if (doc.redactionState === "contacts_preserved") {
+    if (!doc.sourceMessage) {
+      throw new Error("Contact-preserving leads require the original message.");
+    }
+  } else {
+    if (doc.sourceMessage !== undefined) {
+      throw new Error("Redacted leads cannot contain an original message.");
+    }
+    assertNoRawDirectContacts(doc.sourcePageName, "sourcePageName");
+    assertNoRawDirectContacts(doc.title, "title");
+    assertNoRawDirectContacts(doc.workSummary, "workSummary");
+  }
   doc.moneyText.forEach((money, index) =>
     assertNoRawDirectContacts(money, `moneyText[${index}]`),
   );
   if (doc.contentSha256 !== contentFingerprint(doc)) {
-    throw new Error("contentSha256 does not match the redacted lead content.");
+    throw new Error("contentSha256 does not match the lead content.");
   }
 
   const cutoff = new Date(
@@ -478,11 +494,19 @@ export function mapFacebookPageRowToExternalLead(
 
   const pageNameRedaction = redactDirectContacts(source.page_name);
   const messageRedaction = redactDirectContacts(source.message);
-  const sourcePageName = pageNameRedaction.redacted;
+  const sourcePageName = parsedOptions.preserveContacts
+    ? normalizeWhitespace(source.page_name)
+    : pageNameRedaction.redacted;
   if (!sourcePageName) {
     throw new Error("Facebook Page row has no Page name after redaction.");
   }
-  const workSummary = deriveWorkSummary(messageRedaction.redacted);
+  const redactedSummary = deriveWorkSummary(messageRedaction.redacted);
+  const workSummary = parsedOptions.preserveContacts
+    ? truncateByCodePoint(
+        normalizeWhitespace(source.message),
+        MAX_SUMMARY_CHARACTERS,
+      )
+    : redactedSummary;
   const title = deriveTitle(workSummary);
   const moneyText = extractMoneyText(messageRedaction.redacted);
   const orderedContactTypes: ExternalLeadContactType[] = [
@@ -516,6 +540,9 @@ export function mapFacebookPageRowToExternalLead(
     workSummary,
     moneyText,
     contactTypes,
+    ...(parsedOptions.preserveContacts
+      ? { sourceMessage: source.message }
+      : {}),
   };
 
   return validateExternalLeadDocument({
@@ -554,7 +581,9 @@ export function mapFacebookPageRowToExternalLead(
       reactions: source.reactions_count,
       comments: source.comments_count,
     },
-    redactionState: "supported_contact_patterns_redacted",
+    redactionState: parsedOptions.preserveContacts
+      ? "contacts_preserved"
+      : "supported_contact_patterns_redacted",
     verificationState: "pending_human_review",
     lawfulUseState: "pending_review",
     outreachState: "not_authorized",
@@ -685,6 +714,13 @@ export async function upsertExternalUnverifiedLeads(
         {
           $set: {
             ...refreshedFields,
+            ...(doc.sourceMessage === undefined
+              ? {
+                  sourceMessage: {
+                    $cond: [refreshBlocked, "$sourceMessage", "$$REMOVE"],
+                  },
+                }
+              : {}),
             expiresAt: {
               $cond: [
                 refreshBlocked,

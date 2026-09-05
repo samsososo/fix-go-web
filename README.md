@@ -145,6 +145,15 @@ The local URI assumes the SSH tunnel documented in
 deployment loads a second ignored environment file so the application connects
 to the private Docker hostname instead of the tunnel.
 
+### Authorized Page contact preservation
+
+For an explicitly authorized private DEV import, add `--preserve-contacts` to
+`db:sync:facebook-pages` (both dry-run and apply). This keeps the original Page
+message in `sourceMessage` and preserves contact routes in the summary, with
+`redactionState: contacts_preserved`. The default remains redacted. This exception
+supersedes redacted-only descriptions below for that option only. Logs remain
+count-only, and data must stay out of Git and public product views.
+
 ### Managed Facebook Pages to DEV staging
 
 The managed-Page importer reads only Pages returned by the token owner's

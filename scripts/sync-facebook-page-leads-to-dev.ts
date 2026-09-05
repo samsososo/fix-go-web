@@ -38,6 +38,7 @@ type SqliteConstructor = new (
 
 type CliOptions = {
   apply: boolean;
+  preserveContacts?: boolean;
   retentionDays?: number;
   windowDays?: number;
 };
@@ -140,6 +141,10 @@ export function parseCliOptions(argv: string[]): CliOptions {
   const options: CliOptions = { apply: false };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
+    if (argument === "--preserve-contacts") {
+      options.preserveContacts = true;
+      continue;
+    }
     if (argument === "--apply") {
       options.apply = true;
       continue;
@@ -167,7 +172,7 @@ export function parseCliOptions(argv: string[]): CliOptions {
     if (argument === "--help") {
       process.stdout.write(
         [
-          "Usage: npm run db:sync:facebook-pages -- [--apply] --retention-days DAYS [--window-days DAYS]",
+          "Usage: npm run db:sync:facebook-pages -- [--apply] [--preserve-contacts] --retention-days DAYS [--window-days DAYS]",
           "",
           "Without --apply the command fetches into the restricted SQLite cache and validates the derived rows without writing MongoDB.",
         ].join("\n") + "\n",
@@ -608,6 +613,7 @@ export function deriveLeads(options: {
   runStartedAt: Date;
   retentionDays: number;
   windowDays: number;
+  preserveContacts?: boolean;
 }) {
   const leads: ExternalUnverifiedLeadDocument[] = [];
   let rejectedRows = 0;
@@ -619,6 +625,7 @@ export function deriveLeads(options: {
           sourceGeneratedAt: options.runStartedAt,
           windowDays: options.windowDays,
           retentionDays: options.retentionDays,
+          preserveContacts: options.preserveContacts,
         }),
       );
     } catch {
@@ -715,6 +722,7 @@ async function main() {
           runStartedAt,
           retentionDays,
           windowDays,
+          preserveContacts: cli.preserveContacts,
         });
         return { sourceExitCode, snapshot, ...derived };
       } finally {

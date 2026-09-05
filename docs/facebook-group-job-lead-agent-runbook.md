@@ -13,6 +13,18 @@ This runbook tells an AI coding agent how to continue the current Facebook job-l
 
 Normative terms `MUST`, `MUST NOT`, `SHOULD`, and `STOP` are deliberate.
 
+## Authorized private Page contact preservation (2026-09-05)
+
+The user explicitly authorized preserving contacts for this DEV Page import.
+Use `--preserve-contacts` on both dry-run and apply to retain the full original
+Page message as `sourceMessage`, preserve summary contact routes, and set
+`redactionState` to `contacts_preserved`. This option supersedes the Page staging
+redacted-only requirements below. Without the option, redaction remains the
+default. Group canonical rules are unchanged. Never print contacts or commit
+private data. DEV targeting, explicit retention, pending human review, and the
+formal service-case boundary remain enforced. Content fingerprints include the
+full original message, including contacts beyond the summary length limit.
+
 ## 1. Read before acting
 
 The agent MUST read, in this order:
