@@ -1,7 +1,20 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { FacebookGroupLeads } from "@/features/pro/facebook-group-leads";
 import { WorkOpportunityCard } from "@/components/shared/work-opportunity-card";
+
+vi.mock("@/i18n/navigation", () => ({
+  Link: ({
+    children,
+    href,
+    className,
+  }: {
+    children: ReactNode;
+    href: string;
+    className?: string;
+  }) => createElement("a", { href, className }, children),
+}));
 
 describe("unified work cards", () => {
   it("shows reviewed work without source sections or date warnings", () => {
@@ -15,6 +28,7 @@ describe("unified work cards", () => {
             sourceName: "Private Source Group",
             title: "搵師傅裝燈",
             message: "安裝兩盞燈",
+            contactText: "",
             location: "香港",
             categoryId: "electrical",
             sourceUrl: "https://www.facebook.com/groups/test/",
@@ -27,7 +41,8 @@ describe("unified work cards", () => {
     expect(html).toContain("搵師傅裝燈");
     expect(html).toContain("電力工程");
     expect(html).toContain("查看詳情");
-    expect(html).toContain('href="https://www.facebook.com/groups/test/"');
+    expect(html).toContain('href="/pro/leads/work-synthetic"');
+    expect(html).not.toContain('href="https://www.facebook.com/');
     expect(html).not.toContain("Private Source Group");
     expect(html).not.toContain("Facebook");
     expect(html).not.toContain("日期未確認");

@@ -1,4 +1,5 @@
 import { MapPin } from "lucide-react";
+import { Link } from "@/i18n/navigation";
 import { WorkOpportunityCard } from "@/components/shared/work-opportunity-card";
 import type { FacebookGroupSnapshot } from "@/lib/facebook-group-snapshots";
 
@@ -15,11 +16,10 @@ export function FacebookGroupLeads({
   return (
     <>
       {leads.map((lead) => (
-        <a
+        <Link
           key={lead.id}
-          href={lead.permalink ?? lead.sourceUrl}
-          target="_blank"
-          rel="noopener noreferrer"
+          href={`/pro/leads/work-${lead.id}`}
+          locale={locale}
           className="block"
         >
           <WorkOpportunityCard
@@ -43,7 +43,7 @@ export function FacebookGroupLeads({
             }
             action={en ? "View details" : "查看詳情"}
           />
-        </a>
+        </Link>
       ))}
     </>
   );

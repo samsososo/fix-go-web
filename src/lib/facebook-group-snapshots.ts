@@ -13,6 +13,7 @@ export type FacebookGroupSnapshot = {
   location: string;
   categoryId: string | null;
   message: string;
+  contactText: string;
   sourceUrl: string;
   permalink: string | null;
   truncated: boolean;
@@ -73,33 +74,74 @@ export function toFacebookGroupSnapshot(
         ? review.displayText
         : row.sourceMessage,
     ),
+    // Only the reviewed post body may supply direct contacts, never feed comments.
+    contactText:
+      typeof review.displayText === "string"
+        ? cleanFacebookPostText(review.displayText)
+        : "",
     sourceUrl,
     permalink: groupUrl(row.sourcePermalink, true),
     truncated: row.truncated === true,
   };
 }
 
-/** Read only: these snapshots are never converted into marketplace requests. */
-export async function listFacebookGroupSnapshots(
-  categoryId?: string,
-): Promise<FacebookGroupSnapshot[]> {
-  if (env.MONGODB_DATABASE !== "hotfix_dev" || !env.MONGODB_URI) return [];
+async function authorizedSnapshotUri(): Promise<string | null> {
+  if (env.MONGODB_DATABASE !== "hotfix_dev" || !env.MONGODB_URI) return null;
   try {
     validateHotfixDevMongoTarget(env.MONGODB_URI, env.MONGODB_DATABASE);
   } catch {
-    return [];
+    return null;
   }
   const user = await getCurrentUser();
-  if (user?.role !== "pro") return [];
+  if (user?.role !== "pro") return null;
   const snapshot = await getProSubscriptionEntitlement(user.id);
   if (
     !snapshot.policyDataValid ||
     !snapshot.entitlement.canCreateQuotes ||
     !snapshot.entitlement.canAcceptNewWork
   )
-    return [];
+    return null;
 
-  const client = new MongoClient(env.MONGODB_URI, {
+  return env.MONGODB_URI;
+}
+
+function eligibleSnapshotFilter() {
+  return {
+    sourceKind: "group_browser_snapshot",
+    "intentReview.version": 1,
+    "intentReview.region": "HK",
+    "intentReview.intent": { $in: ["service_request", "recruitment"] },
+    $expr: { $eq: ["$intentReview.contentSha256", "$contentSha256"] },
+    verificationState: "pending_human_review",
+    retentionState: {
+      $nin: ["deleted", "deletion_requested", "expired"],
+    },
+    $or: [
+      { expiresAt: { $exists: false } },
+      { expiresAt: { $gt: new Date() } },
+    ],
+  };
+}
+
+const snapshotProjection = {
+  _id: 1,
+  contentSha256: 1,
+  intentReview: 1,
+  sourceName: 1,
+  sourceMessage: 1,
+  sourceUrl: 1,
+  sourcePermalink: 1,
+  truncated: 1,
+};
+
+/** Read only: these snapshots are never converted into marketplace requests. */
+export async function listFacebookGroupSnapshots(
+  categoryId?: string,
+): Promise<FacebookGroupSnapshot[]> {
+  const uri = await authorizedSnapshotUri();
+  if (!uri) return [];
+
+  const client = new MongoClient(uri, {
     serverSelectionTimeoutMS: 7000,
   });
   try {
@@ -110,31 +152,10 @@ export async function listFacebookGroupSnapshots(
       .find(
         {
           ...(categoryId ? { "intentReview.categoryId": categoryId } : {}),
-          sourceKind: "group_browser_snapshot",
-          "intentReview.version": 1,
-          "intentReview.region": "HK",
-          "intentReview.intent": { $in: ["service_request", "recruitment"] },
-          $expr: { $eq: ["$intentReview.contentSha256", "$contentSha256"] },
-          verificationState: "pending_human_review",
-          retentionState: {
-            $nin: ["deleted", "deletion_requested", "expired"],
-          },
-          $or: [
-            { expiresAt: { $exists: false } },
-            { expiresAt: { $gt: new Date() } },
-          ],
+          ...eligibleSnapshotFilter(),
         },
         {
-          projection: {
-            _id: 1,
-            contentSha256: 1,
-            intentReview: 1,
-            sourceName: 1,
-            sourceMessage: 1,
-            sourceUrl: 1,
-            sourcePermalink: 1,
-            truncated: 1,
-          },
+          projection: snapshotProjection,
         },
       )
       .sort({ capturedAt: -1, _id: 1 })
@@ -144,6 +165,34 @@ export async function listFacebookGroupSnapshots(
       const mapped = toFacebookGroupSnapshot(row);
       return mapped ? [mapped] : [];
     });
+  } finally {
+    await client.close();
+  }
+}
+
+/** Read a single eligible snapshot, independently of the list's pagination cap. */
+export async function getFacebookGroupSnapshot(
+  id: string,
+): Promise<FacebookGroupSnapshot | null> {
+  if (!/^[a-f0-9]{64}$/.test(id)) return null;
+  const uri = await authorizedSnapshotUri();
+  if (!uri) return null;
+
+  const client = new MongoClient(uri, {
+    serverSelectionTimeoutMS: 7000,
+  });
+  try {
+    await client.connect();
+    const row = await client
+      .db("hotfix_dev")
+      .collection<{ _id: string } & Record<string, unknown>>(
+        "externalFacebookGroupSnapshots",
+      )
+      .findOne(
+        { _id: id, ...eligibleSnapshotFilter() },
+        { projection: snapshotProjection },
+      );
+    return row ? toFacebookGroupSnapshot(row) : null;
   } finally {
     await client.close();
   }

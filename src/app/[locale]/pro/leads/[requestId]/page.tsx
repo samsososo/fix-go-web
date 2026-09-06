@@ -6,6 +6,8 @@ import { PortalShell } from "@/components/shared/portal-shell";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { WhatsAppContactLink } from "@/components/shared/whatsapp-contact-link";
 import { Card, CardContent } from "@/components/ui/card";
+import { WorkLeadDetail } from "@/features/pro/work-lead-detail";
+import { getFacebookGroupSnapshot } from "@/lib/facebook-group-snapshots";
 import { QuoteForm } from "@/features/pro/quote-form";
 import { Link } from "@/i18n/navigation";
 import { getCurrentUser } from "@/lib/auth";
@@ -18,7 +20,7 @@ import {
 } from "@/lib/formatters";
 import { formatAreaName, formatDistrictName } from "@/lib/hk-locale";
 import { env } from "@/lib/env";
-import { getLeadDetail } from "@/lib/mock/repositories";
+import { getLeadDetail, listCategoryOptions } from "@/lib/mock/repositories";
 import { getProNav } from "@/lib/nav";
 import { getProSubscriptionEntitlement } from "@/lib/pro-subscription-entitlement";
 
@@ -32,6 +34,21 @@ export default async function ProLeadDetailPage({
   const user = await getCurrentUser();
   if (!user) {
     return null;
+  }
+
+  if (requestId.startsWith("work-")) {
+    const work = await getFacebookGroupSnapshot(requestId.slice(5));
+    if (!work) redirect(`/pro/leads`);
+    const categories = await listCategoryOptions(locale as "zh-HK" | "en");
+    return (
+      <WorkLeadDetail
+        lead={work}
+        locale={locale}
+        categoryLabel={
+          categories.find((category) => category.id === work.categoryId)?.label
+        }
+      />
+    );
   }
 
   const [lead, subscriptionSnapshot] = await Promise.all([

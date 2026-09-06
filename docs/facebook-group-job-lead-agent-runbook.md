@@ -709,3 +709,15 @@ The 2026-08-15 local prototype had:
 The private Excel also has 5 rows, but it is not the same set as the 5 automatic candidates. A reconstructed source mapping found only 2 overlapping `stable_id` values, while the current selected export payload stores no `stable_id` or source object. Do not claim that the current Excel is deterministically reproducible from `facebook-job-leads-7d.intermediate.json`.
 
 These numbers are not targets. A future run must report its own counts against the hard gates above.
+
+
+## Authorized in-platform details and phone links (2026-09-06)
+
+The user requested that job cards open an in-platform detail page. Extract phone
+contact actions only from the current hash-matched `intentReview.displayText`,
+which has been reviewed as the original post body. Do not fall back to raw feed
+text or commenters' contact details. Provide a `tel:` link; provide WhatsApp only
+when the post explicitly identifies that number as a WhatsApp contact. Retain a
+secondary, manually opened post/group link when needed. Detail reads must apply
+the same DEV, pro entitlement, HK/intent/hash, deletion and expiry gates as lists.
+Do not send messages or create native marketplace records as part of this flow.

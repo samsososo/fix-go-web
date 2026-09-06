@@ -285,3 +285,10 @@ AI 執行步驟及 stop conditions 見 [`facebook-group-job-lead-agent-runbook.m
 
 
 地區限制：另外要求 `intentReview.region = HK`，按帖文工程／工作地點判斷；僅香港群組名稱、廣東話或香港電話不足以確認工程在港。海外或地區不明一律隱藏，補充地點並重新分析後才顯示。地區分析與原文 hash 一併綁定。
+
+
+### 2026-09-06：平台內工作詳情與電話聯絡
+
+使用者要求工作卡片先開啟平台內詳情，不直接跳到 Facebook。有已分析正文電話的帖文顯示 `tel:` 聯絡入口；正文明示 WhatsApp 的同一電話才顯示 WhatsApp 按鈕。只從原文 hash 相符的 `intentReview.displayText` 提取，避免將留言者自薦電話當成發帖人聯絡方式。不得由原始整段群組快照補電話。沒有電話則保留手動原帖／討論區連結，來源仍只作次要入口。
+
+詳情頁與列表使用同一 DEV、香港、意圖、hash、刪除／到期及師傅新工作權限檢查；網址不能繞過權限。電話入口只方便使用者自行聯絡，不代發訊息，不建立正式 ServiceRequest／quote／booking。
