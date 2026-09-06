@@ -3,7 +3,10 @@ import { MongoClient } from "mongodb";
 import { getCurrentUser } from "@/lib/auth";
 import { cleanFacebookPostText } from "@/lib/facebook-post-text";
 import { env } from "@/lib/env";
-import { validateHotfixDevMongoTarget } from "@/lib/external-unverified-leads";
+import {
+  type FacebookSnapshotMongoTarget,
+  validateFacebookSnapshotMongoTarget,
+} from "@/lib/facebook-snapshot-mongo-target";
 import { getProSubscriptionEntitlement } from "@/lib/pro-subscription-entitlement";
 
 export type FacebookGroupSnapshot = {
@@ -85,10 +88,14 @@ export function toFacebookGroupSnapshot(
   };
 }
 
-async function authorizedSnapshotUri(): Promise<string | null> {
-  if (env.MONGODB_DATABASE !== "hotfix_dev" || !env.MONGODB_URI) return null;
+async function authorizedSnapshotTarget(): Promise<FacebookSnapshotMongoTarget | null> {
+  if (!env.MONGODB_URI) return null;
+  let target: FacebookSnapshotMongoTarget;
   try {
-    validateHotfixDevMongoTarget(env.MONGODB_URI, env.MONGODB_DATABASE);
+    target = validateFacebookSnapshotMongoTarget(
+      env.MONGODB_URI,
+      env.MONGODB_DATABASE,
+    );
   } catch {
     return null;
   }
@@ -102,7 +109,7 @@ async function authorizedSnapshotUri(): Promise<string | null> {
   )
     return null;
 
-  return env.MONGODB_URI;
+  return target;
 }
 
 function eligibleSnapshotFilter() {
@@ -138,16 +145,17 @@ const snapshotProjection = {
 export async function listFacebookGroupSnapshots(
   categoryId?: string,
 ): Promise<FacebookGroupSnapshot[]> {
-  const uri = await authorizedSnapshotUri();
-  if (!uri) return [];
+  const target = await authorizedSnapshotTarget();
+  if (!target) return [];
 
-  const client = new MongoClient(uri, {
+  const client = new MongoClient(target.uri, {
     serverSelectionTimeoutMS: 7000,
+    authSource: target.database,
   });
   try {
     await client.connect();
     const rows = await client
-      .db("hotfix_dev")
+      .db(target.database)
       .collection("externalFacebookGroupSnapshots")
       .find(
         {
@@ -175,16 +183,17 @@ export async function getFacebookGroupSnapshot(
   id: string,
 ): Promise<FacebookGroupSnapshot | null> {
   if (!/^[a-f0-9]{64}$/.test(id)) return null;
-  const uri = await authorizedSnapshotUri();
-  if (!uri) return null;
+  const target = await authorizedSnapshotTarget();
+  if (!target) return null;
 
-  const client = new MongoClient(uri, {
+  const client = new MongoClient(target.uri, {
     serverSelectionTimeoutMS: 7000,
+    authSource: target.database,
   });
   try {
     await client.connect();
     const row = await client
-      .db("hotfix_dev")
+      .db(target.database)
       .collection<{ _id: string } & Record<string, unknown>>(
         "externalFacebookGroupSnapshots",
       )

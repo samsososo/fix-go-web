@@ -22,7 +22,8 @@ canonical 規則、待人工覆核狀態、禁止直接建立正式工作單、�
 以上是最初展示方式；目前列表介面及日期顯示以以下 2026-09-06 授權為準。
 本次授權容許 DEV 列表展示，優先於下文未覆核資料不得展示的原型限制；
 不代表人工核實完成、同意推廣聯絡或建立正式 ServiceRequest／報價／booking。
-正式環境不讀取此資料集，已刪除／過期快照不顯示。
+當時正式環境不讀取此資料集；此環境限制已由下方 2026-09-06 正式環境同步
+授權取代。已刪除／過期快照仍不顯示。
 
 ## 2026-09-06：統一工作列表及接受日期未確認的帖文
 
@@ -43,8 +44,41 @@ canonical 規則、待人工覆核狀態、禁止直接建立正式工作單、�
 不因合併列表而重新顯示。介面不區分來源，但內部必須保留來源識別、原帖連結、
 原文 hash、待覆核狀態及日期可信度，供去重、重新分析及刪除處理。
 
-這是 DEV 展示調整，不將外部 snapshot 轉成正式 `ServiceRequest`、quote 或
-booking，亦不表示需求已核實、批准聯絡或改變師傅訂閱及新工作權限。
+這次最初是 DEV 展示調整；下方正式環境同步授權把相同展示方式延伸至 PROD。
+外部 snapshot 不會轉成正式 `ServiceRequest`、quote 或 booking，亦不表示
+需求已核實、批准代發聯絡或改變師傅訂閱及新工作權限。
+
+## 2026-09-06：同步已確認展示內容至正式環境
+
+使用者已明確要求將目前 DEV 工作列表及平台內詳情同步至 PROD。本次授權
+容許正式環境使用 `externalFacebookGroupSnapshots`，優先於上文及原型流程
+的 DEV-only／禁止正式展示限制。每個環境只讀取自己已驗證的 MongoDB
+URI／資料庫配對：DEV 為 `hotfix_dev`，PROD 為 `hotfix_prod`。PROD 不得
+直接讀 DEV 資料庫，亦不更改 Page importer 的 DEV-only 範圍。
+
+本次資料同步只包含目前明確選定的 6 個 snapshot IDs，對應已分析、原文
+hash 相符、香港地點明確、意圖為搵師傅／工程詢價或師傅招聘的快照。
+這是一次性同步，不建立定期收集或自動同步工作。保留原文、已授權的聯絡資料、
+`intentReview`、內部來源識別、原帖連結、日期可信度、待覆核及保存期限狀態。
+未知日期照常顯示，不能用擷取／匯入時間補作發帖日期。這是展示及部署授權，
+不代表需求、日期或聯絡資料已經人工核實，亦不批准自動聯絡。
+
+同步採用可重複執行的 insert-only 寫入，沿用穩定 snapshot identity 及原文 hash
+去重；同一 identity 的 PROD 紀錄已存在時不覆寫、不重設審核或保存期限狀態。
+若 PROD 已有刪除、要求刪除或過期紀錄，同步不得令該來源重新出現；有 identity
+或內容衝突須保留 PROD 現況並報告。更新、替換或恢復現有 PROD 紀錄需要
+使用者之後明確授權。本次不新增或延長保存期限，也不取消已有 expiry。
+
+不得把 DEV 的原生客戶測試工作、帳戶、config、訂閱、報價、booking 或通知
+複製到 PROD，亦不得從外部快照建立正式 marketplace 紀錄。同步前須保留受限
+備份及只含數量／hash 的核對資料；先 dry-run，再驗證實際寫入及重跑零新增。
+原始帖文、聯絡資料及備份只能留在受限資料庫／ignored 私人目錄，不得進入
+Git、logs 或對話。
+
+PROD 使用相同的統一工作卡片、平台內詳情、已分析正文電話及明示 WhatsApp
+入口。列表與詳情同時保留香港／需求／原文 hash、刪除／過期、登入師傅、
+有效訂閱規則及建立報價和接受新工作兩項權限檢查。來源只作內部 provenance
+及次要原帖入口；不另設來源分區或日期未知提示。
 
 ## 目的
 
@@ -151,7 +185,7 @@ Normalized post 的最低 audit fields 是：
 
 ## 原型七日清單入選規則
 
-以下適用於明確要求七日窗口的原型 deliverable；目前 DEV 工作列表按上方
+以下適用於明確要求七日窗口的原型 deliverable；目前 DEV／PROD 工作列表按上方
 2026-09-06 授權處理日期未知的帖文。七日清單每筆 lead 必須同時符合：
 
 - 日期明確在指定 7 日窗口內；日期未知不進最終清單。
@@ -263,7 +297,7 @@ Facebook lead 是外部、未驗證線索，不能直接建立現有 `ServiceReq
 7. 現有 contact regex 只能保證已支援格式的 leak count，不能證明匿名化；姓名、permalink、混合 Unicode 或 obfuscated contact 仍可能識別個人。
 8. 今次有大量截斷內容及缺 permalink；現有數量不能代表完整 coverage。Facebook UI 搜尋排序及可見結果亦不保證完整。
 9. 現有 private artifacts 使用一般工作站權限；新 run 每個建立私人檔案的 shell 都要設定 `umask 077`，再把 private directory 及 files 限制為 owner-only access。
-10. 目前未有正式 retention period、outreach consent 流程或 external lead product model；三者未批准前，不可自動分發或聯絡。
+10. 目前未有正式 retention period、outreach consent 流程或 external lead product model；上方已授權快照可按本次範圍展示，保存期限狀態如實保留。此例外不批准額外自動分發或聯絡，也不批准延長保存期限。
 
 ## 正式化前的決策門檻
 
@@ -277,11 +311,11 @@ Facebook lead 是外部、未驗證線索，不能直接建立現有 `ServiceReq
 AI 執行步驟及 stop conditions 見 [`facebook-group-job-lead-agent-runbook.md`](facebook-group-job-lead-agent-runbook.md)。
 
 
-### DEV 搵師傅意圖篩選（2026-09-06）
+### 搵師傅意圖篩選（2026-09-06）
 
 工作列表只顯示已逐篇分析、`intentReview.version = 1` 且 `intentReview.intent` 為 `service_request` 或 `recruitment` 的 snapshot；涵蓋搵師傅、有具體工程範圍的詢價及香港師傅招聘。服務廣告、產品推銷、師傅求職、海外招聘、純討論及意思不清楚的帖文不顯示。判斷以原帖需求為準，不將留言者自薦當成發帖者搵師傅。
 
-分析結果存於 DEV snapshot 的 `intentReview`，記錄原因及原文 `contentSha256`；hash 不相符或未分析的新帖文一律不顯示，須重新分析。此分類不代表核實日期、需求仍然有效或批准聯絡，亦不建立正式工作。原始 snapshot 及聯絡資料保留；私人分析清單不提交 Git。
+分析結果存於各環境 snapshot 的 `intentReview`，記錄原因及原文 `contentSha256`；hash 不相符或未分析的新帖文一律不顯示，須重新分析。此分類不代表核實日期、需求仍然有效或批准聯絡，亦不建立正式工作。原始 snapshot 及聯絡資料保留；私人分析清單不提交 Git。
 
 
 地區限制：另外要求 `intentReview.region = HK`，按帖文工程／工作地點判斷；僅香港群組名稱、廣東話或香港電話不足以確認工程在港。海外或地區不明一律隱藏，補充地點並重新分析後才顯示。地區分析與原文 hash 一併綁定。
@@ -291,4 +325,4 @@ AI 執行步驟及 stop conditions 見 [`facebook-group-job-lead-agent-runbook.m
 
 使用者要求工作卡片先開啟平台內詳情，不直接跳到 Facebook。有已分析正文電話的帖文顯示 `tel:` 聯絡入口；正文明示 WhatsApp 的同一電話才顯示 WhatsApp 按鈕。只從原文 hash 相符的 `intentReview.displayText` 提取，避免將留言者自薦電話當成發帖人聯絡方式。不得由原始整段群組快照補電話。沒有電話則保留手動原帖／討論區連結，來源仍只作次要入口。
 
-詳情頁與列表使用同一 DEV、香港、意圖、hash、刪除／到期及師傅新工作權限檢查；網址不能繞過權限。電話入口只方便使用者自行聯絡，不代發訊息，不建立正式 ServiceRequest／quote／booking。
+詳情頁與列表使用同一環境資料庫、香港、意圖、hash、刪除／到期及師傅新工作權限檢查；網址不能繞過權限。電話入口只方便使用者自行聯絡，不代發訊息，不建立正式 ServiceRequest／quote／booking。

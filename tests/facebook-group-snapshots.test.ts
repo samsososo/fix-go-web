@@ -7,6 +7,8 @@ const state = vi.hoisted(() => ({
   user: vi.fn(),
   entitlement: vi.fn(),
   connect: vi.fn(),
+  client: vi.fn(),
+  db: vi.fn(),
   close: vi.fn(),
   find: vi.fn(),
   findOne: vi.fn(),
@@ -19,13 +21,12 @@ vi.mock("@/lib/pro-subscription-entitlement", () => ({
 }));
 vi.mock("mongodb", () => ({
   MongoClient: class {
+    constructor(...args: unknown[]) {
+      state.client(...args);
+    }
     connect = state.connect;
     close = state.close;
-    db() {
-      return {
-        collection: () => ({ find: state.find, findOne: state.findOne }),
-      };
-    }
+    db = state.db;
   },
 }));
 import {
@@ -47,113 +48,184 @@ beforeEach(() => {
   });
   state.rows.mockResolvedValue([]);
   state.findOne.mockResolvedValue(null);
+  state.db.mockReturnValue({
+    collection: () => ({ find: state.find, findOne: state.findOne }),
+  });
   state.find.mockReturnValue({
     sort: () => ({ limit: () => ({ toArray: state.rows }) }),
   });
 });
 
-describe("DEV Facebook snapshot access", () => {
-  it.each([null, { id: "synthetic-customer", role: "customer" }])(
-    "does not query private data for a non-pro",
-    async (user) => {
-      state.user.mockResolvedValue(user);
-      expect(await listFacebookGroupSnapshots()).toEqual([]);
-      expect(await getFacebookGroupSnapshot(snapshotId)).toBeNull();
-      expect(state.connect).not.toHaveBeenCalled();
-    },
-  );
-  it.each([
-    {
-      policyDataValid: false,
-      entitlement: { canCreateQuotes: true, canAcceptNewWork: true },
-    },
-    {
-      policyDataValid: true,
-      entitlement: { canCreateQuotes: false, canAcceptNewWork: false },
-    },
-    {
-      policyDataValid: true,
-      entitlement: { canCreateQuotes: true, canAcceptNewWork: false },
-    },
-    {
-      policyDataValid: true,
-      entitlement: { canCreateQuotes: false, canAcceptNewWork: true },
-    },
-  ])(
-    "hides raw contacts when new-work access is unavailable",
-    async (entitlement) => {
-      state.entitlement.mockResolvedValue(entitlement);
-      expect(await listFacebookGroupSnapshots()).toEqual([]);
-      expect(await getFacebookGroupSnapshot(snapshotId)).toBeNull();
-      expect(state.connect).not.toHaveBeenCalled();
-    },
-  );
-  it.each([
-    ["hotfix_prod", "mongodb://localhost/hotfix_prod"],
-    ["hotfix_dev", "mongodb://localhost/hotfix_prod"],
-    ["hotfix_dev", "mongodb://localhost/hotfix_dev?authSource=hotfix_prod"],
-  ])(
-    "never reads a production or mismatched database",
-    async (database, uri) => {
+describe.each(["hotfix_dev", "hotfix_prod"])(
+  "Facebook snapshot access in %s",
+  (database) => {
+    beforeEach(() => {
       state.env.MONGODB_DATABASE = database;
-      state.env.MONGODB_URI = uri;
-      expect(await listFacebookGroupSnapshots()).toEqual([]);
-      expect(await getFacebookGroupSnapshot(snapshotId)).toBeNull();
-      expect(state.connect).not.toHaveBeenCalled();
-    },
-  );
-  it("returns only display fields and excludes expired/deleted snapshots in the query", async () => {
-    state.rows.mockResolvedValue([
-      {
-        _id: "synthetic",
-        contentSha256: "synthetic-content-hash",
-        intentReview: {
-          version: 1,
-          region: "HK",
-          intent: "service_request",
-          contentSha256: "synthetic-content-hash",
-        },
-        sourceName: "Synthetic Group",
-        sourceMessage: "Synthetic visible work description",
-        sourceUrl: "https://www.facebook.com/groups/synthetic/",
-        sourcePermalink: "javascript:alert(1)",
-        inputSha256: "private-metadata",
-      },
-    ]);
-    const result = await listFacebookGroupSnapshots();
-    expect(result).toHaveLength(1);
-    expect(result[0].permalink).toBeNull();
-    expect(result[0]).not.toHaveProperty("inputSha256");
-    expect(state.find.mock.calls[0][0]).toMatchObject({
-      "intentReview.intent": { $in: ["service_request", "recruitment"] },
-      "intentReview.version": 1,
-      "intentReview.region": "HK",
-      $expr: { $eq: ["$intentReview.contentSha256", "$contentSha256"] },
-      retentionState: { $nin: ["deleted", "deletion_requested", "expired"] },
+      state.env.MONGODB_URI = `mongodb://localhost/${database}?authSource=${database}`;
     });
-    expect(state.find.mock.calls[0][0].$or[1].expiresAt.$gt).toBeInstanceOf(
-      Date,
+    it.each([null, { id: "synthetic-customer", role: "customer" }])(
+      "does not query private data for a non-pro",
+      async (user) => {
+        state.user.mockResolvedValue(user);
+        expect(await listFacebookGroupSnapshots()).toEqual([]);
+        expect(await getFacebookGroupSnapshot(snapshotId)).toBeNull();
+        expect(state.connect).not.toHaveBeenCalled();
+      },
     );
-    expect(state.close).toHaveBeenCalled();
-  });
-  it("rejects external hosts and unsafe source URLs", () => {
-    expect(
-      toFacebookGroupSnapshot({
-        _id: "synthetic",
-        contentSha256: "synthetic-content-hash",
-        intentReview: {
-          version: 1,
-          region: "HK",
-          intent: "service_request",
+    it.each([
+      {
+        policyDataValid: false,
+        entitlement: { canCreateQuotes: true, canAcceptNewWork: true },
+      },
+      {
+        policyDataValid: true,
+        entitlement: { canCreateQuotes: false, canAcceptNewWork: false },
+      },
+      {
+        policyDataValid: true,
+        entitlement: { canCreateQuotes: true, canAcceptNewWork: false },
+      },
+      {
+        policyDataValid: true,
+        entitlement: { canCreateQuotes: false, canAcceptNewWork: true },
+      },
+    ])(
+      "hides raw contacts when new-work access is unavailable",
+      async (entitlement) => {
+        state.entitlement.mockResolvedValue(entitlement);
+        expect(await listFacebookGroupSnapshots()).toEqual([]);
+        expect(await getFacebookGroupSnapshot(snapshotId)).toBeNull();
+        expect(state.connect).not.toHaveBeenCalled();
+      },
+    );
+    it.each([
+      ["hotfix_test", "mongodb://localhost/hotfix_test"],
+      ["unknown", "mongodb://localhost/unknown"],
+      ["hotfix_dev", "mongodb://localhost/hotfix_prod"],
+      ["hotfix_prod", "mongodb://localhost/hotfix_dev"],
+      ["hotfix_dev", "mongodb://localhost/hotfix_dev?authSource=hotfix_prod"],
+      ["hotfix_prod", "mongodb://localhost/hotfix_prod?authSource=hotfix_dev"],
+      ["hotfix_prod", "mongodb://localhost/hotfix_prod?AUTHSOURCE=hotfix_dev"],
+      [
+        "hotfix_prod",
+        "mongodb://localhost/hotfix_prod?authSource=hotfix_prod&AUTHSOURCE=hotfix_dev",
+      ],
+      [
+        "hotfix_prod",
+        "mongodb://localhost/hotfix_prod?authSource=hotfix_prod&authSource=hotfix_prod",
+      ],
+      ["hotfix_prod", "mongodb://localhost/hotfix_prod?authSource="],
+      ["hotfix_prod", "mongodb://localhost/hotfix_prod?authSource=admin"],
+      ["hotfix_prod", "mongodb://localhost/hotfix_prod?dbName=hotfix_dev"],
+      ["hotfix_prod", "mongodb://localhost/hotfix_prod/"],
+      ["hotfix_prod", "mongodb://localhost/"],
+      ["hotfix_prod", "mongodb://localhost/%zz"],
+      ["hotfix_prod", "mongodb://localhost/hotfix_prod#fragment"],
+      ["hotfix_prod", "https://localhost/hotfix_prod"],
+      ["hotfix_prod", "invalid"],
+      ["hotfix_prod", ""],
+    ])(
+      "never reads an unknown, invalid or mismatched database (%s, %s)",
+      async (database, uri) => {
+        state.env.MONGODB_DATABASE = database;
+        state.env.MONGODB_URI = uri;
+        expect(await listFacebookGroupSnapshots()).toEqual([]);
+        expect(await getFacebookGroupSnapshot(snapshotId)).toBeNull();
+        expect(state.connect).not.toHaveBeenCalled();
+        expect(state.client).not.toHaveBeenCalled();
+        expect(state.user).not.toHaveBeenCalled();
+      },
+    );
+    it.each(["", "?authSource=", "?AUTHSOURCE="])(
+      "uses the deployment's own URI and database for list and detail (%s)",
+      async (authOption) => {
+        state.env.MONGODB_URI = `mongodb://localhost/${database}${authOption}${authOption ? database : ""}`;
+        const row = {
+          _id: snapshotId,
           contentSha256: "synthetic-content-hash",
+          intentReview: {
+            version: 1,
+            region: "HK",
+            intent: "service_request",
+            contentSha256: "synthetic-content-hash",
+            displayText: "Synthetic reviewed work description",
+          },
+          sourceName: "Synthetic Group",
+          sourceMessage: "Synthetic visible work description",
+          sourceUrl: "https://www.facebook.com/groups/synthetic/",
+        };
+        state.rows.mockResolvedValue([row]);
+        state.findOne.mockResolvedValue(row);
+
+        const list = await listFacebookGroupSnapshots();
+        const detail = await getFacebookGroupSnapshot(snapshotId);
+
+        expect(list).toHaveLength(1);
+        expect(detail).toEqual(list[0]);
+        expect(state.client).toHaveBeenCalledTimes(2);
+        for (const args of state.client.mock.calls) {
+          expect(args).toEqual([
+            state.env.MONGODB_URI,
+            { serverSelectionTimeoutMS: 7000, authSource: database },
+          ]);
+        }
+        expect(state.db.mock.calls).toEqual([[database], [database]]);
+        expect(state.close).toHaveBeenCalledTimes(2);
+      },
+    );
+    it("returns only display fields and excludes expired/deleted snapshots in the query", async () => {
+      state.rows.mockResolvedValue([
+        {
+          _id: "synthetic",
+          contentSha256: "synthetic-content-hash",
+          intentReview: {
+            version: 1,
+            region: "HK",
+            intent: "service_request",
+            contentSha256: "synthetic-content-hash",
+          },
+          sourceName: "Synthetic Group",
+          sourceMessage: "Synthetic visible work description",
+          sourceUrl: "https://www.facebook.com/groups/synthetic/",
+          sourcePermalink: "javascript:alert(1)",
+          inputSha256: "private-metadata",
         },
-        sourceName: "Group",
-        sourceMessage: "Text",
-        sourceUrl: "https://www.facebook.com.example.invalid/groups/test/",
-      }),
-    ).toBeNull();
-  });
-});
+      ]);
+      const result = await listFacebookGroupSnapshots();
+      expect(result).toHaveLength(1);
+      expect(result[0].permalink).toBeNull();
+      expect(result[0]).not.toHaveProperty("inputSha256");
+      expect(state.find.mock.calls[0][0]).toMatchObject({
+        "intentReview.intent": { $in: ["service_request", "recruitment"] },
+        "intentReview.version": 1,
+        "intentReview.region": "HK",
+        $expr: { $eq: ["$intentReview.contentSha256", "$contentSha256"] },
+        retentionState: { $nin: ["deleted", "deletion_requested", "expired"] },
+      });
+      expect(state.find.mock.calls[0][0].$or[1].expiresAt.$gt).toBeInstanceOf(
+        Date,
+      );
+      expect(state.close).toHaveBeenCalled();
+    });
+    it("rejects external hosts and unsafe source URLs", () => {
+      expect(
+        toFacebookGroupSnapshot({
+          _id: "synthetic",
+          contentSha256: "synthetic-content-hash",
+          intentReview: {
+            version: 1,
+            region: "HK",
+            intent: "service_request",
+            contentSha256: "synthetic-content-hash",
+          },
+          sourceName: "Group",
+          sourceMessage: "Text",
+          sourceUrl: "https://www.facebook.com.example.invalid/groups/test/",
+        }),
+      ).toBeNull();
+    });
+  },
+);
 
 describe("Facebook intent review", () => {
   it.each([

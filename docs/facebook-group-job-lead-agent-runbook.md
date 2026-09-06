@@ -35,8 +35,8 @@ and both new-work entitlements before querying contact-bearing snapshots.
 The original display used unknown-date and incomplete-text labels; the current
 presentation is superseded by the 2026-09-06 authorization below. Render text
 safely and use only validated Facebook group/post links. Do not create marketplace
-requests, quotes, bookings or outreach messages. Production must not query this
-collection.
+requests, quotes, bookings or outreach messages. The original production-query
+restriction is superseded only by the production promotion authorization below.
 
 ## Authorized unified DEV work list and unknown dates (2026-09-06)
 
@@ -64,8 +64,50 @@ Keep provenance, stable identity, source links, raw content hashes, pending revi
 states and date confidence internally for deduplication, review and deletion.
 Presentation changes MUST NOT convert snapshots into formal `ServiceRequest`,
 quote or booking records, approve outreach, or alter subscription entitlements.
-The existing DEV-only target check, pro-role check, both new-work entitlement
-checks, and deletion/expiry exclusions remain required.
+The pro-role check, both new-work entitlement checks, and deletion/expiry
+exclusions remain required. The original DEV-only target check is superseded by
+the per-environment database validation below.
+
+## Authorized production promotion (2026-09-06)
+
+The user explicitly requested syncing the verified DEV work-list and in-platform
+detail experience to PROD. This authorizes the production application to read
+its own `externalFacebookGroupSnapshots` collection and overrides the earlier
+DEV-only and prototype isolation requirements for this approved snapshot scope.
+Each environment MUST validate and use its own MongoDB URI/database pair:
+`hotfix_dev` for DEV and `hotfix_prod` for PROD. PROD MUST NOT query the DEV
+database. The managed-Page importer remains DEV-only.
+
+This one-time data promotion is limited to the six explicitly selected snapshot
+IDs, each with a current hash-matched intent review, region `HK`, and intent
+`service_request` or `recruitment`. Do not create recurring collection or sync
+jobs. Preserve original content and authorized contacts, reviewed
+display fields, source identity/links/hashes, unknown source dates, pending
+verification/lawful-use/outreach states, and retention/deletion metadata.
+Deployment approval does not certify that dates, contact values, or demand have
+been human-verified and does not authorize automated outreach.
+
+Promotion MUST be idempotent and insert-only. Deduplicate by stable snapshot
+identity and source content hash. Do not overwrite or replace an existing PROD
+record, reset its review/retention state, or resurrect a deleted, deletion-requested,
+or expired source. Preserve and report identity/content conflicts; updates,
+replacement, and restoration require later explicit user authorization. Do not
+invent or extend a retention period, clear an expiry, or reset deletion metadata.
+
+Before applying, retain a restricted backup and a count/hash-only manifest,
+review the dry-run counts, and verify both the applied result and a zero-insert
+rerun. Only this approved external snapshot subset may be inserted. Do not copy
+DEV native jobs, accounts, config, subscriptions, quotes, bookings, notifications,
+or unrelated collections. Do not create `ServiceRequest` or other marketplace
+records from snapshots. Raw records/backups remain in restricted databases or
+ignored owner-only files and MUST NOT appear in Git, logs, or chat.
+
+Use the same unified cards, in-platform details and reviewed phone/explicit
+WhatsApp actions in PROD. Lists and direct detail URLs MUST enforce the same
+pro role, valid subscription policy, both new-work entitlements, HK/intent/hash
+checks, and deletion/expiry exclusions. Keep unknown dates visible without
+inventing a posting date or showing a date warning. Preserve source internally
+and as a secondary manual source link without a separate source section.
 
 ## 1. Read before acting
 
@@ -719,5 +761,6 @@ which has been reviewed as the original post body. Do not fall back to raw feed
 text or commenters' contact details. Provide a `tel:` link; provide WhatsApp only
 when the post explicitly identifies that number as a WhatsApp contact. Retain a
 secondary, manually opened post/group link when needed. Detail reads must apply
-the same DEV, pro entitlement, HK/intent/hash, deletion and expiry gates as lists.
+the same environment/database, pro entitlement, HK/intent/hash, deletion and
+expiry gates as lists.
 Do not send messages or create native marketplace records as part of this flow.
