@@ -249,3 +249,10 @@ Facebook lead 是外部、未驗證線索，不能直接建立現有 `ServiceReq
 - 定義 quantity、precision、contactability、duplicate、staleness 及 conversion metrics。
 
 AI 執行步驟及 stop conditions 見 [`facebook-group-job-lead-agent-runbook.md`](facebook-group-job-lead-agent-runbook.md)。
+
+
+### DEV 搵師傅意圖篩選（2026-09-06）
+
+工作列表只顯示已逐篇分析、`intentReview.version = 1` 且 `intentReview.intent` 為 `service_request` 或 `recruitment` 的 snapshot；涵蓋搵師傅、有具體工程範圍的詢價及香港師傅招聘。服務廣告、產品推銷、師傅求職、海外招聘、純討論及意思不清楚的帖文不顯示。判斷以原帖需求為準，不將留言者自薦當成發帖者搵師傅。
+
+分析結果存於 DEV snapshot 的 `intentReview`，記錄原因及原文 `contentSha256`；hash 不相符或未分析的新帖文一律不顯示，須重新分析。此分類不代表核實日期、需求仍然有效或批准聯絡，亦不建立正式工作。原始 snapshot 及聯絡資料保留；私人分析清單不提交 Git。

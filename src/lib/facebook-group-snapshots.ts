@@ -39,6 +39,15 @@ function groupUrl(value: unknown, post: boolean): string | null {
 export function toFacebookGroupSnapshot(
   row: Record<string, unknown>,
 ): FacebookGroupSnapshot | null {
+  const review = row.intentReview as Record<string, unknown> | undefined;
+  if (
+    !review ||
+    review.version !== 1 ||
+    !["service_request", "recruitment"].includes(String(review.intent)) ||
+    typeof row.contentSha256 !== "string" ||
+    review.contentSha256 !== row.contentSha256
+  )
+    return null;
   const sourceUrl = groupUrl(row.sourceUrl, false);
   if (
     !sourceUrl ||
@@ -88,6 +97,9 @@ export async function listFacebookGroupSnapshots(): Promise<
       .find(
         {
           sourceKind: "group_browser_snapshot",
+          "intentReview.version": 1,
+          "intentReview.intent": { $in: ["service_request", "recruitment"] },
+          $expr: { $eq: ["$intentReview.contentSha256", "$contentSha256"] },
           verificationState: "pending_human_review",
           retentionState: {
             $nin: ["deleted", "deletion_requested", "expired"],
@@ -100,6 +112,8 @@ export async function listFacebookGroupSnapshots(): Promise<
         {
           projection: {
             _id: 1,
+            contentSha256: 1,
+            intentReview: 1,
             sourceName: 1,
             sourceMessage: 1,
             sourceUrl: 1,

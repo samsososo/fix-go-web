@@ -92,6 +92,12 @@ describe("DEV Facebook snapshot access", () => {
     state.rows.mockResolvedValue([
       {
         _id: "synthetic",
+        contentSha256: "synthetic-content-hash",
+        intentReview: {
+          version: 1,
+          intent: "service_request",
+          contentSha256: "synthetic-content-hash",
+        },
         sourceName: "Synthetic Group",
         sourceMessage: "Synthetic visible work description",
         sourceUrl: "https://www.facebook.com/groups/synthetic/",
@@ -104,6 +110,9 @@ describe("DEV Facebook snapshot access", () => {
     expect(result[0].permalink).toBeNull();
     expect(result[0]).not.toHaveProperty("inputSha256");
     expect(state.find.mock.calls[0][0]).toMatchObject({
+      "intentReview.intent": { $in: ["service_request", "recruitment"] },
+      "intentReview.version": 1,
+      $expr: { $eq: ["$intentReview.contentSha256", "$contentSha256"] },
       retentionState: { $nin: ["deleted", "deletion_requested", "expired"] },
     });
     expect(state.find.mock.calls[0][0].$or[1].expiresAt.$gt).toBeInstanceOf(
@@ -115,10 +124,53 @@ describe("DEV Facebook snapshot access", () => {
     expect(
       toFacebookGroupSnapshot({
         _id: "synthetic",
+        contentSha256: "synthetic-content-hash",
+        intentReview: {
+          version: 1,
+          intent: "service_request",
+          contentSha256: "synthetic-content-hash",
+        },
         sourceName: "Group",
         sourceMessage: "Text",
         sourceUrl: "https://www.facebook.com.example.invalid/groups/test/",
       }),
     ).toBeNull();
   });
+});
+
+describe("Facebook intent review", () => {
+  it.each([
+    undefined,
+    { version: 1, intent: "service_ad", contentSha256: "current" },
+    { version: 1, intent: "service_request", contentSha256: "old" },
+    { version: 2, intent: "service_request", contentSha256: "current" },
+  ])("hides unreviewed, excluded or stale decisions", (intentReview) => {
+    expect(
+      toFacebookGroupSnapshot({
+        _id: "test",
+        sourceName: "Group",
+        sourceUrl: "https://www.facebook.com/groups/test/",
+        sourceMessage: "想搵師傅",
+        contentSha256: "current",
+        intentReview,
+      }),
+    ).toBeNull();
+  });
+});
+
+it("includes reviewed recruitment for tradespeople", () => {
+  expect(
+    toFacebookGroupSnapshot({
+      _id: "recruit",
+      sourceName: "Group",
+      sourceUrl: "https://www.facebook.com/groups/test/",
+      sourceMessage: "招聘電工",
+      contentSha256: "current",
+      intentReview: {
+        version: 1,
+        intent: "recruitment",
+        contentSha256: "current",
+      },
+    }),
+  ).not.toBeNull();
 });
