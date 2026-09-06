@@ -929,7 +929,10 @@ async function initializeMongo(db: Db) {
       .createIndex({ email: 1 }, { unique: true, sparse: true }),
     db
       .collection<AdminProfileDoc>("adminProfiles")
-      .createIndex({ phone: 1 }, { unique: true }),
+      .createIndex(
+        { phone: 1 },
+        { name: "phone_1_sparse", unique: true, sparse: true },
+      ),
     db
       .collection<AuthCredentialDoc>("authCredentials")
       .createIndex({ userId: 1 }, { unique: true }),
@@ -2450,6 +2453,9 @@ async function findProfileByIdentifier(db: Db, identifier: string) {
   const profile = await db.collection<ProfileDoc>("profile").findOne(query);
   if (profile) {
     return userFromProfileDoc(profile);
+  }
+  if (!isEmail) {
+    return null;
   }
   const admin = await db
     .collection<AdminProfileDoc>("adminProfiles")

@@ -11,7 +11,6 @@ type SystemMetadataDocument = {
 type ProfileIdentifierDocument = {
   _id: string;
   email?: string;
-  phone: string;
 };
 
 type AdminProfileDocument = ProfileIdentifierDocument & {
@@ -37,10 +36,6 @@ const adminNameSchema = z.string().trim().min(2).max(100);
 const adminEmailSchema = z
   .email()
   .transform((value) => value.trim().toLowerCase());
-const adminPhoneSchema = z
-  .string()
-  .transform((value) => value.replace(/\D/g, ""))
-  .pipe(z.string().regex(/^(5|6|8|9)\d{7}$/));
 const adminPasswordSchema = z
   .string()
   .min(8)
@@ -58,11 +53,9 @@ const configSchema = z
     ENABLE_DEMO_LOGIN: z.literal("false"),
     PRODUCTION_ADMIN_1_FULL_NAME: adminNameSchema,
     PRODUCTION_ADMIN_1_EMAIL: adminEmailSchema,
-    PRODUCTION_ADMIN_1_PHONE: adminPhoneSchema,
     PRODUCTION_ADMIN_1_PASSWORD: adminPasswordSchema,
     PRODUCTION_ADMIN_2_FULL_NAME: adminNameSchema,
     PRODUCTION_ADMIN_2_EMAIL: adminEmailSchema,
-    PRODUCTION_ADMIN_2_PHONE: adminPhoneSchema,
     PRODUCTION_ADMIN_2_PASSWORD: adminPasswordSchema,
     PRODUCTION_ADMIN_DRY_RUN: z
       .enum(["true", "false"])
@@ -75,13 +68,6 @@ const configSchema = z
         code: "custom",
         path: ["PRODUCTION_ADMIN_2_EMAIL"],
         message: "Production admin emails must be different.",
-      });
-    }
-    if (config.PRODUCTION_ADMIN_1_PHONE === config.PRODUCTION_ADMIN_2_PHONE) {
-      context.addIssue({
-        code: "custom",
-        path: ["PRODUCTION_ADMIN_2_PHONE"],
-        message: "Production admin phone numbers must be different.",
       });
     }
     if (
@@ -128,13 +114,11 @@ async function main() {
     {
       fullName: config.PRODUCTION_ADMIN_1_FULL_NAME,
       email: config.PRODUCTION_ADMIN_1_EMAIL,
-      phone: config.PRODUCTION_ADMIN_1_PHONE,
       password: config.PRODUCTION_ADMIN_1_PASSWORD,
     },
     {
       fullName: config.PRODUCTION_ADMIN_2_FULL_NAME,
       email: config.PRODUCTION_ADMIN_2_EMAIL,
-      phone: config.PRODUCTION_ADMIN_2_PHONE,
       password: config.PRODUCTION_ADMIN_2_PASSWORD,
     },
   ];
@@ -172,10 +156,9 @@ async function main() {
       );
     }
 
-    const identifierFilters = requestedAdmins.flatMap((admin) => [
-      { email: admin.email },
-      { phone: admin.phone },
-    ]);
+    const identifierFilters = requestedAdmins.map((admin) => ({
+      email: admin.email,
+    }));
     const duplicateIdentifiers = await Promise.all([
       database.collection<ProfileIdentifierDocument>("profile").findOne({
         $or: identifierFilters,
@@ -212,7 +195,6 @@ async function main() {
         role: "admin",
         fullName: admin.fullName,
         email: admin.email,
-        phone: admin.phone,
         locale: "zh-HK",
         createdAt,
         lastLoginAt: createdAt,

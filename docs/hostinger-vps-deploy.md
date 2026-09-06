@@ -115,13 +115,15 @@ VPS、亦已被 Git ignore 的 `.env.production.admin`：
 ```dotenv
 PRODUCTION_ADMIN_1_FULL_NAME=<第一位管理員姓名>
 PRODUCTION_ADMIN_1_EMAIL=<第一位管理員登入電郵>
-PRODUCTION_ADMIN_1_PHONE=<第一位管理員香港手提電話>
 PRODUCTION_ADMIN_1_PASSWORD=<第一位管理員密碼，最少 8 個字元>
 PRODUCTION_ADMIN_2_FULL_NAME=<第二位管理員姓名>
 PRODUCTION_ADMIN_2_EMAIL=<第二位管理員登入電郵>
-PRODUCTION_ADMIN_2_PHONE=<第二位管理員香港手提電話>
 PRODUCTION_ADMIN_2_PASSWORD=<第二位管理員密碼，最少 8 個字元>
 ```
+
+管理員只以電郵登入，不需要電話。`PRODUCTION_ADMIN_1_PHONE` 及
+`PRODUCTION_ADMIN_2_PHONE` 應省略；管理員密碼復原由受控管理流程處理。
+客戶及師傅仍按一般規則提供香港手提電話。
 
 先經 SSH tunnel 連接 MongoDB，再執行 dry run：
 
@@ -140,6 +142,30 @@ Script 只容許 `NODE_ENV=production`、production database、demo／seeding �
 資料時執行。兩個密碼只會由 `.env.production.admin` 讀取，不會印在 terminal。
 兩個 account 會以同一批操作建立；任何一步失敗均會刪除今次新增資料。成功後
 再次執行會因資料庫已非空而停止。
+
+## 既有 Production 管理員改用電郵識別
+
+既有 PROD 不可重跑首次建立管理員的 bootstrap。使用
+`db:migrate-admin-email-only` 將 `.env.production.admin` 內兩個電郵對應的
+現有管理員改為只用電郵識別。先經 SSH tunnel 連接 MongoDB，核對目標為
+`hotfix_prod`，再執行只輸出數量的 dry run：
+
+```bash
+PRODUCTION_ADMIN_DRY_RUN=true npm run db:migrate-admin-email-only
+```
+
+核對 dry run 結果後套用：
+
+```bash
+npm run db:migrate-admin-email-only
+```
+
+Script 驗證 PROD 目標、seeding 關閉，以及兩個電郵各自對應一個有效管理員
+和登入 credential。遷移將管理員電話索引改為 unique+sparse，只移除該兩個
+管理員的電話及電話驗證欄位，並記錄 migration metadata；重跑不會新增帳戶。
+姓名、電郵、密碼、權限、sessions、客戶／師傅資料及訂閱保持不變，也不複製
+DEV 帳戶。完成後核對管理員電郵登入；聯絡資料與 credentials
+不得輸出到 terminal、logs 或對話。
 
 ## Stripe 分場注意
 
