@@ -126,6 +126,7 @@ export function SignupForm({
       const result = await requestSignupPhoneOtpAction({
         phone: phoneToVerify,
         locale,
+        role: role ?? "customer",
       });
       if (!result.ok) {
         setSmsError(result.error);

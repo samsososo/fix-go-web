@@ -631,7 +631,10 @@ export async function signUpAction(
     findUserByIdentifier(signupData.phone),
     signupData.email ? findUserByIdentifier(signupData.email) : null,
   ]);
-  if (phoneAccount || emailAccount) {
+  const phoneConflict =
+    phoneAccount &&
+    !(signupData.role === "pro" && phoneAccount.role === "admin");
+  if (phoneConflict || emailAccount) {
     return {
       ok: false as const,
       error: isEnglish
@@ -687,6 +690,7 @@ function isHongKongMobilePhone(phone: string) {
 export async function requestSignupPhoneOtpAction(input: {
   phone: string;
   locale: string;
+  role?: "customer" | "pro";
 }) {
   const isEnglish = input.locale === "en";
   const phone = normalizeSignupPhone(input.phone);
@@ -716,7 +720,11 @@ export async function requestSignupPhoneOtpAction(input: {
         : "SMS 驗證暫時未能使用，請稍後再試。",
     };
   }
-  if (await findUserByIdentifier(phone)) {
+  const phoneAccount = await findUserByIdentifier(phone);
+  if (
+    phoneAccount &&
+    !(input.role === "pro" && phoneAccount.role === "admin")
+  ) {
     return {
       ok: false as const,
       error: isEnglish

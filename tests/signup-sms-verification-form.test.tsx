@@ -69,6 +69,7 @@ describe("signup phone verification form", () => {
     expect(mocks.requestSignupPhoneOtpAction).toHaveBeenCalledWith({
       phone: "91234567",
       locale: "zh-HK",
+      role: "customer",
     });
     expect(await screen.findByText("123456")).toBeInTheDocument();
     const codeInput = screen.getByLabelText("6 位數字驗證碼");

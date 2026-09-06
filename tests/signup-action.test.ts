@@ -108,6 +108,107 @@ describe("signup SMS verification routing", () => {
     vi.mocked(createUserAccount).mockResolvedValue(createdPro);
   });
 
+  function useAdminPhone() {
+    const admin: User = {
+      ...createdPro,
+      id: "synthetic-admin",
+      role: "admin",
+      email: "admin@example.invalid",
+    };
+    vi.mocked(findUserByIdentifier).mockImplementation(async (identifier) =>
+      identifier === signupInput.phone ? admin : null,
+    );
+    return admin;
+  }
+
+  it("allows an admin phone to create and sign in a separate pro", async () => {
+    const admin = useAdminPhone();
+    expect(await signUpAction(signupInput)).toEqual({
+      ok: true,
+      target: "/pro/billing",
+    });
+    expect(createUserAccount).toHaveBeenCalledWith(signupInput);
+    expect(createCredential).toHaveBeenCalledWith(
+      createdPro.id,
+      signupInput.password,
+      false,
+      expect.any(Object),
+    );
+    expect(signInAs).toHaveBeenCalledWith(createdPro.id);
+    expect(signInAs).not.toHaveBeenCalledWith(admin.id);
+  });
+
+  it("does not extend the admin phone exception to customer signup", async () => {
+    useAdminPhone();
+    expect(
+      await signUpAction({ ...signupInput, role: "customer" }),
+    ).toMatchObject({ ok: false });
+    expect(createUserAccount).not.toHaveBeenCalled();
+  });
+
+  it("keeps existing pro phones and admin emails reserved", async () => {
+    vi.mocked(findUserByIdentifier).mockResolvedValue(createdPro);
+    expect(await signUpAction(signupInput)).toMatchObject({ ok: false });
+    expect(createUserAccount).not.toHaveBeenCalled();
+    const admin = useAdminPhone();
+    vi.mocked(findUserByIdentifier).mockResolvedValue(admin);
+    expect(await signUpAction(signupInput)).toMatchObject({ ok: false });
+    expect(createUserAccount).not.toHaveBeenCalled();
+  });
+
+  it("still requires the admin phone to pass enabled signup verification", async () => {
+    useAdminPhone();
+    vi.mocked(getSmsVerificationConfig).mockResolvedValue({
+      ...disabledSmsConfig,
+      enabled: true,
+      effectiveEnabled: true,
+    });
+    expect(await signUpAction(signupInput)).toMatchObject({
+      ok: false,
+      error: "請先驗證呢個電話號碼，再建立帳戶。",
+    });
+    expect(createUserAccount).not.toHaveBeenCalled();
+  });
+
+  it("permits OTP for admin phone only for the pro signup role", async () => {
+    useAdminPhone();
+    vi.mocked(getSmsVerificationConfig).mockResolvedValue({
+      ...disabledSmsConfig,
+      enabled: true,
+      effectiveEnabled: true,
+    });
+    vi.mocked(startSignupSmsPhoneVerification).mockResolvedValue({
+      status: "sent",
+      challengeId: "synthetic-challenge",
+      retryAfterSeconds: 60,
+      codeExpiresInSeconds: 300,
+      maskedPhone: "masked",
+      consolePocCode: undefined,
+    });
+    expect(
+      await requestSignupPhoneOtpAction({
+        phone: signupInput.phone,
+        locale: "zh-HK",
+        role: "pro",
+      }),
+    ).toMatchObject({ ok: true });
+    expect(startSignupSmsPhoneVerification).toHaveBeenCalledTimes(1);
+    expect(
+      await requestSignupPhoneOtpAction({
+        phone: signupInput.phone,
+        locale: "zh-HK",
+        role: "customer",
+      }),
+    ).toMatchObject({ ok: false });
+    expect(
+      await requestSignupPhoneOtpAction({
+        phone: signupInput.phone,
+        locale: "zh-HK",
+      }),
+    ).toMatchObject({ ok: false });
+    expect(startSignupSmsPhoneVerification).toHaveBeenCalledTimes(1);
+  });
+
   it("creates and signs in a pro without an OTP or verified-phone timestamp", async () => {
     await expect(
       signUpAction({ ...signupInput, interfaceLocale: "zh-HK" }),

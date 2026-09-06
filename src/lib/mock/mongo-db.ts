@@ -2438,8 +2438,15 @@ export async function failMongoStripeWebhookEvent(
 
 async function findProfileByIdentifier(db: Db, identifier: string) {
   const normalizedIdentifier = identifier.trim().toLowerCase();
-  const phone = identifier.replace(/\D/g, "");
-  const query = { $or: [{ email: normalizedIdentifier }, { phone }] };
+  const isEmail = normalizedIdentifier.includes("@");
+  const phone = normalizedIdentifier.replace(/\D/g, "");
+  if (!isEmail && (!phone || !/^\+?[\d\s().-]+$/.test(normalizedIdentifier))) {
+    return null;
+  }
+  // An email's digits must never resolve a different account's phone number.
+  const query = isEmail ? { email: normalizedIdentifier } : { phone };
+  // Shared admin/pro phones resolve to the public account for login and
+  // recovery. The separate administrator account remains reachable by email.
   const profile = await db.collection<ProfileDoc>("profile").findOne(query);
   if (profile) {
     return userFromProfileDoc(profile);

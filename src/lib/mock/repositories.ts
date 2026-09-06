@@ -189,12 +189,21 @@ export async function listDemoUsers() {
 export async function findUserByIdentifier(identifier: string) {
   const db = await readDb();
   const normalizedIdentifier = identifier.trim().toLowerCase();
+  if (normalizedIdentifier.includes("@")) {
+    return (
+      db.users.find(
+        (user) => user.email?.toLowerCase() === normalizedIdentifier,
+      ) ?? null
+    );
+  }
+
+  const phoneMatches = db.users.filter(
+    (user) => user.phone === identifier.replace(/\D/g, ""),
+  );
   return (
-    db.users.find(
-      (user) =>
-        user.email?.toLowerCase() === normalizedIdentifier ||
-        user.phone === identifier.replace(/\D/g, ""),
-    ) ?? null
+    phoneMatches.find((user) => user.role !== "admin") ??
+    phoneMatches[0] ??
+    null
   );
 }
 
@@ -209,7 +218,8 @@ export async function createUserAccount(
     const normalizedEmail = input.email?.trim().toLowerCase() || "";
     const existing = db.users.find(
       (user) =>
-        user.phone === input.phone ||
+        (user.phone === input.phone &&
+          !(user.role === "admin" && input.role === "pro")) ||
         (normalizedEmail.length > 0 &&
           user.email?.toLowerCase() === normalizedEmail),
     );
