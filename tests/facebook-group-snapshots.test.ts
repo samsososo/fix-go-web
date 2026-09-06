@@ -214,3 +214,40 @@ it.each([undefined, "unknown", "TW", "CN"])(
     ).toBeNull();
   },
 );
+
+it("filters reviewed work by trade without requiring a confirmed posting date", async () => {
+  state.rows.mockResolvedValue([
+    {
+      _id: "dated-test",
+      sourceName: "Group",
+      sourceUrl: "https://www.facebook.com/groups/test/",
+      sourceMessage: "Raw body",
+      sourceCreatedAt: null,
+      needsDateReview: true,
+      contentSha256: "current",
+      intentReview: {
+        version: 1,
+        region: "HK",
+        intent: "service_request",
+        contentSha256: "current",
+        title: "Install lights",
+        displayText: "Two lights to install",
+        displayLocation: "Hong Kong",
+        categoryId: "electrical",
+      },
+    },
+  ]);
+  const result = await listFacebookGroupSnapshots("electrical");
+  expect(result).toHaveLength(1);
+  expect(result[0]).toMatchObject({
+    title: "Install lights",
+    message: "Two lights to install",
+    location: "Hong Kong",
+    categoryId: "electrical",
+  });
+  expect(state.find.mock.calls[0][0]["intentReview.categoryId"]).toBe(
+    "electrical",
+  );
+  expect(state.find.mock.calls[0][0]).not.toHaveProperty("sourceCreatedAt");
+  expect(state.find.mock.calls[0][0]).not.toHaveProperty("needsDateReview");
+});

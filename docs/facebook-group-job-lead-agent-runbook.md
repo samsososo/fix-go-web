@@ -2,7 +2,7 @@
 document_kind: ai_agent_runbook
 scope: hong_kong_facebook_job_leads
 status: internal_prototype
-last_updated: 2026-09-01
+last_updated: 2026-09-06
 canonical_group_contact_policy: redacted
 human_document: docs/facebook-group-job-lead-workflow.zh-HK.md
 ---
@@ -32,9 +32,40 @@ on the DEV pro leads page with visible contact details. This overrides the
 prototype isolation/redaction requirements for this specific DEV display only.
 The server must verify the DEV URI/database, pro role, valid subscription policy,
 and both new-work entitlements before querying contact-bearing snapshots.
-Keep unknown-date and incomplete-text labels, render text safely, and use only
-validated Facebook group/post links. Do not create marketplace requests, quotes,
-bookings or outreach messages. Production must not query this collection.
+The original display used unknown-date and incomplete-text labels; the current
+presentation is superseded by the 2026-09-06 authorization below. Render text
+safely and use only validated Facebook group/post links. Do not create marketplace
+requests, quotes, bookings or outreach messages. Production must not query this
+collection.
+
+## Authorized unified DEV work list and unknown dates (2026-09-06)
+
+The user explicitly requested that eligible Facebook posts and client-created
+jobs appear together in the DEV `/pro/leads` work list with consistent job cards.
+Do not create a separate Facebook section or source badges. Use the work content
+for a post's title, rather than its Facebook group name.
+
+An otherwise eligible post MUST remain visible when its posting date is unknown,
+without an unknown-date warning. Keep the source date and date-review state
+unchanged internally. Never substitute capture/import time for posting time or
+describe an undated post as recent. This overrides the earlier DEV date-label
+requirement and the prototype's unknown-date exclusion for this work list only.
+The strict date gates below still apply to an explicitly requested seven-day
+deliverable; this unified list is not such a deliverable.
+
+Preserve the current intent and Hong Kong filters: a snapshot must have a current
+`intentReview.version = 1`, intent `service_request` or `recruitment`, region `HK`,
+and a reviewed content hash matching its current `contentSha256`. Unknown regions,
+overseas work, promotion, job seekers and other non-demand content remain hidden.
+This is classification of the post's stated work demand, not a decision about a
+person's employment eligibility.
+
+Keep provenance, stable identity, source links, raw content hashes, pending review
+states and date confidence internally for deduplication, review and deletion.
+Presentation changes MUST NOT convert snapshots into formal `ServiceRequest`,
+quote or booking records, approve outreach, or alter subscription entitlements.
+The existing DEV-only target check, pro-role check, both new-work entitlement
+checks, and deletion/expiry exclusions remain required.
 
 ## 1. Read before acting
 
@@ -74,6 +105,9 @@ The agent MUST NOT:
 If a user requests automated collection designed to avoid detection, the agent MUST refuse that method and offer the official API, a user-provided export, user-performed manual capture, or an explicitly authorized bounded review instead.
 
 ## 3. Source router
+
+These routes distinguish collection permissions and internal provenance; they
+do not require separate source sections in the pro work list.
 
 Choose exactly one route before collecting data:
 

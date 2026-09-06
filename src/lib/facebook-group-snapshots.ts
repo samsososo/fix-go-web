@@ -9,6 +9,9 @@ import { getProSubscriptionEntitlement } from "@/lib/pro-subscription-entitlemen
 export type FacebookGroupSnapshot = {
   id: string;
   sourceName: string;
+  title: string;
+  location: string;
+  categoryId: string | null;
   message: string;
   sourceUrl: string;
   permalink: string | null;
@@ -60,7 +63,16 @@ export function toFacebookGroupSnapshot(
   return {
     id: row._id,
     sourceName: row.sourceName,
-    message: cleanFacebookPostText(row.sourceMessage),
+    title: typeof review.title === "string" ? review.title : "",
+    location:
+      typeof review.displayLocation === "string" ? review.displayLocation : "",
+    categoryId:
+      typeof review.categoryId === "string" ? review.categoryId : null,
+    message: cleanFacebookPostText(
+      typeof review.displayText === "string"
+        ? review.displayText
+        : row.sourceMessage,
+    ),
     sourceUrl,
     permalink: groupUrl(row.sourcePermalink, true),
     truncated: row.truncated === true,
@@ -68,9 +80,9 @@ export function toFacebookGroupSnapshot(
 }
 
 /** Read only: these snapshots are never converted into marketplace requests. */
-export async function listFacebookGroupSnapshots(): Promise<
-  FacebookGroupSnapshot[]
-> {
+export async function listFacebookGroupSnapshots(
+  categoryId?: string,
+): Promise<FacebookGroupSnapshot[]> {
   if (env.MONGODB_DATABASE !== "hotfix_dev" || !env.MONGODB_URI) return [];
   try {
     validateHotfixDevMongoTarget(env.MONGODB_URI, env.MONGODB_DATABASE);
@@ -97,6 +109,7 @@ export async function listFacebookGroupSnapshots(): Promise<
       .collection("externalFacebookGroupSnapshots")
       .find(
         {
+          ...(categoryId ? { "intentReview.categoryId": categoryId } : {}),
           sourceKind: "group_browser_snapshot",
           "intentReview.version": 1,
           "intentReview.region": "HK",

@@ -1,16 +1,10 @@
 import { getLocale } from "next-intl/server";
-import {
-  ArrowRight,
-  Clock3,
-  LockKeyhole,
-  MapPin,
-  Paperclip,
-} from "lucide-react";
+import { Clock3, LockKeyhole, MapPin, Paperclip } from "lucide-react";
 
 import { EmptyState } from "@/components/shared/empty-state";
 import { PortalShell } from "@/components/shared/portal-shell";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { WorkOpportunityCard } from "@/components/shared/work-opportunity-card";
 import { Link } from "@/i18n/navigation";
 import { FacebookGroupLeads } from "@/features/pro/facebook-group-leads";
 import { listFacebookGroupSnapshots } from "@/lib/facebook-group-snapshots";
@@ -50,8 +44,9 @@ export default async function ProLeadsPage({
     activeCategory === "all" ? undefined : activeCategory,
   );
 
-  const facebookLeads =
-    activeCategory === "all" ? await listFacebookGroupSnapshots() : [];
+  const facebookLeads = await listFacebookGroupSnapshots(
+    activeCategory === "all" ? undefined : activeCategory,
+  );
 
   return (
     <PortalShell
@@ -72,8 +67,8 @@ export default async function ProLeadsPage({
       subtitle={
         canCreateQuotes
           ? locale === "en"
-            ? "Review open customer requests, filter by category, and submit a structured quote."
-            : "查看開放服務需求，可按分類篩選並提交結構化報價。"
+            ? "Browse work opportunities and recruitment, filter by category, and open the details to follow up."
+            : "睇工程需求同師傅招聘，按工種篩選，再開啟詳情跟進。"
           : isSetupRequired
             ? locale === "en"
               ? "Preview matching work. Set up your card to open details and submit quotes."
@@ -159,24 +154,19 @@ export default async function ProLeadsPage({
             const canOpenDetail =
               canCreateQuotes || Boolean(lead.existingQuote);
             const card = (
-              <Card className={cn(!canOpenDetail && "border-warning/20")}>
-                <CardContent className="space-y-3 p-4 sm:p-6">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-display text-xl font-bold sm:text-2xl">
-                        {lead.title}
-                      </p>
-                    </div>
-                    <StatusBadge status={lead.status} locale={locale} />
-                  </div>
-                  <p className="line-clamp-2 text-sm leading-6 text-muted">
-                    {canOpenDetail
-                      ? lead.description
-                      : locale === "en"
-                        ? "Set up your card to view the full job description, customer information and site details."
-                        : "綁定付款卡後即可查看完整工作描述、客戶資料及現場詳情。"}
-                  </p>
-                  <div className="flex flex-wrap gap-2 text-xs font-semibold text-foreground/68">
+              <WorkOpportunityCard
+                title={lead.title}
+                status={<StatusBadge status={lead.status} locale={locale} />}
+                locked={!canOpenDetail}
+                description={
+                  canOpenDetail
+                    ? lead.description
+                    : locale === "en"
+                      ? "Set up your card to view the full job description, customer information and site details."
+                      : "綁定付款卡後即可查看完整工作描述、客戶資料及現場詳情。"
+                }
+                metadata={
+                  <>
                     <span className="inline-flex items-center gap-1 rounded-full bg-surface-tint px-2.5 py-1.5">
                       <Clock3 className="h-3.5 w-3.5 text-primary" />
                       {formatUrgencyLabel(lead.urgency, locale)}
@@ -196,41 +186,30 @@ export default async function ProLeadsPage({
                           : `${lead.attachmentIds.length} 張相`}
                       </span>
                     ) : null}
-                  </div>
-                  <div className="flex items-end justify-between gap-3 border-t border-line/70 pt-3">
-                    <div>
-                      <p className="text-xs text-muted">
-                        {locale === "en" ? "Budget" : "預算"}
-                      </p>
-                      <p className="font-display text-lg font-bold">
-                        {lead.budgetMax
-                          ? `HK$${lead.budgetMin ?? 0}–${lead.budgetMax}`
-                          : locale === "en"
-                            ? "Flexible"
-                            : "彈性處理"}
-                      </p>
-                    </div>
-                    <span className="inline-flex items-center gap-1 text-sm font-bold text-primary">
-                      {lead.existingQuote
-                        ? locale === "en"
-                          ? "View quote"
-                          : "查看報價"
-                        : canCreateQuotes
-                          ? locale === "en"
-                            ? "Quote"
-                            : "報價"
-                          : locale === "en"
-                            ? "Set up card to view details"
-                            : "綁卡後查看詳情"}
-                      {canOpenDetail ? (
-                        <ArrowRight className="h-4 w-4" />
-                      ) : (
-                        <LockKeyhole className="h-4 w-4" />
-                      )}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
+                  </>
+                }
+                amountLabel={locale === "en" ? "Budget" : "預算"}
+                amount={
+                  lead.budgetMax
+                    ? `HK$${lead.budgetMin ?? 0}–${lead.budgetMax}`
+                    : locale === "en"
+                      ? "Flexible"
+                      : "彈性處理"
+                }
+                action={
+                  lead.existingQuote
+                    ? locale === "en"
+                      ? "View quote"
+                      : "查看報價"
+                    : canCreateQuotes
+                      ? locale === "en"
+                        ? "Quote"
+                        : "報價"
+                      : locale === "en"
+                        ? "Set up card to view details"
+                        : "綁卡後查看詳情"
+                }
+              />
             );
 
             return canOpenDetail ? (
@@ -279,8 +258,12 @@ export default async function ProLeadsPage({
             }
           />
         )}
+        <FacebookGroupLeads
+          leads={facebookLeads}
+          locale={locale}
+          categoryOptions={categoryOptions}
+        />
       </div>
-      <FacebookGroupLeads leads={facebookLeads} locale={locale} />
     </PortalShell>
   );
 }
