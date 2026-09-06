@@ -22,13 +22,13 @@ export function FacebookGroupLeads({
           className="font-display text-xl font-bold"
         >
           {en
-            ? `Facebook work opportunities (${leads.length})`
-            : `Facebook 搵師傅／招聘（${leads.length}）`}
+            ? `Hong Kong Facebook work opportunities (${leads.length})`
+            : `香港 Facebook 搵師傅／招聘（${leads.length}）`}
         </h2>
         <p className="mt-2 text-sm leading-6 text-muted">
           {en
-            ? "Posts seeking tradespeople, quotes for specific work or recruiting tradespeople in Hong Kong. Dates and availability still need checking. These are not platform bookings."
-            : "已篩選搵師傅、具體工程詢價及香港師傅招聘帖文；發帖日期及需求是否仍然有效有待確認，並非平台訂單。"}
+            ? "Hong Kong posts seeking tradespeople, quotes for specific work or recruiting tradespeople. Dates and availability still need checking. These are not platform bookings."
+            : "只顯示地點可判斷為香港的搵師傅、工程詢價及招聘帖文；發帖日期及需求是否仍然有效有待確認，並非平台訂單。"}
         </p>
       </div>
       <div className="grid gap-3 sm:gap-5">

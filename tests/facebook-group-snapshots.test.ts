@@ -95,6 +95,7 @@ describe("DEV Facebook snapshot access", () => {
         contentSha256: "synthetic-content-hash",
         intentReview: {
           version: 1,
+          region: "HK",
           intent: "service_request",
           contentSha256: "synthetic-content-hash",
         },
@@ -112,6 +113,7 @@ describe("DEV Facebook snapshot access", () => {
     expect(state.find.mock.calls[0][0]).toMatchObject({
       "intentReview.intent": { $in: ["service_request", "recruitment"] },
       "intentReview.version": 1,
+      "intentReview.region": "HK",
       $expr: { $eq: ["$intentReview.contentSha256", "$contentSha256"] },
       retentionState: { $nin: ["deleted", "deletion_requested", "expired"] },
     });
@@ -127,6 +129,7 @@ describe("DEV Facebook snapshot access", () => {
         contentSha256: "synthetic-content-hash",
         intentReview: {
           version: 1,
+          region: "HK",
           intent: "service_request",
           contentSha256: "synthetic-content-hash",
         },
@@ -141,9 +144,24 @@ describe("DEV Facebook snapshot access", () => {
 describe("Facebook intent review", () => {
   it.each([
     undefined,
-    { version: 1, intent: "service_ad", contentSha256: "current" },
-    { version: 1, intent: "service_request", contentSha256: "old" },
-    { version: 2, intent: "service_request", contentSha256: "current" },
+    {
+      version: 1,
+      region: "HK",
+      intent: "service_ad",
+      contentSha256: "current",
+    },
+    {
+      version: 1,
+      region: "HK",
+      intent: "service_request",
+      contentSha256: "old",
+    },
+    {
+      version: 2,
+      region: "HK",
+      intent: "service_request",
+      contentSha256: "current",
+    },
   ])("hides unreviewed, excluded or stale decisions", (intentReview) => {
     expect(
       toFacebookGroupSnapshot({
@@ -168,9 +186,31 @@ it("includes reviewed recruitment for tradespeople", () => {
       contentSha256: "current",
       intentReview: {
         version: 1,
+        region: "HK",
         intent: "recruitment",
         contentSha256: "current",
       },
     }),
   ).not.toBeNull();
 });
+
+it.each([undefined, "unknown", "TW", "CN"])(
+  "hides missing or non-Hong Kong locations (%s)",
+  (region) => {
+    expect(
+      toFacebookGroupSnapshot({
+        _id: "test",
+        sourceName: "香港群組",
+        sourceUrl: "https://www.facebook.com/groups/test/",
+        sourceMessage: "想搵師傅",
+        contentSha256: "current",
+        intentReview: {
+          version: 1,
+          region,
+          intent: "service_request",
+          contentSha256: "current",
+        },
+      }),
+    ).toBeNull();
+  },
+);

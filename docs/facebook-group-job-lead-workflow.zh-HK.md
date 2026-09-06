@@ -256,3 +256,6 @@ AI 執行步驟及 stop conditions 見 [`facebook-group-job-lead-agent-runbook.m
 工作列表只顯示已逐篇分析、`intentReview.version = 1` 且 `intentReview.intent` 為 `service_request` 或 `recruitment` 的 snapshot；涵蓋搵師傅、有具體工程範圍的詢價及香港師傅招聘。服務廣告、產品推銷、師傅求職、海外招聘、純討論及意思不清楚的帖文不顯示。判斷以原帖需求為準，不將留言者自薦當成發帖者搵師傅。
 
 分析結果存於 DEV snapshot 的 `intentReview`，記錄原因及原文 `contentSha256`；hash 不相符或未分析的新帖文一律不顯示，須重新分析。此分類不代表核實日期、需求仍然有效或批准聯絡，亦不建立正式工作。原始 snapshot 及聯絡資料保留；私人分析清單不提交 Git。
+
+
+地區限制：另外要求 `intentReview.region = HK`，按帖文工程／工作地點判斷；僅香港群組名稱、廣東話或香港電話不足以確認工程在港。海外或地區不明一律隱藏，補充地點並重新分析後才顯示。地區分析與原文 hash 一併綁定。

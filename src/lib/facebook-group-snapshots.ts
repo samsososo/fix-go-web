@@ -43,6 +43,7 @@ export function toFacebookGroupSnapshot(
   if (
     !review ||
     review.version !== 1 ||
+    review.region !== "HK" ||
     !["service_request", "recruitment"].includes(String(review.intent)) ||
     typeof row.contentSha256 !== "string" ||
     review.contentSha256 !== row.contentSha256
@@ -98,6 +99,7 @@ export async function listFacebookGroupSnapshots(): Promise<
         {
           sourceKind: "group_browser_snapshot",
           "intentReview.version": 1,
+          "intentReview.region": "HK",
           "intentReview.intent": { $in: ["service_request", "recruitment"] },
           $expr: { $eq: ["$intentReview.contentSha256", "$contentSha256"] },
           verificationState: "pending_human_review",
