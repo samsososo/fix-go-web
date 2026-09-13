@@ -207,3 +207,15 @@ docker volume inspect hotfix24_mongodb_data
 
 不要在 support 訊息中貼出 `docker inspect` 的完整 environment，因為當中有
 MongoDB root password。
+
+## 獨立自動化測試 DB（2026-09-13）
+
+測試使用獨立 `hotfix_test` database 及 `hotfix_test_app` 帳戶；此帳戶只可
+讀寫 `hotfix_test`，不授予 DEV／PROD 權限，不複製真實用戶或工作資料。
+測試會重建合成資料，只供自動化測試使用，不作另一個對外網站。
+
+Mac `.env.test` 保存專用連線，必須 Git ignored 及 mode `600`；欄位見
+`.env.test.example`。沿用上方 SSH tunnel，執行 `npm test` 或
+`npm run test:watch`。測試 runner 不讀取 `.env.dev`，並在啟動前檢查
+資料庫、URI 路徑、authentication database 及帳戶均指向測試環境。
+缺少設定或指向 DEV／PROD 時直接停止，不能改用正式資料庫執行測試。

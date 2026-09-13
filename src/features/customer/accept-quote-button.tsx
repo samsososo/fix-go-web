@@ -57,8 +57,8 @@ export function AcceptQuoteButton({
           </p>
           <p className="mt-2 text-sm leading-6 text-muted">
             {locale === "en"
-              ? "Accepting creates an order with this professional. No customer payment is required at this stage."
-              : "接受後會同呢位師傅建立訂單；現階段客戶毋須付款。"}
+              ? "Accepting creates an order with this professional. You do not need to pay on the platform to confirm the order."
+              : "接受後會同呢位師傅建立訂單，確認訂單毋須喺平台付款。"}
           </p>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <Button

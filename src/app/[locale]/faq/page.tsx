@@ -29,8 +29,8 @@ export default async function FaqPage() {
         </h1>
         <p className="text-lg leading-8 text-muted">
           {locale === "en"
-            ? "Clear expectations help customers and professionals trust the process before a booking is accepted."
-            : "客戶同師傅在確認訂單前，最需要知道報價、驗證、訊息及營運覆核點樣處理。"}
+            ? "Find out about charges, professional details and comparing quotes before you confirm a repair."
+            : "由收費安排、師傅資料到比較報價，確認維修前先了解清楚。"}
         </p>
       </div>
       <div className="mt-10 grid gap-5">

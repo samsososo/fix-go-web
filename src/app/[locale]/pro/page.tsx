@@ -139,8 +139,8 @@ export default async function ProDashboardPage() {
                 <p className="max-w-2xl text-sm leading-7 text-muted">
                   {canCreateQuotes
                     ? locale === "en"
-                      ? "This overview keeps work discovery in front, so an empty schedule no longer feels like there is nothing to do."
-                      : "呢版會將搵工作放喺最前，就算日程暫時未有安排，師傅都會知道下一步係去睇工作機會。"
+                      ? "Find suitable work, filter by trade and submit a quote when you are ready."
+                      : "查看適合你嘅工作，按工種篩選並提交報價。"
                     : locale === "en"
                       ? "Use jobs and schedule as normal. Manage billing whenever you are ready to restore new-work access."
                       : "你可以照常使用訂單同日程；準備好後到月費頁恢復新工作功能。"}

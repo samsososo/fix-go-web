@@ -17,6 +17,8 @@ import {
   listRelevantLeads,
 } from "@/lib/mock/repositories";
 import { HeroVisual } from "@/components/marketing/hero-visual";
+import { GuestHome } from "@/components/marketing/guest-home";
+import { listPublicJobPreviews } from "@/lib/facebook-group-snapshots";
 import { WorkflowShowcase } from "@/components/marketing/workflow-showcase";
 import { SubscriptionAccessNotice } from "@/features/pro/subscription-access-notice";
 import { buttonVariants } from "@/components/ui/button";
@@ -63,6 +65,11 @@ export default async function HomePage() {
   const isLoggedInPro = user?.role === "pro";
   const canCreateQuotes = proSnapshot?.entitlement.canCreateQuotes ?? false;
   const proLeads = await getHomeProLeads(user, canCreateQuotes);
+
+  if (!user) {
+    const jobs = await listPublicJobPreviews();
+    return <GuestHome locale={locale} categories={categories} jobs={jobs} />;
+  }
 
   const trustPoints =
     locale === "en"

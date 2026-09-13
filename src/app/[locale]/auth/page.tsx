@@ -21,7 +21,7 @@ export default async function AuthHubPage() {
           {
             icon: House,
             title: "Customer",
-            body: "Create a request, compare structured quotes, accept one professional, and track the booking timeline.",
+            body: "Describe your repair, compare prices and availability, then choose a professional and track your order.",
           },
           {
             icon: BriefcaseBusiness,
@@ -33,7 +33,7 @@ export default async function AuthHubPage() {
           {
             icon: House,
             title: "客戶",
-            body: "建立服務請求、比較結構化報價、接受其中一位師傅，並追蹤訂單時間線。",
+            body: "提交維修需求，比較價錢及上門時間，揀選合適師傅並追蹤訂單進度。",
           },
           {
             icon: BriefcaseBusiness,
@@ -48,18 +48,18 @@ export default async function AuthHubPage() {
         <Card className="bg-surface-strong text-white">
           <CardContent className="space-y-6 p-8">
             <p className="text-sm font-semibold text-[#a8e2d4]">
-              {locale === "en" ? "Access overview" : "平台登入總覽"}
+              {locale === "en" ? "Log in or sign up" : "登入或註冊"}
             </p>
             <div className="space-y-4">
               <h1 className="font-display text-4xl font-extrabold tracking-tight">
                 {locale === "en"
-                  ? "One platform, two role-based workspaces"
-                  : "同一平台，兩個角色化工作台"}
+                  ? "Find a professional. Find your next job."
+                  : "搵師傅，搵工作，都喺快修24"}
               </h1>
               <p className="text-sm leading-7 text-white/72">
                 {locale === "en"
-                  ? "Choose the right route before you sign in. Customers and professionals share the same account system, then land in the workflow built for their role."
-                  : "登入前先了解正確入口。客戶與師傅共用同一帳戶系統，登入後會進入對應工作流程。"}
+                  ? "Log in to manage repair requests, quotes and orders. New here? Choose customer or professional when you sign up."
+                  : "登入管理維修需求、報價及訂單。第一次使用？註冊時選擇客戶或師傅身份就可以開始。"}
               </p>
             </div>
             <div className="space-y-3">

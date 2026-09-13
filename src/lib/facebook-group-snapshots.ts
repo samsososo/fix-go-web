@@ -9,6 +9,10 @@ import {
   validateFacebookSnapshotMongoTarget,
 } from "@/lib/facebook-snapshot-mongo-target";
 import { getProSubscriptionEntitlement } from "@/lib/pro-subscription-entitlement";
+import {
+  hongKongAreaNamesZh,
+  hongKongDistrictNamesZh,
+} from "@/lib/hk-service-areas";
 
 export type FacebookGroupSnapshot = {
   locked?: false;
@@ -28,6 +32,97 @@ export type FacebookGroupSnapshotPreview = Pick<
   FacebookGroupSnapshot,
   "id" | "title" | "location" | "categoryId"
 > & { locked: true };
+
+export type PublicJobPreview = Pick<
+  FacebookGroupSnapshot,
+  "id" | "title" | "location" | "categoryId"
+>;
+
+const publicPlaces = Object.entries({
+  ...hongKongDistrictNamesZh,
+  ...hongKongAreaNamesZh,
+});
+
+/** Homepage summaries only; never select raw text, contacts or source links. */
+export async function listPublicJobPreviews(): Promise<PublicJobPreview[]> {
+  if (!env.MONGODB_URI) return [];
+  let target: FacebookSnapshotMongoTarget;
+  try {
+    target = validateFacebookSnapshotMongoTarget(
+      env.MONGODB_URI,
+      env.MONGODB_DATABASE,
+    );
+  } catch {
+    return [];
+  }
+  const client = new MongoClient(target.uri, {
+    serverSelectionTimeoutMS: 7000,
+    authSource: target.database,
+  });
+  try {
+    await client.connect();
+    const rows = await client
+      .db(target.database)
+      .collection("externalFacebookGroupSnapshots")
+      .find(eligibleSnapshotFilter(), {
+        projection: {
+          _id: 1,
+          "intentReview.title": 1,
+          "intentReview.displayLocation": 1,
+          "intentReview.categoryId": 1,
+        },
+      })
+      .sort({ capturedAt: -1, _id: 1 })
+      .limit(12)
+      .toArray();
+    return rows.flatMap((row) => {
+      const review = row.intentReview;
+      if (typeof row._id !== "string" || typeof review?.title !== "string")
+        return [];
+      const title = redactDirectContacts(
+        review.title.normalize("NFKC").replace(/\p{Cf}/gu, ""),
+      )
+        .redacted.replace(/\[(?:PHONE|EMAIL|WHATSAPP)\]/g, "")
+        .trim()
+        .slice(0, 80);
+      if (!title) return [];
+      const location =
+        typeof review.displayLocation === "string"
+          ? review.displayLocation.normalize("NFKC").replace(/\p{Cf}/gu, "")
+          : "";
+      // Return only recognized areas, never a building/unit or free-form address.
+      const places = publicPlaces
+        .filter(
+          ([en, zh]) =>
+            new RegExp(`\\b${en}\\b`, "i").test(location) ||
+            location.includes(zh) ||
+            (zh.length > 2 && location.includes(zh.replace(/區$/, ""))),
+        )
+        .map(([, zh]) => (zh.length > 2 ? zh.replace(/區$/, "") : zh));
+      return [
+        {
+          id: row._id,
+          title,
+          location: [...new Set(places)].join("、") || "香港（地區未提供）",
+          categoryId: [
+            "plumbing",
+            "electrical",
+            "aircon",
+            "renovation",
+          ].includes(review.categoryId)
+            ? (review.categoryId as string)
+            : null,
+        },
+      ];
+    });
+  } catch {
+    // Keep the homepage available without exposing connection details or fake jobs.
+    console.warn("Public job previews unavailable");
+    return [];
+  } finally {
+    await client.close();
+  }
+}
 
 function groupUrl(value: unknown, post: boolean): string | null {
   if (typeof value !== "string") return null;

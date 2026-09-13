@@ -824,3 +824,16 @@ copy native marketplace, account or subscription data or send outreach. Report
 existing-source content or validity changes separately. Remain quiet when a run
 has no new data or actionable change; notify on inserted data, failures or needed
 user action, using aggregate counts without raw contacts.
+
+## Authorized public homepage summaries (2026-09-13)
+
+The user requested real job data in the logged-out homepage carousel. Permit
+at most 12 eligible snapshot summaries from the current environment with only
+id, contact-redacted short title, recognized broad HK location and category.
+Use an explicit Mongo projection that excludes raw body, contacts and source
+links. Keep the existing HK/demand/review-hash/deletion/expiry predicates. Keep verification pending internally. Following the user’s homepage copy
+revision, replace per-card internal review badges with one notice that work
+details and arrangements are subject to confirmation by the original poster.
+Never claim unknown dates are recent or vacancies are still open. No synthetic fallback. Existing pro detail and subscription
+gates remain unchanged. The user subsequently authorized website deployment to DEV and PROD.
+This does not authorize data synchronization or outreach.

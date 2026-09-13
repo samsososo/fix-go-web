@@ -13,6 +13,8 @@ const state = vi.hoisted(() => ({
   find: vi.fn(),
   findOne: vi.fn(),
   rows: vi.fn(),
+  sort: vi.fn(),
+  limit: vi.fn(),
 }));
 vi.mock("@/lib/env", () => ({ env: state.env }));
 vi.mock("@/lib/auth", () => ({ getCurrentUser: state.user }));
@@ -32,6 +34,7 @@ vi.mock("mongodb", () => ({
 import {
   getFacebookGroupSnapshot,
   listFacebookGroupSnapshots,
+  listPublicJobPreviews,
   toFacebookGroupSnapshot,
 } from "@/lib/facebook-group-snapshots";
 
@@ -51,9 +54,9 @@ beforeEach(() => {
   state.db.mockReturnValue({
     collection: () => ({ find: state.find, findOne: state.findOne }),
   });
-  state.find.mockReturnValue({
-    sort: () => ({ limit: () => ({ toArray: state.rows }) }),
-  });
+  state.limit.mockReturnValue({ toArray: state.rows });
+  state.sort.mockReturnValue({ limit: state.limit });
+  state.find.mockReturnValue({ sort: state.sort });
 });
 
 describe.each(["hotfix_dev", "hotfix_prod"])(
@@ -484,5 +487,113 @@ describe("single Facebook snapshot access", () => {
       "Synthetic database failure",
     );
     expect(state.close).toHaveBeenCalled();
+  });
+});
+
+describe("public homepage job summaries", () => {
+  it.each(["hotfix_dev", "hotfix_prod"])(
+    "uses a safe projection and existing eligibility in %s without opening private access",
+    async (database) => {
+      state.env.MONGODB_DATABASE = database;
+      state.env.MONGODB_URI = `mongodb://localhost/${database}`;
+      state.user.mockResolvedValue(null);
+      state.rows.mockResolvedValue([
+        {
+          _id: snapshotId,
+          intentReview: {
+            title: "搵電工 test@example.invalid https://example.invalid",
+            displayLocation: "沙田 測試大廈 A室",
+            categoryId: "electrical",
+            displayText: "PRIVATE BODY",
+          },
+          sourceMessage: "PRIVATE BODY",
+          sourceUrl: "https://example.invalid",
+        },
+        {
+          _id: "b".repeat(64),
+          intentReview: {
+            title: "需要師傅",
+            displayLocation: "地區未提供",
+            categoryId: "unrecognized",
+          },
+        },
+        {
+          _id: "c".repeat(64),
+          intentReview: {
+            title: "需要維修",
+            displayLocation: "東涌",
+            categoryId: "plumbing",
+          },
+        },
+        {
+          _id: "d".repeat(64),
+          intentReview: { title: "test@example.invalid" },
+        },
+      ]);
+      expect(await listPublicJobPreviews()).toEqual([
+        {
+          id: snapshotId,
+          title: "搵電工",
+          location: "沙田",
+          categoryId: "electrical",
+        },
+        {
+          id: "b".repeat(64),
+          title: "需要師傅",
+          location: "香港（地區未提供）",
+          categoryId: null,
+        },
+        {
+          id: "c".repeat(64),
+          title: "需要維修",
+          location: "東涌",
+          categoryId: "plumbing",
+        },
+      ]);
+      expect(state.find).toHaveBeenCalledWith(
+        {
+          sourceKind: "group_browser_snapshot",
+          "intentReview.version": 1,
+          "intentReview.region": "HK",
+          "intentReview.intent": { $in: ["service_request", "recruitment"] },
+          $expr: { $eq: ["$intentReview.contentSha256", "$contentSha256"] },
+          verificationState: "pending_human_review",
+          retentionState: {
+            $nin: ["deleted", "deletion_requested", "expired"],
+          },
+          $or: [
+            { expiresAt: { $exists: false } },
+            { expiresAt: { $gt: expect.any(Date) } },
+          ],
+        },
+        {
+          projection: {
+            _id: 1,
+            "intentReview.title": 1,
+            "intentReview.displayLocation": 1,
+            "intentReview.categoryId": 1,
+          },
+        },
+      );
+      expect(state.limit).toHaveBeenCalledWith(12);
+      expect(state.close).toHaveBeenCalledTimes(1);
+      expect(state.entitlement).not.toHaveBeenCalled();
+      expect(await getFacebookGroupSnapshot(snapshotId)).toBeNull();
+      expect(state.connect).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("fails closed for a mismatched environment or unavailable data", async () => {
+    state.env.MONGODB_DATABASE = "hotfix_prod";
+    expect(await listPublicJobPreviews()).toEqual([]);
+    expect(state.connect).not.toHaveBeenCalled();
+    state.env.MONGODB_DATABASE = "hotfix_dev";
+    expect(await listPublicJobPreviews()).toEqual([]);
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    state.rows.mockRejectedValueOnce(new Error("synthetic database failure"));
+    expect(await listPublicJobPreviews()).toEqual([]);
+    expect(warning).toHaveBeenCalledWith("Public job previews unavailable");
+    expect(state.close).toHaveBeenCalledTimes(2);
+    warning.mockRestore();
   });
 });

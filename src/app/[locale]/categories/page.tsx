@@ -93,75 +93,77 @@ export default async function CategoriesPage() {
           const media = categoryMedia[category.id] ?? categoryMedia.renovation;
 
           return (
-            <Card key={category.id} className="overflow-hidden">
-              <div className="relative aspect-[16/9] bg-paper-warm">
-                <Image
-                  src={media.image}
-                  alt={media.alt[locale]}
-                  className="h-full w-full object-cover"
-                  fill
-                  loading="lazy"
-                  sizes="(min-width: 1024px) 50vw, 100vw"
-                  style={{ objectPosition: media.objectPosition }}
-                />
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/74 via-black/24 to-transparent p-5 text-white">
-                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/70">
-                    {category.id}
-                  </p>
-                  <h2 className="mt-2 font-display text-3xl font-extrabold tracking-tight">
-                    {category.name[locale]}
-                  </h2>
-                </div>
-              </div>
-              <CardContent className="space-y-5">
-                <p className="text-sm leading-7 text-muted">
-                  {category.description[locale]}
-                </p>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl bg-surface-tint p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/70">
-                      {locale === "en" ? "Common jobs" : "常見需求"}
+            <div key={category.id} id={category.id} className="scroll-mt-28">
+              <Card className="h-full overflow-hidden">
+                <div className="relative aspect-[16/9] bg-paper-warm">
+                  <Image
+                    src={media.image}
+                    alt={media.alt[locale]}
+                    className="h-full w-full object-cover"
+                    fill
+                    loading="lazy"
+                    sizes="(min-width: 1024px) 50vw, 100vw"
+                    style={{ objectPosition: media.objectPosition }}
+                  />
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/74 via-black/24 to-transparent p-5 text-white">
+                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/70">
+                      {category.id}
                     </p>
-                    <ul className="mt-3 space-y-2 text-sm text-foreground">
-                      {media.useCases[locale].map((item) => (
-                        <li key={item} className="flex gap-2">
-                          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
-                          <span>{item}</span>
-                        </li>
-                      ))}
-                    </ul>
+                    <h2 className="mt-2 font-display text-3xl font-extrabold tracking-tight">
+                      {category.name[locale]}
+                    </h2>
                   </div>
+                </div>
+                <CardContent className="space-y-5">
+                  <p className="text-sm leading-7 text-muted">
+                    {category.description[locale]}
+                  </p>
 
-                  <div className="rounded-2xl bg-soft-accent/55 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/70">
-                      {locale === "en" ? "Services" : "服務項目"}
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {category.subcategories.map((subcategory) => (
-                        <span
-                          key={subcategory.id}
-                          className="rounded-full border border-white/80 bg-white/86 px-3 py-1 text-xs font-medium"
-                        >
-                          {subcategory.name[locale]}
-                        </span>
-                      ))}
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl bg-surface-tint p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/70">
+                        {locale === "en" ? "Common jobs" : "常見需求"}
+                      </p>
+                      <ul className="mt-3 space-y-2 text-sm text-foreground">
+                        {media.useCases[locale].map((item) => (
+                          <li key={item} className="flex gap-2">
+                            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="rounded-2xl bg-soft-accent/55 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/70">
+                        {locale === "en" ? "Services" : "服務項目"}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {category.subcategories.map((subcategory) => (
+                          <span
+                            key={subcategory.id}
+                            className="rounded-full border border-white/80 bg-white/86 px-3 py-1 text-xs font-medium"
+                          >
+                            {subcategory.name[locale]}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex justify-end border-t border-line/70 pt-5">
-                  <Link
-                    href="/auth/signup"
-                    locale={locale}
-                    className={`${buttonVariants({ size: "sm" })} !text-white`}
-                  >
-                    {locale === "en" ? "Create request" : "建立請求"}
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
+                  <div className="flex justify-end border-t border-line/70 pt-5">
+                    <Link
+                      href="/auth/signup"
+                      locale={locale}
+                      className={`${buttonVariants({ size: "sm" })} !text-white`}
+                    >
+                      {locale === "en" ? "Create request" : "建立請求"}
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           );
         })}
       </div>

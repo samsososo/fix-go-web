@@ -136,8 +136,8 @@ export function PortalShell({
               </p>
               <p className="mt-2 text-xs leading-6 text-muted">
                 {locale === "en"
-                  ? "Open leads stay one click away from every pro page."
-                  : "每一版都可以即刻返去工作機會，唔會淨係見到日程。"}
+                  ? "Browse work that matches your trade and choose which jobs to quote for."
+                  : "按你嘅工種搵合適工作，揀啱再報價。"}
               </p>
             </div>
           </aside>

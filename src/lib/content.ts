@@ -30,16 +30,16 @@ export function getMarketingContent(locale: Locale) {
       ],
       faq: [
         {
-          q: "Is payment built in?",
-          a: "Not yet. Quote acceptance and booking management are available today, while online payments are planned for a later release.",
+          q: "Do customers need to pay on the platform?",
+          a: "Submitting a repair request and accepting a quote require no payment on the platform. Confirm the work charges and payment arrangements with your professional.",
         },
         {
-          q: "Are pros verified?",
-          a: "Operations can review profiles and mark verification status. A deeper document workflow and KYC process are planned next.",
+          q: "How can I check a professional’s details?",
+          a: "Professionals provide their trades, experience and service details. Before confirming work, ask them to confirm any relevant licences, qualifications and the agreed scope.",
         },
         {
-          q: "Can customers chat live with pros?",
-          a: "A message centre surface is available, but direct in-platform messaging is not live yet.",
+          q: "How do I compare quotes?",
+          a: "Open your repair request to compare labour, parts, call-out fees, included work and availability. Accept a suitable quote to create an order.",
         },
       ],
     };
@@ -73,16 +73,16 @@ export function getMarketingContent(locale: Locale) {
     ],
     faq: [
       {
-        q: "有冇內建付款？",
-        a: "暫時未有。現時已支援接受報價及管理訂單狀態，網上付款會於後續版本加入。",
+        q: "客戶需要喺平台付款嗎？",
+        a: "提交維修需求及接受報價毋須喺平台付款。工程費用及付款安排，請與師傅確認。",
       },
       {
-        q: "師傅是否已完成正式驗證？",
-        a: "營運團隊可檢視師傅資料並標記驗證狀態，較完整的文件流程及 KYC 會於後續版本完善。",
+        q: "師傅資料點樣核對？",
+        a: "師傅會提供工種、經驗及服務資料。確認工程前，請向師傅核對相關牌照、資格及工程範圍。",
       },
       {
-        q: "客戶可否即時對話？",
-        a: "現時已有訊息中心版面，但平台內即時對話仍在後續版本規劃中。",
+        q: "點樣比較師傅報價？",
+        a: "打開你嘅維修需求，逐項比較人工、物料、上門費、包含項目及可上門時間。揀選合適報價並確認後，就會建立訂單。",
       },
     ],
   };

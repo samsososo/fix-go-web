@@ -40,12 +40,6 @@ const zhHK = {
       pro: "師傅",
       admin: "管理員",
     },
-    futureModules: {
-      otp: "現時未啟用 OTP 驗證。",
-      messageCenter: "訊息功能會於後續版本推出。",
-      earnings: "收入報表會於後續版本推出。",
-      verification: "驗證流程仍會繼續擴充。",
-    },
   },
 };
 

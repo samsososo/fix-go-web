@@ -21,6 +21,7 @@ vi.mock("@/lib/mock/db", async (importOriginal) => {
   return {
     ...actual,
     setSmsVerificationEnabled: vi.fn(),
+    getSmsVerificationConfig: vi.fn(),
   };
 });
 
@@ -50,7 +51,10 @@ import {
   updateBookingStatusAction,
   updateSmsVerificationConfigAction,
 } from "@/lib/actions";
-import { setSmsVerificationEnabled } from "@/lib/mock/db";
+import {
+  getSmsVerificationConfig,
+  setSmsVerificationEnabled,
+} from "@/lib/mock/db";
 import {
   acceptCustomerQuote,
   createCustomerRequest,
@@ -142,6 +146,10 @@ const profileValues = {
 describe("session-bound marketplace actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getSmsVerificationConfig).mockResolvedValue({
+      enabled: false,
+      provider: "console",
+    } as never);
   });
 
   it("creates a customer request for the authenticated customer", async () => {

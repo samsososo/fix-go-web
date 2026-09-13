@@ -12,6 +12,10 @@ import {
   verifySignupPhoneOtpAction,
 } from "@/lib/actions";
 import { securityQuestions } from "@/lib/account-recovery";
+import {
+  PRO_SUBSCRIPTION_AMOUNT_MINOR,
+  PRO_SUBSCRIPTION_TRIAL_MONTHS,
+} from "@/lib/subscription-policy";
 import { useHydrated } from "@/hooks/use-hydrated";
 import {
   signupSchema,
@@ -27,8 +31,10 @@ export function SignupForm({
   locale,
   categoryOptions,
   smsVerification,
+  initialRole = "customer",
 }: {
   locale: string;
+  initialRole?: "customer" | "pro";
   categoryOptions: { id: string; label: string }[];
   smsVerification: {
     enabled: boolean;
@@ -77,7 +83,7 @@ export function SignupForm({
       fullName: "",
       phone: smsVerification.initial?.phone ?? "",
       email: "",
-      role: "customer",
+      role: initialRole,
       serviceCategoryIds: [],
       locale: "zh-HK",
       dateOfBirth: "",
@@ -202,6 +208,24 @@ export function SignupForm({
 
   return (
     <form className="space-y-5" onSubmit={form.handleSubmit(onSubmit)}>
+      <Field
+        label={locale === "en" ? "Role" : "身份"}
+        error={form.formState.errors.role?.message}
+      >
+        <Select {...form.register("role")}>
+          <option value="customer">
+            {locale === "en" ? "Customer" : "客戶"}
+          </option>
+          <option value="pro">{locale === "en" ? "Pro" : "師傅"}</option>
+        </Select>
+      </Field>
+      {role === "pro" ? (
+        <p className="rounded-xl bg-surface-tint p-4 text-sm leading-7 text-primary">
+          註冊後綁卡，開始首 {PRO_SUBSCRIPTION_TRIAL_MONTHS}{" "}
+          個月免費試用；之後每月自動收取 HK$
+          {PRO_SUBSCRIPTION_AMOUNT_MINOR / 100}。可隨時取消下期續費。
+        </p>
+      ) : null}
       <Field
         label={locale === "en" ? "Full name" : "姓名"}
         error={form.formState.errors.fullName?.message}
@@ -367,22 +391,18 @@ export function SignupForm({
       >
         <Input {...form.register("email")} placeholder="you@example.com" />
       </Field>
-      <Field
-        label={locale === "en" ? "Role" : "身份"}
-        error={form.formState.errors.role?.message}
-      >
-        <Select {...form.register("role")}>
-          <option value="customer">
-            {locale === "en" ? "Customer" : "客戶"}
-          </option>
-          <option value="pro">{locale === "en" ? "Pro" : "師傅"}</option>
-        </Select>
-      </Field>
       {role === "pro" ? (
-        <Field
-          label={locale === "en" ? "Specialties" : "專長"}
-          error={form.formState.errors.serviceCategoryIds?.message}
+        <fieldset
+          className="space-y-2"
+          aria-describedby={
+            form.formState.errors.serviceCategoryIds
+              ? "specialties-error"
+              : undefined
+          }
         >
+          <legend className="text-base font-medium">
+            {locale === "en" ? "Specialties" : "專長"}
+          </legend>
           <div className="grid gap-3 sm:grid-cols-2">
             {categoryOptions.map((category) => (
               <label
@@ -398,7 +418,16 @@ export function SignupForm({
               </label>
             ))}
           </div>
-        </Field>
+          {form.formState.errors.serviceCategoryIds ? (
+            <p
+              id="specialties-error"
+              className="text-sm text-danger"
+              role="alert"
+            >
+              {form.formState.errors.serviceCategoryIds.message}
+            </p>
+          ) : null}
+        </fieldset>
       ) : null}
       <Field
         label={locale === "en" ? "Preferred language" : "偏好語言"}

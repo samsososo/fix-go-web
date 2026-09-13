@@ -77,7 +77,9 @@ export async function SiteHeader({
       <div
         className={cn(
           "content-wrap flex items-center justify-between gap-4",
-          user ? "min-h-16 py-2 lg:min-h-20 lg:py-4" : "min-h-20 py-4",
+          user
+            ? "min-h-16 py-2 lg:min-h-20 lg:py-4"
+            : "min-h-16 py-2 lg:min-h-20 lg:py-4",
         )}
       >
         <Link
@@ -88,7 +90,7 @@ export async function SiteHeader({
           <BrandLogo
             className={cn(
               "max-w-[9rem] shrink sm:h-12 sm:max-w-[11rem]",
-              user ? "h-8 lg:h-10" : "h-10",
+              "h-8 lg:h-10",
             )}
             priority
           />
@@ -150,7 +152,7 @@ export async function SiteHeader({
             ) : (
               <>
                 <Link
-                  href="/auth"
+                  href="/auth/login"
                   locale={locale}
                   className={buttonVariants({ variant: "ghost", size: "sm" })}
                 >
@@ -284,7 +286,7 @@ export async function SiteHeader({
                     ) : (
                       <div className="space-y-2">
                         <Link
-                          href="/auth"
+                          href="/auth/login"
                           locale={locale}
                           className={`${buttonVariants({ variant: "ghost", size: "sm" })} w-full`}
                         >

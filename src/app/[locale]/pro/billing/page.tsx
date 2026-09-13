@@ -111,20 +111,20 @@ export default async function ProBillingPage({
             <p className="mt-1 text-muted">
               {isActivationPending
                 ? isEnglish
-                  ? "Your card is confirmed. Stripe is finishing the monthly plan setup; no second card setup is needed."
-                  : "付款卡已確認，Stripe 正在完成月費計劃設定，唔需要再次綁卡。"
+                  ? "Your card is confirmed. Your subscription is being activated and will update automatically. You do not need to add your card again."
+                  : "付款卡已確認，正在啟用訂閱，完成後會自動更新，毋須再次綁卡。"
                 : isPaidReactivationPending
                   ? isEnglish
-                    ? "Stripe has returned you to this page. New-work access is restored only after the signed payment confirmation is processed."
-                    : "Stripe 已帶你返到呢一頁；系統處理已簽署嘅付款確認後，先會恢復新工作功能。"
+                    ? "We are confirming your payment. Your subscription will update automatically once payment is confirmed, restoring access to new work."
+                    : "正在確認付款。確認成功後，訂閱狀態會自動更新，並恢復新工作功能。"
                   : isPaidReactivationConfirmed
                     ? isEnglish
                       ? "Stripe confirmed the HK$100 payment. New-work access is active again, with no additional free trial."
                       : "Stripe 已確認 HK$100 付款；新工作功能已恢復，而且冇再次獲得免費期。"
                     : subscription.accessStatus === "setup_required"
                       ? isEnglish
-                        ? "Stripe has returned you to this page, but that redirect is not final confirmation. Your trial starts only after the secure Stripe notification is processed."
-                        : "Stripe 已帶你返到呢一頁，但返回頁面本身唔代表綁卡已完成；系統收到並處理 Stripe 安全通知後，免費期先會正式開始。"
+                        ? "We are confirming your card setup. Your free trial starts once setup is confirmed, and your subscription status will update automatically."
+                        : "正在確認綁卡結果。確認成功後，免費試用先會開始，訂閱狀態會自動更新。"
                       : isEnglish
                         ? "Stripe has securely confirmed your card. Your subscription status below is now up to date."
                         : "Stripe 已安全確認付款卡，下面顯示嘅訂閱狀態已經更新。"}
@@ -169,8 +169,8 @@ export default async function ProBillingPage({
             </p>
             <p className="mt-1 text-muted">
               {isEnglish
-                ? "Returning from Stripe is not payment confirmation. If you have an outstanding invoice, retry it below; access is restored only after Stripe confirms payment."
-                : "由 Stripe 返回並唔代表欠款已繳清；如有欠款，請喺下面重新扣款。系統只會喺 Stripe 確認付款後恢復狀態。"}
+                ? "Updating your card does not settle an outstanding payment. Retry the payment below; access to new work resumes once payment is confirmed."
+                : "更新付款卡唔代表欠款已繳清。如有欠款，請喺下面重新付款；確認成功後，先會恢復新工作功能。"}
             </p>
           </div>
         ) : null}
