@@ -76,7 +76,7 @@ beforeEach(() => {
   findProSubscription.mockResolvedValue(null);
 });
 
-describe("admin phone reuse for pro signup", () => {
+describe("admin phone reuse for public signup", () => {
   it("creates a separate ordinary pro and leaves the administrator unchanged", async () => {
     const created = await createUserAccount(signup);
 
@@ -113,12 +113,15 @@ describe("admin phone reuse for pro signup", () => {
     });
   });
 
-  it("does not allow customer signup with an administrator's phone", async () => {
-    await expect(
-      createUserAccount({ ...signup, role: "customer" }),
-    ).rejects.toThrow("already exists");
-    expect(db.users).toEqual([admin]);
-    expect(db.customerProfiles).toEqual([]);
+  it("creates a separate customer with an administrator's phone", async () => {
+    const created = await createUserAccount({ ...signup, role: "customer" });
+    expect(created).toMatchObject({ role: "customer", phone });
+    expect(created.id).not.toBe(admin.id);
+    expect(db.users).toHaveLength(2);
+    expect(db.users[0]).toEqual(admin);
+    expect(db.customerProfiles).toEqual([
+      expect.objectContaining({ userId: created.id }),
+    ]);
     expect(db.proProfiles).toEqual([]);
   });
 
@@ -133,9 +136,15 @@ describe("admin phone reuse for pro signup", () => {
       });
       const before = structuredClone(db);
 
-      await expect(
-        createUserAccount({ ...signup, email: "new@example.test" }),
-      ).rejects.toThrow("already exists");
+      for (const signupRole of ["customer", "pro"] as const) {
+        await expect(
+          createUserAccount({
+            ...signup,
+            role: signupRole,
+            email: "new@example.test",
+          }),
+        ).rejects.toThrow("already exists");
+      }
       expect(db).toEqual(before);
     },
   );
@@ -190,8 +199,9 @@ describe("lookup when an admin shares a phone", () => {
     },
   );
 
-  it("returns an admin for an otherwise unused phone", async () => {
-    await expect(findUserByIdentifier(phone)).resolves.toEqual(admin);
+  it("ignores an admin's legacy phone when no public account uses it", async () => {
+    await expect(findUserByIdentifier(phone)).resolves.toBeNull();
+    await expect(findUserByIdentifier(adminEmail)).resolves.toEqual(admin);
   });
 
   it("does not treat digits in an email address as a phone match", async () => {

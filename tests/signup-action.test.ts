@@ -138,12 +138,28 @@ describe("signup SMS verification routing", () => {
     expect(signInAs).not.toHaveBeenCalledWith(admin.id);
   });
 
-  it("does not extend the admin phone exception to customer signup", async () => {
-    useAdminPhone();
-    expect(
-      await signUpAction({ ...signupInput, role: "customer" }),
-    ).toMatchObject({ ok: false });
-    expect(createUserAccount).not.toHaveBeenCalled();
+  it("allows an admin phone to create and sign in a separate customer", async () => {
+    const admin = useAdminPhone();
+    const customer = {
+      ...createdPro,
+      id: "user_customer_new",
+      role: "customer" as const,
+    };
+    vi.mocked(createUserAccount).mockResolvedValue(customer);
+    const input = { ...signupInput, role: "customer" as const };
+    expect(await signUpAction(input)).toEqual({
+      ok: true,
+      target: "/zh-HK/customer",
+    });
+    expect(createUserAccount).toHaveBeenCalledWith(input);
+    expect(createCredential).toHaveBeenCalledWith(
+      customer.id,
+      input.password,
+      false,
+      expect.any(Object),
+    );
+    expect(signInAs).toHaveBeenCalledWith(customer.id);
+    expect(signInAs).not.toHaveBeenCalledWith(admin.id);
   });
 
   it("keeps existing pro phones and admin emails reserved", async () => {
@@ -170,7 +186,7 @@ describe("signup SMS verification routing", () => {
     expect(createUserAccount).not.toHaveBeenCalled();
   });
 
-  it("permits OTP for admin phone only for the pro signup role", async () => {
+  it("permits OTP for admin phone for either signup role or an omitted role", async () => {
     useAdminPhone();
     vi.mocked(getSmsVerificationConfig).mockResolvedValue({
       ...disabledSmsConfig,
@@ -199,14 +215,14 @@ describe("signup SMS verification routing", () => {
         locale: "zh-HK",
         role: "customer",
       }),
-    ).toMatchObject({ ok: false });
+    ).toMatchObject({ ok: true });
     expect(
       await requestSignupPhoneOtpAction({
         phone: signupInput.phone,
         locale: "zh-HK",
       }),
-    ).toMatchObject({ ok: false });
-    expect(startSignupSmsPhoneVerification).toHaveBeenCalledTimes(1);
+    ).toMatchObject({ ok: true });
+    expect(startSignupSmsPhoneVerification).toHaveBeenCalledTimes(3);
   });
 
   it("creates and signs in a pro without an OTP or verified-phone timestamp", async () => {

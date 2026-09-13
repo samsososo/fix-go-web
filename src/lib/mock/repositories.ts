@@ -197,12 +197,9 @@ export async function findUserByIdentifier(identifier: string) {
     );
   }
 
-  const phoneMatches = db.users.filter(
-    (user) => user.phone === identifier.replace(/\D/g, ""),
-  );
+  const phone = identifier.replace(/\D/g, "");
   return (
-    phoneMatches.find((user) => user.role !== "admin") ??
-    phoneMatches[0] ??
+    db.users.find((user) => user.role !== "admin" && user.phone === phone) ??
     null
   );
 }
@@ -218,8 +215,7 @@ export async function createUserAccount(
     const normalizedEmail = input.email?.trim().toLowerCase() || "";
     const existing = db.users.find(
       (user) =>
-        (user.phone === input.phone &&
-          !(user.role === "admin" && input.role === "pro")) ||
+        (user.role !== "admin" && user.phone === input.phone) ||
         (normalizedEmail.length > 0 &&
           user.email?.toLowerCase() === normalizedEmail),
     );

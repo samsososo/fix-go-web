@@ -631,9 +631,7 @@ export async function signUpAction(
     findUserByIdentifier(signupData.phone),
     signupData.email ? findUserByIdentifier(signupData.email) : null,
   ]);
-  const phoneConflict =
-    phoneAccount &&
-    !(signupData.role === "pro" && phoneAccount.role === "admin");
+  const phoneConflict = phoneAccount && phoneAccount.role !== "admin";
   if (phoneConflict || emailAccount) {
     return {
       ok: false as const,
@@ -721,10 +719,7 @@ export async function requestSignupPhoneOtpAction(input: {
     };
   }
   const phoneAccount = await findUserByIdentifier(phone);
-  if (
-    phoneAccount &&
-    !(input.role === "pro" && phoneAccount.role === "admin")
-  ) {
+  if (phoneAccount && phoneAccount.role !== "admin") {
     return {
       ok: false as const,
       error: isEnglish
