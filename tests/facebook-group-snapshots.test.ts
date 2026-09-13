@@ -75,6 +75,14 @@ describe.each(["hotfix_dev", "hotfix_prod"])(
     it.each([
       {
         policyDataValid: false,
+        entitlement: {
+          status: "setup_required",
+          canCreateQuotes: false,
+          canAcceptNewWork: false,
+        },
+      },
+      {
+        policyDataValid: false,
         entitlement: { canCreateQuotes: true, canAcceptNewWork: true },
       },
       {
@@ -98,6 +106,52 @@ describe.each(["hotfix_dev", "hotfix_prod"])(
         expect(state.connect).not.toHaveBeenCalled();
       },
     );
+    it("shows locked setup previews without body, contacts or source links, while denying direct details", async () => {
+      state.entitlement.mockResolvedValue({
+        policyDataValid: true,
+        entitlement: {
+          status: "setup_required",
+          canCreateQuotes: false,
+          canAcceptNewWork: false,
+        },
+      });
+      state.rows.mockResolvedValue([
+        {
+          _id: snapshotId,
+          contentSha256: "synthetic-content-hash",
+          intentReview: {
+            version: 1,
+            region: "HK",
+            intent: "recruitment",
+            contentSha256: "synthetic-content-hash",
+            title: "搵電工 test@example.invalid",
+            displayLocation: "香港 https://example.invalid/contact",
+            categoryId: "electrical",
+            displayText: "Synthetic private contact body",
+          },
+          sourceName: "Synthetic Group",
+          sourceMessage: "Synthetic raw body",
+          sourceUrl: "https://www.facebook.com/groups/synthetic/",
+          sourcePermalink:
+            "https://www.facebook.com/groups/synthetic/posts/123/",
+        },
+      ]);
+      expect(await listFacebookGroupSnapshots("electrical")).toEqual([
+        {
+          id: snapshotId,
+          title: "搵電工 [EMAIL]",
+          location: "香港",
+          categoryId: "electrical",
+          locked: true,
+        },
+      ]);
+      expect(state.find.mock.calls[0][0]).toMatchObject({
+        "intentReview.categoryId": "electrical",
+      });
+      expect(await getFacebookGroupSnapshot(snapshotId)).toBeNull();
+      expect(state.findOne).not.toHaveBeenCalled();
+      expect(state.connect).toHaveBeenCalledTimes(1);
+    });
     it.each([
       ["hotfix_test", "mongodb://localhost/hotfix_test"],
       ["unknown", "mongodb://localhost/unknown"],
@@ -193,7 +247,7 @@ describe.each(["hotfix_dev", "hotfix_prod"])(
       ]);
       const result = await listFacebookGroupSnapshots();
       expect(result).toHaveLength(1);
-      expect(result[0].permalink).toBeNull();
+      expect(result[0]).toHaveProperty("permalink", null);
       expect(result[0]).not.toHaveProperty("inputSha256");
       expect(state.find.mock.calls[0][0]).toMatchObject({
         "intentReview.intent": { $in: ["service_request", "recruitment"] },

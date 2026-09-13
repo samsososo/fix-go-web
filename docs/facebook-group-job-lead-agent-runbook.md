@@ -2,7 +2,7 @@
 document_kind: ai_agent_runbook
 scope: hong_kong_facebook_job_leads
 status: internal_prototype
-last_updated: 2026-09-06
+last_updated: 2026-09-13
 canonical_group_contact_policy: redacted
 human_document: docs/facebook-group-job-lead-workflow.zh-HK.md
 ---
@@ -10,6 +10,16 @@ human_document: docs/facebook-group-job-lead-workflow.zh-HK.md
 # AI Agent Runbook: Hong Kong Facebook Job Leads
 
 This runbook tells an AI coding agent how to continue the current Facebook job-lead work without changing product billing rules, leaking personal data, confusing Facebook Pages with Groups, or turning a supervised research task into unauthorized automated collection.
+
+## Authorized unbound-card previews (2026-09-13)
+
+The user explicitly requires Facebook job previews before card setup, with details
+unlocked only after card setup and subscription authorization. This supersedes
+the earlier identical list/detail entitlement gates in both DEV and PROD.
+A valid `setup_required` pro may receive only title, location and category previews,
+with direct contacts redacted. Do not return body, contact text or source links.
+Direct detail URLs still require valid policy data and both new-work entitlements.
+Keep all source eligibility, expiry/deletion, suspension and termination gates.
 
 Normative terms `MUST`, `MUST NOT`, `SHOULD`, and `STOP` are deliberate.
 

@@ -3,6 +3,7 @@ import { MongoClient } from "mongodb";
 import { getCurrentUser } from "@/lib/auth";
 import { cleanFacebookPostText } from "@/lib/facebook-post-text";
 import { env } from "@/lib/env";
+import { redactDirectContacts } from "@/lib/external-unverified-leads";
 import {
   type FacebookSnapshotMongoTarget,
   validateFacebookSnapshotMongoTarget,
@@ -10,6 +11,7 @@ import {
 import { getProSubscriptionEntitlement } from "@/lib/pro-subscription-entitlement";
 
 export type FacebookGroupSnapshot = {
+  locked?: false;
   id: string;
   sourceName: string;
   title: string;
@@ -21,6 +23,11 @@ export type FacebookGroupSnapshot = {
   permalink: string | null;
   truncated: boolean;
 };
+
+export type FacebookGroupSnapshotPreview = Pick<
+  FacebookGroupSnapshot,
+  "id" | "title" | "location" | "categoryId"
+> & { locked: true };
 
 function groupUrl(value: unknown, post: boolean): string | null {
   if (typeof value !== "string") return null;
@@ -88,7 +95,9 @@ export function toFacebookGroupSnapshot(
   };
 }
 
-async function authorizedSnapshotTarget(): Promise<FacebookSnapshotMongoTarget | null> {
+async function authorizedSnapshotTarget(
+  allowPreview = false,
+): Promise<(FacebookSnapshotMongoTarget & { canViewDetails: boolean }) | null> {
   if (!env.MONGODB_URI) return null;
   let target: FacebookSnapshotMongoTarget;
   try {
@@ -102,14 +111,17 @@ async function authorizedSnapshotTarget(): Promise<FacebookSnapshotMongoTarget |
   const user = await getCurrentUser();
   if (user?.role !== "pro") return null;
   const snapshot = await getProSubscriptionEntitlement(user.id);
+  if (!snapshot.policyDataValid) return null;
+  const canViewDetails =
+    snapshot.entitlement.canCreateQuotes &&
+    snapshot.entitlement.canAcceptNewWork;
   if (
-    !snapshot.policyDataValid ||
-    !snapshot.entitlement.canCreateQuotes ||
-    !snapshot.entitlement.canAcceptNewWork
+    !canViewDetails &&
+    !(allowPreview && snapshot.entitlement.status === "setup_required")
   )
     return null;
 
-  return target;
+  return { ...target, canViewDetails };
 }
 
 function eligibleSnapshotFilter() {
@@ -144,8 +156,8 @@ const snapshotProjection = {
 /** Read only: these snapshots are never converted into marketplace requests. */
 export async function listFacebookGroupSnapshots(
   categoryId?: string,
-): Promise<FacebookGroupSnapshot[]> {
-  const target = await authorizedSnapshotTarget();
+): Promise<(FacebookGroupSnapshot | FacebookGroupSnapshotPreview)[]> {
+  const target = await authorizedSnapshotTarget(true);
   if (!target) return [];
 
   const client = new MongoClient(target.uri, {
@@ -169,10 +181,27 @@ export async function listFacebookGroupSnapshots(
       .sort({ capturedAt: -1, _id: 1 })
       .limit(100)
       .toArray();
-    return rows.flatMap((row) => {
-      const mapped = toFacebookGroupSnapshot(row);
-      return mapped ? [mapped] : [];
-    });
+    return rows.flatMap<FacebookGroupSnapshot | FacebookGroupSnapshotPreview>(
+      (row) => {
+        const mapped = toFacebookGroupSnapshot(row);
+        if (!mapped) return [];
+        if (target.canViewDetails) return [mapped];
+        // Return an explicit preview allowlist, never raw text or source links.
+        return [
+          {
+            id: mapped.id,
+            title: redactDirectContacts(
+              mapped.title.normalize("NFKC").replace(/\p{Cf}/gu, ""),
+            ).redacted,
+            location: redactDirectContacts(
+              mapped.location.normalize("NFKC").replace(/\p{Cf}/gu, ""),
+            ).redacted,
+            categoryId: mapped.categoryId,
+            locked: true,
+          },
+        ];
+      },
+    );
   } finally {
     await client.close();
   }

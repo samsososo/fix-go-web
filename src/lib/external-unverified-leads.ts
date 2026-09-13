@@ -226,7 +226,7 @@ function sanitizeFacebookPermalink(value: string | null) {
   return parsed.toString();
 }
 
-function redactDirectContacts(message: string) {
+export function redactDirectContacts(message: string) {
   const normalizedMessage = normalizeWhitespace(message);
   const contactTypes = new Set<ExternalLeadContactType>();
   const withoutWhatsAppLinks = normalizedMessage.replace(
