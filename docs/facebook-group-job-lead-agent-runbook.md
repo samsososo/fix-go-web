@@ -752,7 +752,6 @@ The private Excel also has 5 rows, but it is not the same set as the 5 automatic
 
 These numbers are not targets. A future run must report its own counts against the hard gates above.
 
-
 ## Authorized in-platform details and phone links (2026-09-06)
 
 The user requested that job cards open an in-platform detail page. Extract phone
@@ -764,3 +763,28 @@ secondary, manually opened post/group link when needed. Detail reads must apply
 the same environment/database, pro entitlement, HK/intent/hash, deletion and
 expiry gates as lists.
 Do not send messages or create native marketplace records as part of this flow.
+
+## Authorized broader DEV demand screening (2026-09-13)
+
+The user asked to lower the threshold for Hong Kong posts seeking people to do
+work. For DEV, include explicit tradesperson requests, recruitment, subcontractor
+collaboration, and installation, repair or project quotation requests without
+requiring a detailed address, pay, schedule or direct phone number. An approved
+Hong Kong group's context may support a provisional HK classification when the
+post does not specify an overseas work location. This supersedes the earlier
+DEV rule excluding demand solely because its district or location is missing.
+
+Record `intentReview.regionEvidence = source_context` for that inference and
+display `香港（地區未提供）` when no district is given; preserve any stated place
+without treating an ambiguous place name as verified HK evidence. Use `post_text`
+when the source explicitly establishes a Hong Kong location.
+Keep human verification pending and never invent a district. Review the stated
+work demand individually; membership in a Hong Kong source is not sufficient
+to classify an advertisement as a job.
+
+Continue excluding explicit overseas work, service/product ads, job seekers,
+pure DIY discussions, and demands with confirmed expired deadlines or cancelled
+work. Preserve unknown posting dates, content hashes, source links, deduplication,
+redaction, retention/deletion states and subscription access gates. This change
+authorizes DEV review updates and eligible new snapshots, not automatic PROD
+promotion or formal marketplace records.
