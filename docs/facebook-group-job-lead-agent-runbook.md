@@ -788,3 +788,29 @@ work. Preserve unknown posting dates, content hashes, source links, deduplicatio
 redaction, retention/deletion states and subscription access gates. This change
 authorizes DEV review updates and eligible new snapshots, not automatic PROD
 promotion or formal marketplace records.
+
+## Authorized daily review and DEV-to-PROD sync (2026-09-13)
+
+The user subsequently requested syncing the eligible data to DEV and PROD and
+running this job daily. This supersedes the prior DEV-only, six-snapshot and
+one-time restrictions for this work. Apply the broader HK demand policy in both
+environments. Preserve unknown dates without claiming a fixed recent window.
+
+Follow `tools/facebook_group_leads/README.md` and the enabled source allowlist in
+`sources.json` in that directory. Review at most eight visible posts per enabled
+group, with bounded expansion and permalink checks for observed candidates.
+Do not add more groups or expand the allowlist without a subsequent request.
+Stop on expired login, checkpoint, CAPTCHA, block or permission errors.
+
+Use the scheduled task in this existing conversation to review demand, redact
+new candidates, deduplicate and dry-run the reusable sync command. Apply the
+authorized updates to DEV, verify them, then insert missing eligible snapshots
+into PROD. Verify a zero-insert rerun. Keep private backups and count/hash-only
+receipts. Do not ask again for routine runs within this approved scope.
+
+Both databases retain pending human review and existing retention/deletion
+states. Never overwrite existing snapshots or resurrect deleted sources. Do not
+copy native marketplace, account or subscription data or send outreach. Report
+existing-source content or validity changes separately. Remain quiet when a run
+has no new data or actionable change; notify on inserted data, failures or needed
+user action, using aggregate counts without raw contacts.

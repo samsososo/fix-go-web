@@ -1,0 +1,131 @@
+{
+  "maxPostsPerGroup": 8,
+  "sources": [
+    {
+      "name": "香港冷氣佬，電燈佬，水喉佬買賣，搵工，技術交流",
+      "url": "https://www.facebook.com/groups/253676606939648/",
+      "enabled": true
+    },
+    {
+      "name": "香港裝修佬",
+      "url": "https://www.facebook.com/groups/1951192408542603/",
+      "enabled": true
+    },
+    {
+      "name": "師傅上門安裝🛠️淘寶傢俬3.0🔧淘寶燈🛠潔具🛠維修🛠裝修🛠師傅 🛠裝燈🛠吊燈🛠風扇燈🛠射燈🛠吸頂燈🛠水晶燈🛠鑽牆🛠裝修",
+      "url": "https://www.facebook.com/groups/hktaobao/",
+      "enabled": true
+    },
+    {
+      "name": "冷氣機關注組🌬❄️💨 (清洗/ 保養/ 維修/ 選購/ 慳電教學/ 香港人換冷氣機攻略)",
+      "url": "https://www.facebook.com/groups/753730790050891/",
+      "enabled": true
+    },
+    {
+      "name": "香港裝修維修設計分享討論平台",
+      "url": "https://www.facebook.com/groups/1254763468389848/",
+      "enabled": true
+    },
+    {
+      "name": "😎搵裝修😎搵師傅😎搵設計",
+      "url": "https://www.facebook.com/groups/401572384756867/",
+      "enabled": true
+    },
+    {
+      "name": "(師傅到)裝修，維修，安裝，冷氣，水電，門，窗，鐵器，清拆，(揾師傅，揾工，，揾工具，一站式平台)",
+      "url": "https://www.facebook.com/groups/597788164125884/",
+      "enabled": true
+    },
+    {
+      "name": "家居裝修分享谷",
+      "url": "https://www.facebook.com/groups/hkdecoshare/",
+      "enabled": true
+    },
+    {
+      "name": "香港家居維修交流平台",
+      "url": "https://www.facebook.com/groups/homefixhk/",
+      "enabled": true
+    },
+    {
+      "name": "家居維修交流平台",
+      "url": "https://www.facebook.com/groups/521310541385627/",
+      "enabled": true
+    },
+    {
+      "name": "裝修佬/地盤佬/電燈佬/水喉佬/泥水佬/維修佬（揾工/請人/廣告/採購/報價/吹水/扮靚）",
+      "url": "https://www.facebook.com/groups/728198264268579/",
+      "enabled": true
+    },
+    {
+      "name": "水電工互相支援",
+      "url": "https://www.facebook.com/groups/2053641618351330/",
+      "enabled": false,
+      "reason": "Observed Taiwan-focused posts; excluded from daily Hong Kong review"
+    },
+    {
+      "name": "地盤佬/裝修佬搵工作請人關注組",
+      "url": "https://www.facebook.com/groups/141213002231705/",
+      "enabled": true
+    },
+    {
+      "name": "HK 建造業 - 電燈佬冷氣佬交流群組 - 歡迎判頭,工人,地盤,裝修 招聘或交流",
+      "url": "https://www.facebook.com/groups/1015037141917275/",
+      "enabled": true
+    },
+    {
+      "name": "裝修，維修，水電泥水木工油漆防水技工人招工區",
+      "url": "https://www.facebook.com/groups/677241367617117/",
+      "enabled": true
+    },
+    {
+      "name": "三行 室內裝修 搵工搵人 散工 群組 ：泥水，木工，油漆，電工，來去水，搬運上貨...",
+      "url": "https://www.facebook.com/groups/184631723565629/",
+      "enabled": true
+    },
+    {
+      "name": "三行佬，泥水佬，裝修佬，地盤佬，水喉佬，電燈佬...：搵工，搵人，搵工具，廣告，分享...",
+      "url": "https://www.facebook.com/groups/1208486189179602/",
+      "enabled": true
+    },
+    {
+      "name": "香港建造業工友群🏋️‍♂️（搵人，搵工，交流，最新消息）☎",
+      "url": "https://www.facebook.com/groups/490783999174425/",
+      "enabled": true
+    },
+    {
+      "name": "裝修清拆佬（搵人搵車互助群）",
+      "url": "https://www.facebook.com/groups/547852829882513/",
+      "enabled": true
+    },
+    {
+      "name": "地盤佬 裝修 三行 搵人搵工專區",
+      "url": "https://www.facebook.com/groups/1709345596003045/",
+      "enabled": true
+    },
+    {
+      "name": "香港裝修/室內設計/傢俬設計報價群組",
+      "url": "https://www.facebook.com/groups/115907312456714/",
+      "enabled": true
+    },
+    {
+      "name": "新裝修佬群組",
+      "url": "https://www.facebook.com/groups/442757150231685/",
+      "enabled": true
+    },
+    {
+      "name": "香港工程行業🔸電器佬🔸冷氣佬🔸機械佬🔸睇伙佬🔸装修佬🔸地盤佬🔸電訊設備電子防盜系統🔸求職🔸招聘🔸分享討論區",
+      "url": "https://www.facebook.com/groups/1811483588908371/",
+      "enabled": true
+    },
+    {
+      "name": "水、電、裝修、師傳、散工、長工、香港、九龍、新界、招聘組",
+      "url": "https://www.facebook.com/groups/1785964471651467/",
+      "enabled": true
+    },
+    {
+      "name": "香港揾工易(建築地盤、 冷氣、水電、泥水、裝修及其他等等)",
+      "url": "https://www.facebook.com/groups/163630180856079/",
+      "enabled": true
+    }
+  ]
+}
