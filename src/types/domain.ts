@@ -2,6 +2,18 @@ export type Locale = "zh-HK" | "en";
 
 export type LanguageCode = "zh-HK" | "en" | "yue";
 export type UserRole = "customer" | "pro" | "admin";
+export type MarketingAttribution = Partial<
+  Record<
+    | "utm_source"
+    | "utm_medium"
+    | "utm_campaign"
+    | "utm_content"
+    | "utm_term"
+    | "fbclid"
+    | "gclid",
+    string
+  >
+>;
 export type VerificationStatus = "unverified" | "pending" | "verified";
 export type VerificationLevel = "none" | "basic" | "enhanced";
 export type RequestUrgency = "asap" | "today" | "tomorrow" | "scheduled";
@@ -40,6 +52,7 @@ export interface User {
   lastLoginAt: string;
   phoneVerificationRequiredAt?: string;
   phoneVerifiedAt?: string;
+  marketingAttribution?: MarketingAttribution;
 }
 
 export interface Address {

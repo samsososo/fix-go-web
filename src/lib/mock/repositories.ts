@@ -27,6 +27,7 @@ import {
   BookingStatusEvent,
   BookingStatus,
   Locale,
+  MarketingAttribution,
   ProProfile,
   Quote,
   RequestStatus,
@@ -209,6 +210,7 @@ export async function createUserAccount(
   options: {
     phoneVerificationRequiredAt?: string;
     phoneVerifiedAt?: string;
+    marketingAttribution?: MarketingAttribution;
   } = {},
 ) {
   return withDb((db) => {
@@ -234,6 +236,7 @@ export async function createUserAccount(
       lastLoginAt: nowIso(),
       phoneVerificationRequiredAt: options.phoneVerificationRequiredAt,
       phoneVerifiedAt: options.phoneVerifiedAt,
+      marketingAttribution: options.marketingAttribution,
     };
 
     db.users.push(user);

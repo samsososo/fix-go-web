@@ -1,6 +1,7 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
+import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 
 import {
@@ -78,6 +79,10 @@ import {
   verifyPendingSignupSmsCode,
   verifyPendingSmsCode,
 } from "@/lib/sms-verification";
+import {
+  MARKETING_ATTRIBUTION_COOKIE,
+  readMarketingAttribution,
+} from "@/lib/marketing-attribution";
 
 const CHECKOUT_RESERVATION_MS = 5 * 60 * 1000;
 
@@ -642,12 +647,18 @@ export async function signUpAction(
   }
 
   let user;
+  const attribution = readMarketingAttribution(
+    (await cookies()).get(MARKETING_ATTRIBUTION_COOKIE)?.value,
+  );
   try {
     user = verifiedPhone
       ? await createUserAccount(signupData, {
           phoneVerifiedAt: verifiedPhone.verifiedAt,
+          marketingAttribution: attribution,
         })
-      : await createUserAccount(signupData);
+      : await createUserAccount(signupData, {
+          marketingAttribution: attribution,
+        });
   } catch (error) {
     return {
       ok: false,
