@@ -370,7 +370,7 @@ describe("pro subscription persistence", () => {
       await client.connect();
       await client
         .db(env.MONGODB_DATABASE)
-        .collection("proSubscriptions")
+        .collection<{ _id: string }>("proSubscriptions")
         .updateOne({ _id: proId }, { $set: { trialEndsAt: legacyEnd } });
     } finally {
       await client.close();
