@@ -16,7 +16,7 @@ const SUBSCRIPTION_ID = "sub_webhook_test";
 const NEW_SUBSCRIPTION_ID = "sub_webhook_reactivated";
 const PRICE_ID = "price_webhook_test";
 const CARD_BOUND_AT = "2026-08-09T12:00:00.000Z";
-const TRIAL_ENDS_AT = "2026-09-09T12:00:00.000Z";
+const TRIAL_ENDS_AT = "2026-08-23T12:00:00.000Z";
 const CARD_BOUND_UNIX = Date.parse(CARD_BOUND_AT) / 1_000;
 const TRIAL_END_UNIX = Date.parse(TRIAL_ENDS_AT) / 1_000;
 
@@ -340,6 +340,7 @@ describe("Stripe Checkout webhook processing", () => {
       proId: PRO_ID,
       customerId: CUSTOMER_ID,
       setupIntentId: SETUP_INTENT_ID,
+      planCode: "pro_monthly_v1",
     });
     expect(dependencies.setCustomerDefaultPaymentMethod).toHaveBeenCalledWith({
       customerId: CUSTOMER_ID,
@@ -358,6 +359,7 @@ describe("Stripe Checkout webhook processing", () => {
       proId: PRO_ID,
       customerId: CUSTOMER_ID,
       trialEndUnix: TRIAL_END_UNIX,
+      planCode: "pro_monthly_v1",
       idempotencyKey: `pro-subscription:${PRO_ID}:lifetime`,
     });
     expect(dependencies.activateProTrialSubscription).toHaveBeenCalledWith({

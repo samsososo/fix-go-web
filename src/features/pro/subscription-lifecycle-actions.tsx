@@ -134,7 +134,7 @@ export function SubscriptionRenewalButton({
       !window.confirm(
         isEnglish
           ? "Cancel at the end of the current period? Payments already collected are not prorated or refunded."
-          : "確定喺目前週期完結時取消？已收取嘅當期月費不會按比例退款。",
+          : "確定喺目前週期完結時取消？已收取嘅當期套餐費不會按比例退款。",
       )
     ) {
       return;

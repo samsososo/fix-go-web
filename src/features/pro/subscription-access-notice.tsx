@@ -35,7 +35,7 @@ export function SubscriptionAccessNotice({
           : "新工作功能暫時停用",
         description: isEnglish
           ? "We could not safely confirm your subscription status. You can still manage existing jobs and billing while it is being checked."
-          : "系統暫時未能安全確認訂閱狀態；期間你仍可處理現有工作同管理月費。",
+          : "系統暫時未能安全確認訂閱狀態；期間你仍可處理現有工作同管理訂閱。",
         icon: <ShieldAlert className="h-5 w-5" aria-hidden="true" />,
         tone: "danger" as const,
       }
@@ -45,8 +45,8 @@ export function SubscriptionAccessNotice({
             ? "Set up your card to start taking new work"
             : "綁定付款卡後即可開始接新工作",
           description: isEnglish
-            ? "Existing records remain available. Your one-month free trial starts only after Stripe confirms your card."
-            : "你仍可查看現有紀錄；Stripe 確認綁卡後，1 個月免費試用先會開始。",
+            ? "Existing records remain available. Your one-time 14-day free trial starts only after Stripe confirms your card."
+            : "你仍可查看現有紀錄；Stripe 確認綁卡後，14 日免費試用先會開始。",
           icon: <CreditCard className="h-5 w-5" aria-hidden="true" />,
           tone: "warning" as const,
         }
@@ -79,7 +79,7 @@ export function SubscriptionAccessNotice({
                     : "新報價同新工作已暫停",
               description: isEnglish
                 ? "You can still view records, manage existing jobs, update your profile, and fix billing."
-                : "你仍可查看紀錄、處理現有工作、更新師傅檔案同管理月費。",
+                : "你仍可查看紀錄、處理現有工作、更新師傅檔案同管理訂閱。",
               icon: <ShieldAlert className="h-5 w-5" aria-hidden="true" />,
               tone: "danger" as const,
             };
@@ -126,7 +126,7 @@ export function SubscriptionAccessNotice({
         )}
       >
         <CreditCard className="h-4 w-4" aria-hidden="true" />
-        {isEnglish ? "Manage billing" : "管理月費"}
+        {isEnglish ? "Manage billing" : "管理訂閱"}
       </Link>
     </div>
   );

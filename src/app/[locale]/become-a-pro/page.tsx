@@ -10,10 +10,8 @@ import {
 
 import { Link } from "@/i18n/navigation";
 import { buttonVariants } from "@/components/ui/button";
-import {
-  PRO_SUBSCRIPTION_AMOUNT_MINOR,
-  PRO_SUBSCRIPTION_TRIAL_MONTHS,
-} from "@/lib/subscription-policy";
+import { PRO_SUBSCRIPTION_TRIAL_DAYS } from "@/lib/subscription-policy";
+import { SubscriptionPlanOptions } from "@/features/pro/subscription-plan-options";
 import { createPageMetadata } from "@/lib/seo";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -68,21 +66,18 @@ export default async function BecomeAProPage() {
         </div>
         <div className="self-start overflow-hidden rounded-3xl border border-primary/20 bg-white">
           <div className="bg-[#e9f2e9] px-6 py-4 text-sm font-semibold text-primary sm:px-8">
-            新師傅首 {PRO_SUBSCRIPTION_TRIAL_MONTHS} 個月免費試用
+            每位新師傅一次 {PRO_SUBSCRIPTION_TRIAL_DAYS} 日免費試用
           </div>
           <div className="space-y-6 p-6 sm:p-8">
             <div>
-              <h2 className="text-sm font-semibold text-muted">師傅月費計劃</h2>
-              <p className="mt-3 flex items-baseline gap-2 text-primary">
-                <span className="text-lg font-semibold">HK$</span>
-                <span className="font-display text-6xl font-extrabold">
-                  {PRO_SUBSCRIPTION_AMOUNT_MINOR / 100}
-                </span>
-                <span className="text-base text-muted">／月</span>
-              </p>
+              <h2 className="text-sm font-semibold text-muted">師傅訂閱計劃</h2>
+              <div className="mt-4">
+                <SubscriptionPlanOptions locale={locale} />
+              </div>
               <p className="mt-4 text-sm leading-7 text-muted">
-                成功綁卡當日開始免費試用。試用期內不收月費，完結後每月自動續費
-                HK${PRO_SUBSCRIPTION_AMOUNT_MINOR / 100}。
+                成功綁卡後開始 14
+                日免費試用，今日不收費。試用完結後，按所選套餐每 1／3／6／12
+                個月一次過收取全額並自動續費。平均月費只供比較。
               </p>
             </div>
             <ul className="space-y-3 border-y border-line/70 py-5 text-sm">
@@ -110,11 +105,11 @@ export default async function BecomeAProPage() {
                 <ArrowRight aria-hidden="true" className="h-5 w-5" />
               </Link>
               <p className="mt-3 text-center text-xs text-muted">
-                建立帳戶 → 綁定付款卡 → 開始免費試用
+                建立帳戶 → 選套餐及綁卡 → 開始免費試用
               </p>
             </div>
             <p className="text-sm leading-7 text-muted">
-              可隨時取消下期續費，使用權保留至本期完結。免費期內取消，不收首期月費；已收月費不作按比例退款。每位師傅只享一次免費試用。
+              可隨時取消下期續費，使用權保留至本期完結。免費期內取消，不收首期套餐費；已收套餐費不作按比例退款。每位師傅只享一次免費試用。
             </p>
           </div>
         </div>
@@ -132,7 +127,7 @@ export default async function BecomeAProPage() {
               {
                 icon: ReceiptText,
                 title: "02 綁卡開始免費期",
-                body: "註冊後進入綁卡流程，成功綁卡先開始首月免費試用，開放完整工作資料及報價功能。",
+                body: "註冊後進入綁卡流程，成功綁卡先開始每人一次嘅 14 日免費試用，開放完整工作資料及報價功能。",
               },
               {
                 icon: CalendarDays,

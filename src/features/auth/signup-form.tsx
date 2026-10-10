@@ -12,10 +12,7 @@ import {
   verifySignupPhoneOtpAction,
 } from "@/lib/actions";
 import { securityQuestions } from "@/lib/account-recovery";
-import {
-  PRO_SUBSCRIPTION_AMOUNT_MINOR,
-  PRO_SUBSCRIPTION_TRIAL_MONTHS,
-} from "@/lib/subscription-policy";
+import { PRO_SUBSCRIPTION_TRIAL_DAYS } from "@/lib/subscription-policy";
 import { useHydrated } from "@/hooks/use-hydrated";
 import {
   signupSchema,
@@ -221,9 +218,9 @@ export function SignupForm({
       </Field>
       {role === "pro" ? (
         <p className="rounded-xl bg-surface-tint p-4 text-sm leading-7 text-primary">
-          註冊後綁卡，開始首 {PRO_SUBSCRIPTION_TRIAL_MONTHS}{" "}
-          個月免費試用；之後每月自動收取 HK$
-          {PRO_SUBSCRIPTION_AMOUNT_MINOR / 100}。可隨時取消下期續費。
+          註冊後選套餐及綁卡，開始每人一次 {PRO_SUBSCRIPTION_TRIAL_DAYS}{" "}
+          日免費試用。試用完結後按套餐全額自動續費：HK$100／1 個月、HK$249／3
+          個月、HK$449／6 個月、HK$699／12 個月。可隨時取消下期續費。
         </p>
       ) : null}
       <Field

@@ -14,7 +14,11 @@ import { requireRole } from "@/lib/auth";
 import { ensureProSubscription } from "@/lib/mock/db";
 import { getProNav } from "@/lib/nav";
 import { evaluateProSubscriptionEntitlement } from "@/lib/pro-subscription-entitlement";
-import { hasConsumedLifetimeTrial } from "@/lib/subscription-policy";
+import {
+  getProSubscriptionPlan,
+  formatProSubscriptionPlan,
+  hasConsumedLifetimeTrial,
+} from "@/lib/subscription-policy";
 
 function firstQueryValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -41,9 +45,12 @@ export default async function ProBillingPage({
     subscription,
     new Date().toISOString(),
   ).entitlement.status;
-  const isTrialing = accessStatus === "trialing";
-  const isActive = accessStatus === "active";
-  const hasEstablishedPlan = accessStatus !== "setup_required";
+  const plan = getProSubscriptionPlan(subscription.planCode);
+  const billing = formatProSubscriptionPlan(subscription.planCode, locale);
+  const pendingPrice =
+    getProSubscriptionPlan(
+      subscription.reactivationPlanCode ?? subscription.planCode,
+    ).amountMinor / 100;
   const isActivationPending =
     subscription.accessStatus === "setup_required" &&
     hasConsumedLifetimeTrial(subscription) &&
@@ -73,7 +80,7 @@ export default async function ProBillingPage({
   return (
     <PortalShell
       locale={locale}
-      title={isEnglish ? "Monthly plan and card" : "月費及付款卡"}
+      title={isEnglish ? "Subscription and card" : "訂閱及付款卡"}
       subtitle={
         isEnglish
           ? "Set up your card securely with Stripe and review your confirmed subscription status."
@@ -94,12 +101,12 @@ export default async function ProBillingPage({
                   : "正在啟用免費試用"
                 : isPaidReactivationPending
                   ? isEnglish
-                    ? "Confirming your HK$100 payment"
-                    : "正在確認 HK$100 付款"
+                    ? `Confirming your HK$${pendingPrice} payment`
+                    : `正在確認 HK$${pendingPrice} 付款`
                   : isPaidReactivationConfirmed
                     ? isEnglish
                       ? "Subscription reactivated"
-                      : "月費訂閱已重新啟用"
+                      : "訂閱已重新啟用"
                     : subscription.accessStatus === "setup_required"
                       ? isEnglish
                         ? "Checking your card setup"
@@ -119,8 +126,8 @@ export default async function ProBillingPage({
                     : "正在確認付款。確認成功後，訂閱狀態會自動更新，並恢復新工作功能。"
                   : isPaidReactivationConfirmed
                     ? isEnglish
-                      ? "Stripe confirmed the HK$100 payment. New-work access is active again, with no additional free trial."
-                      : "Stripe 已確認 HK$100 付款；新工作功能已恢復，而且冇再次獲得免費期。"
+                      ? `Stripe confirmed the HK$${pendingPrice} payment. New-work access is active again, with no additional free trial.`
+                      : `Stripe 已確認 HK$${pendingPrice} 付款；新工作功能已恢復，而且冇再次獲得免費期。`
                     : subscription.accessStatus === "setup_required"
                       ? isEnglish
                         ? "We are confirming your card setup. Your free trial starts once setup is confirmed, and your subscription status will update automatically."
@@ -150,8 +157,8 @@ export default async function ProBillingPage({
             <p className="mt-1 text-muted">
               {hasConsumedLifetimeTrial(subscription)
                 ? isEnglish
-                  ? "No new subscription was started. You can restart the secure HK$100 checkout whenever you are ready."
-                  : "今次冇建立新訂閱；準備好之後可以重新開啟 HK$100 安全付款流程。"
+                  ? "No new subscription was started. You can restart the secure package checkout whenever you are ready."
+                  : "今次冇建立新訂閱；準備好之後可以重新開啟 套餐安全付款流程。"
                 : isEnglish
                   ? "Nothing was charged. You can restart the secure Stripe setup whenever you are ready."
                   : "今次冇收取任何費用；準備好之後可以隨時重新開啟 Stripe 安全綁卡。"}
@@ -184,104 +191,39 @@ export default async function ProBillingPage({
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)]">
           <Card>
             <CardContent className="space-y-6 p-5 sm:p-6">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-primary">
-                    {isEnglish ? "FastFix24 Pro plan" : "快修24 師傅月費"}
-                  </p>
-                  <p className="mt-2 font-display text-4xl font-extrabold tracking-tight sm:text-5xl">
-                    HK$100
-                    <span className="ml-2 font-sans text-base font-semibold tracking-normal text-muted">
-                      {isEnglish ? "/ month" : "/ 月"}
-                    </span>
-                  </p>
-                </div>
-                <span className="w-fit rounded-full bg-secondary/14 px-3 py-1.5 text-sm font-semibold text-warning">
-                  {isActivationPending
-                    ? isEnglish
-                      ? "Activating"
-                      : "啟用中"
-                    : isTrialing
-                      ? isEnglish
-                        ? "Free trial active"
-                        : "免費試用中"
-                      : isActive
-                        ? isEnglish
-                          ? "HK$100 monthly"
-                          : "每月 HK$100"
-                        : hasEstablishedPlan
-                          ? isEnglish
-                            ? "HK$100 monthly plan"
-                            : "每月 HK$100 計劃"
-                          : isEnglish
-                            ? "First month free"
-                            : "首 1 個月免費"}
-                </span>
+              <div>
+                <p className="text-sm font-semibold text-primary">
+                  {isEnglish ? "Your selected package" : "目前選定套餐"}
+                </p>
+                <p className="mt-2 text-3xl font-extrabold">
+                  HK${plan.amountMinor / 100}
+                  <span className="ml-2 text-base font-semibold text-muted">
+                    ／{plan.intervalCount} {isEnglish ? "months" : "個月"}
+                  </span>
+                </p>
+                <p className="mt-3 text-sm leading-7 text-muted">
+                  {isEnglish
+                    ? `${billing}, billed in full with automatic renewal. Existing subscriptions and recorded trial dates are preserved.`
+                    : `${billing}，每期一次過收取全額並自動續費。現有訂閱及已記錄嘅免費試用到期日會保留。`}
+                </p>
               </div>
-
-              <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              <div className="grid gap-3 sm:grid-cols-3">
                 <PlanPoint
                   icon={<CalendarRange className="h-5 w-5" />}
-                  title={
-                    hasEstablishedPlan && !isTrialing
-                      ? isEnglish
-                        ? "Monthly subscription"
-                        : "月費訂閱"
-                      : isEnglish
-                        ? "One month"
-                        : "1 個月"
-                  }
+                  title={isEnglish ? "14-day trial" : "14 日免費試用"}
                   description={
-                    hasEstablishedPlan && !isTrialing
-                      ? accessStatus === "cancel_at_period_end"
-                        ? isEnglish
-                          ? "Automatic renewal is off until you restore it."
-                          : "自動續訂已關閉，你亦可以喺期末前恢復。"
-                        : accessStatus === "terminated"
-                          ? isEnglish
-                            ? "This monthly subscription has ended."
-                            : "呢個月費訂閱已經終止。"
-                          : accessStatus === "grace_period" ||
-                              accessStatus === "suspended"
-                            ? isEnglish
-                              ? "Billing needs attention before normal access resumes."
-                              : "付款狀態需要處理，完成後先恢復正常功能。"
-                            : isEnglish
-                              ? "Your HK$100 monthly plan renews automatically."
-                              : "每月 HK$100 計劃會自動續訂。"
-                      : isEnglish
-                        ? "Calculated in Hong Kong time from successful card setup."
-                        : "由成功綁卡當日起，按香港時間計算。"
+                    isEnglish
+                      ? "New trials start after successful card setup; existing trial dates stay unchanged."
+                      : "新試用由成功綁卡起計；已開始試用嘅帳戶保留原到期日。"
                   }
                 />
                 <PlanPoint
                   icon={<CreditCard className="h-5 w-5" />}
-                  title={
-                    hasEstablishedPlan && !isTrialing
-                      ? isEnglish
-                        ? "HK$100 each month"
-                        : "每月收取 HK$100"
-                      : isTrialing
-                        ? isEnglish
-                          ? "No charge during trial"
-                          : "試用期內不收費"
-                        : isEnglish
-                          ? "No charge today"
-                          : "今日不收費"
-                  }
+                  title={isEnglish ? "Full package payment" : "按套餐全額收費"}
                   description={
-                    hasEstablishedPlan && !isTrialing
-                      ? accessStatus === "cancel_at_period_end" ||
-                        accessStatus === "terminated"
-                        ? isEnglish
-                          ? "No further renewal charge is scheduled after access ends."
-                          : "使用權完結後不會再安排續期收費。"
-                        : isEnglish
-                          ? "Stripe charges the saved card each billing period."
-                          : "Stripe 會喺每個帳單週期從已綁定付款卡收費。"
-                      : isEnglish
-                        ? "HK$100 monthly billing starts only after the trial."
-                        : "免費期完結後，先開始每月收取 HK$100。"
+                    isEnglish
+                      ? "No charge during a new trial. Afterwards, the full package renews every 1, 3, 6 or 12 months."
+                      : "新試用期內不收費；完結後按套餐每 1／3／6／12 個月收取全額。"
                   }
                 />
                 <PlanPoint
@@ -289,8 +231,8 @@ export default async function ProBillingPage({
                   title={isEnglish ? "One trial per pro" : "每人一次試用"}
                   description={
                     isEnglish
-                      ? "Changing a card or rejoining does not restart the trial."
-                      : "換卡或重新訂閱都唔會重設免費期。"
+                      ? "Changing a card, package or rejoining does not restart the trial."
+                      : "換卡、換套餐或重新訂閱，都唔會重設免費期。"
                   }
                 />
               </div>

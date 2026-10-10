@@ -62,7 +62,7 @@ export async function SiteHeader({
     ? proLeadLabel
     : locale === "en"
       ? "Manage billing"
-      : "管理月費";
+      : "管理訂閱";
 
   const navItems = [
     { href: "/", label: t("nav.home") },

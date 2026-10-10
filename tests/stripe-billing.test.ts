@@ -330,7 +330,7 @@ describe("Stripe billing adapter", () => {
           cancelUrl: "https://hotfix24.test/pro/billing",
           idempotencyKey: "setup-checkout:pro-1:attempt-1",
         },
-        { stripe },
+        { stripe, monthlyPriceId: "price_monthly_hkd_100" },
       ),
     ).resolves.toBe(checkoutSession);
 
@@ -595,7 +595,7 @@ describe("Stripe billing adapter", () => {
           nowUnix: () => 1_999_999_999,
         },
       ),
-    ).rejects.toThrow("does not match the HK$100 monthly plan");
+    ).rejects.toThrow("does not match the selected package");
 
     api.checkout.sessions.retrieve.mockResolvedValue(
       paidSubscriptionCheckoutSession(price, {
@@ -996,7 +996,7 @@ describe("Stripe billing adapter", () => {
         { ...input, allowHistoricalPriceId: false },
         { stripe, monthlyPriceId: "price_new_monthly_hkd_100" },
       ),
-    ).rejects.toThrow("configured Stripe Price does not match");
+    ).rejects.toThrow("configured Stripe Price is inactive or incorrect");
 
     await expect(
       retrieveOwnedMonthlyProSubscription(
@@ -1148,4 +1148,106 @@ describe("Stripe billing adapter", () => {
       ),
     ).rejects.toThrow("does not match this professional plan");
   });
+});
+
+describe("professional packages", () => {
+  it.each([
+    ["pro_monthly_v1", 10000, 1],
+    ["pro_3_months_v1", 24900, 3],
+    ["pro_6_months_v1", 44900, 6],
+    ["pro_12_months_v1", 69900, 12],
+  ] as const)(
+    "creates and validates %s with the full amount and interval",
+    async (code, amount, months) => {
+      const { api, stripe, price, subscription } = mockStripe();
+      const packagePrice = {
+        ...price,
+        id: `price_package_${months}`,
+        unit_amount: amount,
+        recurring: { ...price.recurring!, interval_count: months },
+      };
+      const packageSubscription = {
+        ...subscription,
+        metadata: { proId: "pro-1", planCode: code },
+        items: {
+          ...subscription.items,
+          data: [{ ...subscription.items.data[0], price: packagePrice }],
+        },
+      };
+      api.prices.retrieve.mockResolvedValue(packagePrice);
+      api.subscriptions.create.mockResolvedValue(packageSubscription);
+      api.subscriptions.retrieve.mockResolvedValue(packageSubscription);
+      const dependencies = { stripe, priceIds: { [code]: packagePrice.id } };
+      await createMonthlyProSubscription(
+        {
+          proId: "pro-1",
+          customerId: "cus_pro_1",
+          planCode: code,
+          trialEndUnix: 1791766800,
+          idempotencyKey: `package-${months}`,
+        },
+        dependencies,
+      );
+      expect(api.subscriptions.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          items: [{ price: packagePrice.id, quantity: 1 }],
+          trial_end: 1791766800,
+          metadata: { proId: "pro-1", planCode: code },
+        }),
+        expect.anything(),
+      );
+      await expect(
+        retrieveOwnedMonthlyProSubscription(
+          {
+            proId: "pro-1",
+            customerId: "cus_pro_1",
+            subscriptionId: "sub_pro_1",
+            expectedPlanCode: code,
+          },
+          dependencies,
+        ),
+      ).resolves.toHaveProperty("subscription", packageSubscription);
+      api.subscriptions.retrieve.mockResolvedValue({
+        ...packageSubscription,
+        items: {
+          ...subscription.items,
+          data: [
+            {
+              ...subscription.items.data[0],
+              price: { ...packagePrice, unit_amount: amount - 100 },
+            },
+          ],
+        },
+      });
+      await expect(
+        retrieveOwnedMonthlyProSubscription(
+          {
+            proId: "pro-1",
+            customerId: "cus_pro_1",
+            subscriptionId: "sub_pro_1",
+            expectedPlanCode: code,
+          },
+          dependencies,
+        ),
+      ).rejects.toThrow("does not match");
+      api.prices.retrieve.mockResolvedValue({
+        ...packagePrice,
+        recurring: { ...packagePrice.recurring, interval_count: months + 1 },
+      });
+      await expect(
+        createCardSetupCheckoutSession(
+          {
+            proId: "pro-1",
+            customerId: "cus_pro_1",
+            planCode: code,
+            successUrl: "https://hotfix24.test/pro/billing",
+            cancelUrl: "https://hotfix24.test/pro/billing",
+            idempotencyKey: "invalid-price",
+          },
+          dependencies,
+        ),
+      ).rejects.toThrow("does not match");
+      expect(api.checkout.sessions.create).not.toHaveBeenCalled();
+    },
+  );
 });

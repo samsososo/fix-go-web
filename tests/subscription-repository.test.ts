@@ -46,7 +46,7 @@ async function activateLifecycleTestSubscription() {
     stripeSetupIntentId: "seti_lifecycle_test",
     stripePaymentMethodId: "pm_lifecycle_test",
     cardBoundAt: "2026-01-31T02:30:00.000Z",
-    trialEndsAt: "2026-02-28T02:30:00.000Z",
+    trialEndsAt: "2026-02-14T02:30:00.000Z",
   });
   await activateProTrialSubscription({
     proId,
@@ -57,7 +57,7 @@ async function activateLifecycleTestSubscription() {
     currentPeriodStartedAt: "2026-08-01T00:00:00.000Z",
     currentPeriodEndsAt: "2026-09-01T00:00:00.000Z",
     lastStripeEventId: "evt_lifecycle_activation",
-    lastStripeEventCreatedAt: "2026-02-28T02:30:00.000Z",
+    lastStripeEventCreatedAt: "2026-02-14T02:30:00.000Z",
     lastStripeSyncedAt: "2026-08-01T00:00:01.000Z",
   });
   return proId;
@@ -302,7 +302,7 @@ describe("pro subscription persistence", () => {
       stripeSetupIntentId: "seti_step2_test",
       stripePaymentMethodId: "pm_step2_test",
       cardBoundAt: "2026-01-31T02:30:00.000Z",
-      trialEndsAt: "2026-02-28T02:30:00.000Z",
+      trialEndsAt: "2026-02-14T02:30:00.000Z",
     };
     const trials = await Promise.all([
       consumeProLifetimeTrial(trialInput),
@@ -316,7 +316,7 @@ describe("pro subscription persistence", () => {
     expect(trials[0].subscription.trialConsumedAt).toBe(
       "2026-01-31T02:30:00.000Z",
     );
-    expect(trials[1].subscription.trialEndsAt).toBe("2026-02-28T02:30:00.000Z");
+    expect(trials[1].subscription.trialEndsAt).toBe("2026-02-14T02:30:00.000Z");
 
     await expect(
       consumeProLifetimeTrial({
@@ -332,7 +332,7 @@ describe("pro subscription persistence", () => {
       stripeStatus: "active" as const,
       stripeLivemode: false,
       currentPeriodStartedAt: "2026-01-31T02:30:00.000Z",
-      currentPeriodEndsAt: "2026-02-28T02:30:00.000Z",
+      currentPeriodEndsAt: "2026-02-14T02:30:00.000Z",
       lastStripeEventId: "evt_step2_test",
       lastStripeSyncedAt: "2026-01-31T02:30:01.000Z",
     };
@@ -343,7 +343,7 @@ describe("pro subscription persistence", () => {
       stripeSubscriptionId: "sub_step2_test",
       stripeStatus: "active",
       trialConsumedAt: "2026-01-31T02:30:00.000Z",
-      trialEndsAt: "2026-02-28T02:30:00.000Z",
+      trialEndsAt: "2026-02-14T02:30:00.000Z",
       lastStripeEventId: "evt_step2_test",
     });
 
@@ -362,9 +362,53 @@ describe("pro subscription persistence", () => {
     });
   });
 
+  it("preserves a recorded legacy trial end when its setup webhook is retried", async () => {
+    const proId = await activateLifecycleTestSubscription();
+    const legacyEnd = "2026-02-28T02:30:00.000Z";
+    const client = new MongoClient(env.MONGODB_URI!);
+    try {
+      await client.connect();
+      await client
+        .db(env.MONGODB_DATABASE)
+        .collection("proSubscriptions")
+        .updateOne({ _id: proId }, { $set: { trialEndsAt: legacyEnd } });
+    } finally {
+      await client.close();
+    }
+    const retry = await consumeProLifetimeTrial({
+      proId,
+      checkoutSessionId: "cs_lifecycle_test",
+      stripeCustomerId: "cus_lifecycle_test",
+      stripeSetupIntentId: "seti_lifecycle_test",
+      stripePaymentMethodId: "pm_lifecycle_test",
+      cardBoundAt: "2026-01-31T02:30:00.000Z",
+      trialEndsAt: legacyEnd,
+    });
+    expect(retry.status).toBe("existing");
+    expect(retry.subscription.trialEndsAt).toBe(legacyEnd);
+  });
+
+  it("persists the selected package atomically with its checkout reservation", async () => {
+    const proId = "user_pro_chan";
+    await ensureProSubscription(proId);
+    const reserved = await reserveProSubscriptionCheckout({
+      proId,
+      planCode: "pro_12_months_v1",
+      reservationId: "annual_package",
+      reservationExpiresAt: "2099-01-01T00:00:00.000Z",
+    });
+    expect(reserved).toMatchObject({
+      planCode: "pro_12_months_v1",
+      amountMinor: 69900,
+      intervalCount: 12,
+      accessStatus: "setup_required",
+    });
+    expect(reserved?.trialConsumedAt).toBeUndefined();
+  });
+
   it("fails closed when a partial lifetime-trial write already exists", async () => {
     const proId = "user_pro_chan";
-    const partialCardBoundAt = "2026-02-28T02:30:00.000Z";
+    const partialCardBoundAt = "2026-02-14T02:30:00.000Z";
     await ensureProSubscription(proId);
     await setProStripeCustomer(proId, "cus_partial_history");
 
@@ -413,7 +457,7 @@ describe("pro subscription persistence", () => {
         stripeSetupIntentId: "seti_partial_history",
         stripePaymentMethodId: "pm_partial_history",
         cardBoundAt: "2026-03-01T02:30:00.000Z",
-        trialEndsAt: "2026-04-01T02:30:00.000Z",
+        trialEndsAt: "2026-03-15T02:30:00.000Z",
       }),
     ).rejects.toThrow("does not match");
 

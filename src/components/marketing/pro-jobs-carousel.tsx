@@ -14,10 +14,7 @@ import {
 } from "lucide-react";
 
 import { Link } from "@/i18n/navigation";
-import {
-  PRO_SUBSCRIPTION_AMOUNT_MINOR,
-  PRO_SUBSCRIPTION_TRIAL_MONTHS,
-} from "@/lib/subscription-policy";
+import { PRO_SUBSCRIPTION_TRIAL_DAYS } from "@/lib/subscription-policy";
 
 import type { PublicJobPreview } from "@/lib/facebook-group-snapshots";
 
@@ -198,13 +195,13 @@ export function ProJobsCarousel({
             locale={locale}
             className="inline-flex min-h-11 items-center justify-center text-sm font-semibold !text-white underline underline-offset-4"
           >
-            了解月費及免費試用
+            了解套餐及免費試用
           </Link>
         </div>
         <p className="mt-3 text-xs leading-6 text-white/75">
-          註冊可預覽工作；綁卡起首 {PRO_SUBSCRIPTION_TRIAL_MONTHS}{" "}
-          個月免費，之後 HK${PRO_SUBSCRIPTION_AMOUNT_MINOR / 100}
-          ／月自動續費。完整資料及報價須有效訂閱。
+          註冊可預覽工作；成功綁卡後享每人一次 {PRO_SUBSCRIPTION_TRIAL_DAYS}{" "}
+          日免費試用。之後按所選套餐全額自動續費：HK$100／1 個月、HK$249／3
+          個月、HK$449／6 個月、HK$699／12 個月。完整資料及報價須有效訂閱。
         </p>
       </div>
     </section>

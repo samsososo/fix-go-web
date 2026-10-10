@@ -38,6 +38,7 @@ vi.mock("@/lib/stripe-billing", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/stripe-billing")>();
   return {
     ...actual,
+    expireOwnedProCheckout: vi.fn(),
     createCardSetupCheckoutSession: vi.fn(),
     createPaidProSubscriptionCheckoutSession: vi.fn(),
     createProPaymentMethodPortalSession: vi.fn(),

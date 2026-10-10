@@ -13,8 +13,7 @@
 
 ## 收費基準
 
-師傅月費固定為 HK$100，每月收取一次；首次成功綁卡後享有 1 個月
-免費試用。DEV 使用 Stripe sandbox，Production 使用 Stripe live mode，兩邊的
+師傅套餐為 HK$100／1 個月、HK$249／3 個月、HK$449／6 個月及 HK$699／12 個月，每期收取全額；首次成功綁卡後享有一次 14 日免費試用。DEV 使用 Stripe sandbox，Production 使用 Stripe live mode，兩邊的
 Price ID、secret key 及 webhook signing secret 必須分開。
 
 ## DNS

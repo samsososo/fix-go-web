@@ -143,7 +143,7 @@ export default async function ProDashboardPage() {
                       : "查看適合你嘅工作，按工種篩選並提交報價。"
                     : locale === "en"
                       ? "Use jobs and schedule as normal. Manage billing whenever you are ready to restore new-work access."
-                      : "你可以照常使用訂單同日程；準備好後到月費頁恢復新工作功能。"}
+                      : "你可以照常使用訂單同日程；準備好後到訂閱頁恢復新工作功能。"}
                 </p>
               </div>
             </div>
@@ -164,7 +164,7 @@ export default async function ProDashboardPage() {
                     : "查看工作機會"
                   : locale === "en"
                     ? "Manage billing"
-                    : "管理月費"}
+                    : "管理訂閱"}
               </Link>
               <Link
                 href="/pro/calendar"
@@ -265,7 +265,7 @@ export default async function ProDashboardPage() {
                       : "全部"
                     : locale === "en"
                       ? "Manage billing"
-                      : "管理月費"}
+                      : "管理訂閱"}
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </div>

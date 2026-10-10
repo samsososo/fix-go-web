@@ -27,9 +27,10 @@ import {
   STRIPE_PAID_REACTIVATION_PURPOSE,
 } from "@/lib/stripe-billing";
 import {
-  PRO_SUBSCRIPTION_AMOUNT_MINOR,
+  getProSubscriptionPlan,
+  isProSubscriptionPlanCode,
+  type ProSubscriptionPlanCode,
   PRO_SUBSCRIPTION_CURRENCY,
-  PRO_SUBSCRIPTION_PLAN_CODE,
   createLifetimeTrialWindow,
   type ProSubscription,
   type StripeSubscriptionStatus,
@@ -262,13 +263,13 @@ function validateLocalCheckout(
   if (
     session.mode !== "setup" ||
     !proId ||
-    session.metadata?.planCode !== PRO_SUBSCRIPTION_PLAN_CODE ||
+    !isProSubscriptionPlanCode(session.metadata?.planCode) ||
     session.metadata?.purpose !== STRIPE_CARD_SETUP_PURPOSE ||
     session.client_reference_id !== proId ||
     !customerId ||
     !subscription ||
     subscription.proId !== proId ||
-    subscription.planCode !== PRO_SUBSCRIPTION_PLAN_CODE ||
+    session.metadata?.planCode !== subscription.planCode ||
     subscription.checkoutSessionId !== session.id ||
     subscription.stripeCustomerId !== customerId
   ) {
@@ -290,19 +291,22 @@ function validatePaidReactivationCheckout(
     session.status !== "complete" ||
     session.payment_status !== "paid" ||
     !proId ||
-    session.metadata?.planCode !== PRO_SUBSCRIPTION_PLAN_CODE ||
+    !isProSubscriptionPlanCode(session.metadata?.planCode) ||
     session.metadata?.purpose !== STRIPE_PAID_REACTIVATION_PURPOSE ||
     session.client_reference_id !== proId ||
     !customerId ||
     !newSubscriptionId ||
     !subscription ||
     subscription.proId !== proId ||
-    subscription.planCode !== PRO_SUBSCRIPTION_PLAN_CODE ||
+    session.metadata?.planCode !==
+      (subscription.reactivationPlanCode ?? subscription.planCode) ||
     subscription.stripeCustomerId !== customerId ||
     session.livemode !== subscription.stripeLivemode ||
     session.currency !== PRO_SUBSCRIPTION_CURRENCY ||
-    session.amount_subtotal !== PRO_SUBSCRIPTION_AMOUNT_MINOR ||
-    session.amount_total !== PRO_SUBSCRIPTION_AMOUNT_MINOR ||
+    session.amount_subtotal !==
+      getProSubscriptionPlan(session.metadata?.planCode).amountMinor ||
+    session.amount_total !==
+      getProSubscriptionPlan(session.metadata?.planCode).amountMinor ||
     session.payment_method_types.length !== 1 ||
     session.payment_method_types[0] !== "card"
   ) {
@@ -372,6 +376,7 @@ function validateCreatedSubscription(
     proId: string;
     customerId: string;
     trialEndUnix: number;
+    planCode: ProSubscriptionPlanCode;
   },
 ) {
   const item = stripeSubscription.items.data[0];
@@ -380,7 +385,7 @@ function validateCreatedSubscription(
     !item ||
     expandableId(stripeSubscription.customer) !== input.customerId ||
     stripeSubscription.metadata.proId !== input.proId ||
-    stripeSubscription.metadata.planCode !== PRO_SUBSCRIPTION_PLAN_CODE ||
+    stripeSubscription.metadata.planCode !== input.planCode ||
     stripeSubscription.trial_end !== input.trialEndUnix ||
     !["trialing", "active"].includes(stripeSubscription.status)
   ) {
@@ -419,6 +424,7 @@ async function processCompletedCheckout(
     proId,
     customerId,
     setupIntentId,
+    planCode: subscription.planCode,
   });
   await dependencies.setCustomerDefaultPaymentMethod({
     customerId,
@@ -468,11 +474,13 @@ async function processCompletedCheckout(
       proId,
       customerId,
       trialEndUnix,
+      planCode: subscription.planCode,
     })) ??
     (await dependencies.createMonthlyProSubscription({
       proId,
       customerId,
       trialEndUnix,
+      planCode: subscription.planCode,
       idempotencyKey: `pro-subscription:${proId}:lifetime`,
     }));
   const validatedSubscription = validateCreatedSubscription(
@@ -481,6 +489,7 @@ async function processCompletedCheckout(
       proId,
       customerId,
       trialEndUnix,
+      planCode: subscription.planCode,
     },
   );
   const subscriptionItem = validatedSubscription.item;
@@ -528,6 +537,7 @@ async function processCompletedPaidReactivationCheckout(
     proId: validated.proId,
     customerId: validated.customerId,
     subscriptionId: validated.newSubscriptionId,
+    expectedPlanCode: getProSubscriptionPlan(session.metadata?.planCode).code,
     expectedLivemode: validated.subscription.stripeLivemode,
     expectedNoTrial: true,
   });
@@ -547,8 +557,10 @@ async function processCompletedPaidReactivationCheckout(
   });
   if (
     invoice.status !== "paid" ||
-    invoice.amount_due !== PRO_SUBSCRIPTION_AMOUNT_MINOR ||
-    invoice.amount_paid !== PRO_SUBSCRIPTION_AMOUNT_MINOR ||
+    invoice.amount_due !==
+      getProSubscriptionPlan(session.metadata?.planCode).amountMinor ||
+    invoice.amount_paid !==
+      getProSubscriptionPlan(session.metadata?.planCode).amountMinor ||
     invoice.amount_remaining !== 0
   ) {
     processingError("reactivation_invoice_not_paid");
@@ -561,6 +573,7 @@ async function processCompletedPaidReactivationCheckout(
     : unixSecondsToIso(event.created, "invalid_event_created_at");
   const activated = await dependencies.activatePaidProSubscription({
     proId: validated.proId,
+    planCode: getProSubscriptionPlan(session.metadata?.planCode).code,
     stripeCustomerId: validated.customerId,
     previousStripeSubscriptionId: validated.previousSubscriptionId,
     reactivationCheckoutSessionId: session.id,
@@ -667,6 +680,7 @@ async function retrieveCanonicalLifecycleSubscription(
     customerId: local.stripeCustomerId,
     subscriptionId: local.stripeSubscriptionId,
     expectedPriceId: local.stripePriceId,
+    expectedPlanCode: local.planCode,
     ...(local.stripeSubscriptionHasTrial === false
       ? { expectedNoTrial: true }
       : { expectedTrialEndsAt: local.trialEndsAt }),
@@ -686,7 +700,7 @@ async function processSubscriptionLifecycleEvent(
   if (!local) {
     const proId = eventSubscription.metadata?.proId;
     if (
-      eventSubscription.metadata?.planCode === PRO_SUBSCRIPTION_PLAN_CODE &&
+      isProSubscriptionPlanCode(eventSubscription.metadata?.planCode) &&
       proId
     ) {
       const current = await dependencies.findProSubscription(proId);
@@ -787,8 +801,9 @@ async function processInvoiceLifecycleEvent(
   const subscriptionId = invoiceSubscriptionId(eventInvoice);
   if (!subscriptionId) {
     if (
-      eventInvoice.parent?.subscription_details?.metadata?.planCode ===
-        PRO_SUBSCRIPTION_PLAN_CODE &&
+      isProSubscriptionPlanCode(
+        eventInvoice.parent?.subscription_details?.metadata?.planCode,
+      ) &&
       eventInvoice.parent.subscription_details.metadata?.proId
     ) {
       processingError("invoice_subscription_missing");
@@ -806,8 +821,9 @@ async function processInvoiceLifecycleEvent(
   ) {
     const proId = eventInvoice.parent?.subscription_details?.metadata?.proId;
     if (
-      eventInvoice.parent?.subscription_details?.metadata?.planCode ===
-        PRO_SUBSCRIPTION_PLAN_CODE &&
+      isProSubscriptionPlanCode(
+        eventInvoice.parent?.subscription_details?.metadata?.planCode,
+      ) &&
       proId
     ) {
       const current = await dependencies.findProSubscription(proId);

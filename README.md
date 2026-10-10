@@ -204,9 +204,13 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 STRIPE_PRO_MONTHLY_PRICE_ID=price_...
 ```
 
-The monthly price must be a reusable HKD 100 recurring monthly Price. The
-three-calendar-month trial is granted by application policy when a pro first
-binds a card, not configured on the Stripe Price itself.
+Configure four reusable HKD recurring Prices: 100/249/449/699 dollars with
+`interval=month` and `interval_count=1/3/6/12`, respectively. The one-time
+14-day trial is granted after successful first card binding by application
+policy, not by the Price. Existing trial end dates and subscriptions remain
+unchanged. Additional Price IDs: `STRIPE_PRO_3_MONTHS_PRICE_ID`,
+`STRIPE_PRO_6_MONTHS_PRICE_ID`, `STRIPE_PRO_12_MONTHS_PRICE_ID`.
+Create sandbox Prices for DEV and separate live Prices before Production rollout.
 
 Twilio Verify is used for production signup phone verification. Use a
 Restricted API key with only `verification/create` and

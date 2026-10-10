@@ -113,7 +113,7 @@ export default async function HomePage() {
                     : "有新家居維修需求等緊你報價。"
                   : locale === "en"
                     ? "Keep existing jobs moving while you manage your plan."
-                    : "你可以繼續處理現有工作，同時管理月費。"
+                    : "你可以繼續處理現有工作，同時管理訂閱。"
                 : content.hero.title}
             </h1>
             <p className="max-w-2xl text-lg leading-8 text-muted sm:text-xl">
@@ -124,7 +124,7 @@ export default async function HomePage() {
                     : "首頁仍然可以睇品牌同客戶內容，但師傅登入後第一眼要有返工作入口，唔會離開咗工作台咁。"
                   : locale === "en"
                     ? "New-work actions are paused, but your existing jobs, records, profile, and billing remain available."
-                    : "新工作功能暫停期間，你仍可處理現有訂單、查看紀錄、更新檔案同管理月費。"
+                    : "新工作功能暫停期間，你仍可處理現有訂單、查看紀錄、更新檔案同管理訂閱。"
                 : content.hero.description}
             </p>
           </div>
@@ -166,7 +166,7 @@ export default async function HomePage() {
                     : "查看工作機會"
                   : locale === "en"
                     ? "Manage billing"
-                    : "管理月費"
+                    : "管理訂閱"
                 : locale === "en"
                   ? "Arrange a free quote"
                   : "免費安排報價"}

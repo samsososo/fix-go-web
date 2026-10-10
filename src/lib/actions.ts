@@ -55,6 +55,7 @@ import {
   signupSchema,
 } from "@/lib/validation";
 import {
+  expireOwnedProCheckout,
   createCardSetupCheckoutSession,
   createPaidProSubscriptionCheckoutSession,
   createProPaymentMethodPortalSession,
@@ -68,7 +69,11 @@ import {
   evaluateProSubscriptionEntitlement,
   isProNewWorkRestrictedError,
 } from "@/lib/pro-subscription-entitlement";
-import { hasConsumedLifetimeTrial } from "@/lib/subscription-policy";
+import {
+  getProSubscriptionPlan,
+  type ProSubscriptionPlanCode,
+  hasConsumedLifetimeTrial,
+} from "@/lib/subscription-policy";
 import {
   consumePendingSignupPhoneVerification,
   getVerifiedPendingSignupPhone,
@@ -105,6 +110,7 @@ function pendingCheckoutError(locale: string) {
 
 async function reusableCheckout(input: {
   proId: string;
+  planCode?: ProSubscriptionPlanCode;
   stripeCustomerId?: string;
   checkoutSessionId?: string;
   checkoutSessionExpiresAt?: string;
@@ -123,6 +129,7 @@ async function reusableCheckout(input: {
 
   const state = await inspectOwnedCardSetupCheckoutSession({
     proId: input.proId,
+    planCode: input.planCode,
     customerId: input.stripeCustomerId,
     checkoutSessionId: input.checkoutSessionId,
   });
@@ -139,6 +146,7 @@ async function reusableCheckout(input: {
 
 async function reusablePaidReactivationCheckout(input: {
   proId: string;
+  planCode?: ProSubscriptionPlanCode;
   stripeCustomerId?: string;
   previousStripeSubscriptionId?: string;
   checkoutSessionId?: string;
@@ -152,6 +160,7 @@ async function reusablePaidReactivationCheckout(input: {
   }
   const state = await inspectOwnedPaidProSubscriptionCheckoutSession({
     proId: input.proId,
+    planCode: input.planCode,
     customerId: input.stripeCustomerId,
     previousSubscriptionId: input.previousStripeSubscriptionId,
     checkoutSessionId: input.checkoutSessionId,
@@ -170,6 +179,7 @@ async function reusablePaidReactivationCheckout(input: {
 
 async function startPaidReactivationCheckout(input: {
   locale: "en" | "zh-HK";
+  planCode: ProSubscriptionPlanCode;
   proId: string;
   subscription: Awaited<ReturnType<typeof ensureProSubscription>>;
 }) {
@@ -187,9 +197,24 @@ async function startPaidReactivationCheckout(input: {
     stripeCustomerId: subscription.stripeCustomerId,
     previousStripeSubscriptionId: subscription.stripeSubscriptionId,
     checkoutSessionId: subscription.reactivationCheckoutSessionId,
+    planCode: subscription.reactivationPlanCode ?? subscription.planCode,
   });
   if (existingCheckout.status === "open") {
-    return { ok: true as const, url: existingCheckout.url };
+    if (
+      input.planCode ===
+      (subscription.reactivationPlanCode ?? subscription.planCode)
+    )
+      return { ok: true as const, url: existingCheckout.url };
+    await expireOwnedProCheckout({
+      proId,
+      customerId: subscription.stripeCustomerId,
+      checkoutSessionId: subscription.reactivationCheckoutSessionId!,
+      planCode: subscription.reactivationPlanCode ?? subscription.planCode,
+      previousSubscriptionId: subscription.stripeSubscriptionId,
+    });
+    await clearProSubscriptionReactivationCheckoutSession(
+      subscription.reactivationCheckoutSessionId!,
+    );
   }
   if (existingCheckout.status === "pending") {
     return { ok: false as const, error: pendingCheckoutError(locale) };
@@ -199,6 +224,7 @@ async function startPaidReactivationCheckout(input: {
   try {
     const reserved = await reserveProSubscriptionReactivationCheckout({
       proId,
+      planCode: input.planCode,
       reservationId,
       reservationExpiresAt: new Date(
         Date.now() + CHECKOUT_RESERVATION_MS,
@@ -212,9 +238,16 @@ async function startPaidReactivationCheckout(input: {
             stripeCustomerId: latest.stripeCustomerId,
             previousStripeSubscriptionId: latest.stripeSubscriptionId,
             checkoutSessionId: latest.reactivationCheckoutSessionId,
+            planCode: latest.reactivationPlanCode ?? latest.planCode,
           })
         : { status: "none" as const };
       if (concurrentCheckout.status === "open") {
+        if (
+          (latest?.reactivationPlanCode ?? latest?.planCode) !== input.planCode
+        )
+          throw new Error(
+            "Another checkout is being created for a different plan.",
+          );
         return { ok: true as const, url: concurrentCheckout.url };
       }
       if (concurrentCheckout.status === "pending") {
@@ -229,6 +262,7 @@ async function startPaidReactivationCheckout(input: {
     cancelUrl.searchParams.set("checkout", "cancelled");
     const checkout = await createPaidProSubscriptionCheckoutSession({
       proId,
+      planCode: input.planCode,
       customerId: subscription.stripeCustomerId,
       previousSubscriptionId: subscription.stripeSubscriptionId,
       successUrl: successUrl.toString(),
@@ -264,12 +298,14 @@ async function startPaidReactivationCheckout(input: {
 
 export async function startProSubscriptionCheckoutAction(input: {
   locale: string;
+  planCode?: ProSubscriptionPlanCode;
 }) {
   const locale = input.locale === "en" ? "en" : "zh-HK";
   const user = await requireRole("pro", locale);
   let reservationId: string | undefined;
 
   try {
+    const plan = getProSubscriptionPlan(input.planCode);
     let subscription = await ensureProSubscription(user.id);
     const currentStatus = evaluateProSubscriptionEntitlement(
       subscription,
@@ -285,6 +321,7 @@ export async function startProSubscriptionCheckoutAction(input: {
         locale,
         proId: user.id,
         subscription,
+        planCode: plan.code,
       });
     }
     if (
@@ -310,10 +347,21 @@ export async function startProSubscriptionCheckoutAction(input: {
       proId: user.id,
       stripeCustomerId: subscription.stripeCustomerId,
       checkoutSessionId: subscription.checkoutSessionId,
+      planCode: subscription.planCode,
       checkoutSessionExpiresAt: subscription.checkoutSessionExpiresAt,
     });
     if (existingCheckout.status === "open") {
-      return { ok: true as const, url: existingCheckout.url };
+      if (plan.code === subscription.planCode)
+        return { ok: true as const, url: existingCheckout.url };
+      await expireOwnedProCheckout({
+        proId: user.id,
+        customerId: subscription.stripeCustomerId!,
+        checkoutSessionId: subscription.checkoutSessionId!,
+        planCode: subscription.planCode,
+      });
+      await clearProSubscriptionCheckoutSession(
+        subscription.checkoutSessionId!,
+      );
     }
     if (existingCheckout.status === "pending") {
       return {
@@ -338,6 +386,7 @@ export async function startProSubscriptionCheckoutAction(input: {
     reservationId = randomUUID();
     const reserved = await reserveProSubscriptionCheckout({
       proId: user.id,
+      planCode: plan.code,
       reservationId,
       reservationExpiresAt: new Date(
         Date.now() + CHECKOUT_RESERVATION_MS,
@@ -351,10 +400,15 @@ export async function startProSubscriptionCheckoutAction(input: {
             proId: user.id,
             stripeCustomerId: latest.stripeCustomerId,
             checkoutSessionId: latest.checkoutSessionId,
+            planCode: latest.planCode,
             checkoutSessionExpiresAt: latest.checkoutSessionExpiresAt,
           })
         : { status: "none" as const };
       if (concurrentCheckout.status === "open") {
+        if (latest?.planCode !== plan.code)
+          throw new Error(
+            "Another checkout is being created for a different plan.",
+          );
         return { ok: true as const, url: concurrentCheckout.url };
       }
       if (concurrentCheckout.status === "pending") {
@@ -372,6 +426,7 @@ export async function startProSubscriptionCheckoutAction(input: {
     cancelUrl.searchParams.set("checkout", "cancelled");
     const checkout = await createCardSetupCheckoutSession({
       proId: user.id,
+      planCode: plan.code,
       customerId,
       successUrl: returnUrl.toString(),
       cancelUrl: cancelUrl.toString(),
@@ -518,6 +573,7 @@ export async function setProSubscriptionAutoRenewalAction(input: {
       customerId: identity.customerId,
       subscriptionId: identity.subscriptionId,
       expectedPriceId: identity.priceId,
+      expectedPlanCode: subscription.planCode,
       ...(subscription.stripeSubscriptionHasTrial === false
         ? { expectedNoTrial: true }
         : { expectedTrialEndsAt: subscription.trialEndsAt }),
@@ -1097,7 +1153,7 @@ export async function submitQuoteAction(input: {
         error:
           input.locale === "en"
             ? "New quotes are paused. Manage billing to restore new-work access."
-            : "新報價功能已暫停；請到月費頁處理並恢復新工作功能。",
+            : "新報價功能已暫停；請到訂閱頁處理並恢復新工作功能。",
       };
     }
     return {

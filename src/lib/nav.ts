@@ -52,7 +52,7 @@ export function getProNav(locale: string, current: string, leadCount?: number) {
     },
     {
       href: "/pro/billing",
-      label: locale === "en" ? "Billing" : "月費",
+      label: locale === "en" ? "Billing" : "訂閱",
       active: current === "billing",
     },
   ];

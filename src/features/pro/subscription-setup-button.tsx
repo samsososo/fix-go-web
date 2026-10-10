@@ -3,6 +3,13 @@
 import { CreditCard, LoaderCircle } from "lucide-react";
 import { useState, useTransition } from "react";
 
+import { SubscriptionPlanOptions } from "@/features/pro/subscription-plan-options";
+import {
+  getProSubscriptionPlan,
+  formatProSubscriptionPlan,
+  PRO_SUBSCRIPTION_PLAN_CODE,
+  type ProSubscriptionPlanCode,
+} from "@/lib/subscription-policy";
 import { Button } from "@/components/ui/button";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { startProSubscriptionCheckoutAction } from "@/lib/actions";
@@ -10,10 +17,19 @@ import { startProSubscriptionCheckoutAction } from "@/lib/actions";
 export function SubscriptionSetupButton({
   locale,
   mode = "setup",
+  initialPlanCode = PRO_SUBSCRIPTION_PLAN_CODE,
+  checkoutLocked = false,
 }: {
   locale: string;
   mode?: "setup" | "reactivate";
+  initialPlanCode?: ProSubscriptionPlanCode;
+  checkoutLocked?: boolean;
 }) {
+  const [planCode, setPlanCode] =
+    useState<ProSubscriptionPlanCode>(initialPlanCode);
+  const plan = getProSubscriptionPlan(planCode);
+  const price = plan.amountMinor / 100;
+  const billing = formatProSubscriptionPlan(planCode, locale);
   const isEnglish = locale === "en";
   const isReactivation = mode === "reactivate";
   const isHydrated = useHydrated();
@@ -22,6 +38,22 @@ export function SubscriptionSetupButton({
 
   return (
     <div className="space-y-3">
+      <fieldset>
+        <legend className="mb-3 font-semibold">
+          {isEnglish ? "Choose a subscription period" : "選擇訂閱期"}
+        </legend>
+        <SubscriptionPlanOptions
+          value={planCode}
+          onChange={setPlanCode}
+          disabled={isPending || checkoutLocked}
+          locale={locale}
+        />
+      </fieldset>
+      <p className="text-sm leading-6 text-muted">
+        {isEnglish
+          ? `${billing}, charged in full. Today: HK$${isReactivation ? price : 0}.`
+          : `${billing}，每期一次過收取全額。今日需付：HK$${isReactivation ? price : 0}。`}
+      </p>
       <Button
         type="button"
         className="w-full sm:w-auto"
@@ -34,6 +66,7 @@ export function SubscriptionSetupButton({
             try {
               const result = await startProSubscriptionCheckoutAction({
                 locale,
+                planCode,
               });
 
               if (!result.ok) {
@@ -68,21 +101,21 @@ export function SubscriptionSetupButton({
             : "正在開啟 Stripe…"
           : isEnglish
             ? isReactivation
-              ? "Re-subscribe for HK$100"
-              : "Set up card securely"
+              ? `Re-subscribe for HK$${price}`
+              : "Start your one-time 14-day trial"
             : isReactivation
-              ? "重新訂閱並支付 HK$100"
-              : "前往 Stripe 安全綁卡"}
+              ? `重新訂閱並支付 HK$${price}`
+              : "綁卡開始 14 日免費試用"}
       </Button>
 
       <p id="subscription-setup-note" className="text-xs leading-6 text-muted">
         {isEnglish
           ? isReactivation
-            ? "Stripe charges HK$100 now. Access returns only after payment is confirmed; the lifetime trial is not repeated."
-            : "No charge today. Your one-month free trial starts only after Stripe confirms your card setup."
+            ? `Stripe charges HK$${price} now, then ${billing}. Access returns after payment is confirmed; no second trial.`
+            : "No charge today. Your one-time 14-day free trial starts only after Stripe confirms your card setup."
           : isReactivation
-            ? "Stripe 會即時收取 HK$100；確認付款後先恢復功能，而且不會再次獲得免費試用。"
-            : "今日不會收費；Stripe 確認綁卡成功後，1 個月免費試用先會開始。"}
+            ? `Stripe 會即時收取 HK$${price}，之後${billing}自動續費；確認付款後恢復功能，不會再次獲得免費試用。`
+            : `今日不會收費；Stripe 確認綁卡成功後開始每人一次嘅 14 日免費試用。試用完結後${billing}自動收費。`}
       </p>
 
       {error ? (

@@ -2,7 +2,7 @@ export const PRO_SUBSCRIPTION_PLAN_CODE = "pro_monthly_v1" as const;
 export const PRO_SUBSCRIPTION_AMOUNT_MINOR = 10_000 as const;
 export const PRO_SUBSCRIPTION_CURRENCY = "hkd" as const;
 export const PRO_SUBSCRIPTION_INTERVAL = "month" as const;
-export const PRO_SUBSCRIPTION_TRIAL_MONTHS = 1 as const;
+export const PRO_SUBSCRIPTION_TRIAL_DAYS = 14 as const;
 export const PRO_SUBSCRIPTION_GRACE_PERIOD_DAYS = 14 as const;
 
 export const PRO_SUBSCRIPTION_PLAN = {
@@ -10,9 +10,57 @@ export const PRO_SUBSCRIPTION_PLAN = {
   amountMinor: PRO_SUBSCRIPTION_AMOUNT_MINOR,
   currency: PRO_SUBSCRIPTION_CURRENCY,
   interval: PRO_SUBSCRIPTION_INTERVAL,
-  trialMonths: PRO_SUBSCRIPTION_TRIAL_MONTHS,
+  trialDays: PRO_SUBSCRIPTION_TRIAL_DAYS,
   gracePeriodDays: PRO_SUBSCRIPTION_GRACE_PERIOD_DAYS,
 } as const;
+
+export const PRO_SUBSCRIPTION_PLANS = [
+  { ...PRO_SUBSCRIPTION_PLAN, intervalCount: 1 },
+  {
+    ...PRO_SUBSCRIPTION_PLAN,
+    code: "pro_3_months_v1",
+    amountMinor: 24_900,
+    intervalCount: 3,
+  },
+  {
+    ...PRO_SUBSCRIPTION_PLAN,
+    code: "pro_6_months_v1",
+    amountMinor: 44_900,
+    intervalCount: 6,
+  },
+  {
+    ...PRO_SUBSCRIPTION_PLAN,
+    code: "pro_12_months_v1",
+    amountMinor: 69_900,
+    intervalCount: 12,
+  },
+] as const;
+export type ProSubscriptionPlanCode =
+  (typeof PRO_SUBSCRIPTION_PLANS)[number]["code"];
+
+export function isProSubscriptionPlanCode(
+  value: unknown,
+): value is ProSubscriptionPlanCode {
+  return PRO_SUBSCRIPTION_PLANS.some((plan) => plan.code === value);
+}
+
+export function getProSubscriptionPlan(
+  code: unknown = PRO_SUBSCRIPTION_PLAN_CODE,
+) {
+  const plan = PRO_SUBSCRIPTION_PLANS.find((plan) => plan.code === code);
+  if (!plan) throw new TypeError("Invalid professional subscription plan.");
+  return plan;
+}
+
+export function formatProSubscriptionPlan(
+  code: ProSubscriptionPlanCode,
+  locale = "zh-HK",
+) {
+  const plan = getProSubscriptionPlan(code);
+  return locale === "en"
+    ? `HK$${plan.amountMinor / 100} every ${plan.intervalCount} month(s)`
+    : `每 ${plan.intervalCount} 個月 HK$${plan.amountMinor / 100}`;
+}
 
 export const subscriptionAccessStatuses = [
   "setup_required",
@@ -45,7 +93,9 @@ export type IsoDateTime = string;
  */
 export interface ProSubscription {
   proId: string;
-  planCode: typeof PRO_SUBSCRIPTION_PLAN_CODE;
+  planCode: ProSubscriptionPlanCode;
+  intervalCount?: number;
+  reactivationPlanCode?: ProSubscriptionPlanCode;
   amountMinor: number;
   currency: typeof PRO_SUBSCRIPTION_CURRENCY;
   interval: typeof PRO_SUBSCRIPTION_INTERVAL;
@@ -107,7 +157,6 @@ export interface LifetimeTrialWindow {
   trialEndsAt: IsoDateTime;
 }
 
-const HONG_KONG_UTC_OFFSET_MS = 8 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function parseIsoDateTime(value: IsoDateTime, fieldName: string) {
@@ -123,40 +172,11 @@ function toIsoDateTime(timestamp: number) {
   return new Date(timestamp).toISOString();
 }
 
-function daysInUtcMonth(year: number, zeroBasedMonth: number) {
-  return new Date(Date.UTC(year, zeroBasedMonth + 1, 0)).getUTCDate();
-}
-
-/**
- * Calculates the configured trial end while preserving the Hong Kong local
- * time. Dates that do not exist in the target month are clamped to its final
- * day (for example, 31 January becomes 28 February in a non-leap year).
- */
+/** New trials last exactly 336 hours; persisted trial dates are never recalculated. */
 export function calculateProTrialEndsAt(value: IsoDateTime): IsoDateTime {
-  const timestamp = parseIsoDateTime(value, "value");
-  const hongKongWallClock = new Date(timestamp + HONG_KONG_UTC_OFFSET_MS);
-  const sourceYear = hongKongWallClock.getUTCFullYear();
-  const sourceMonth = hongKongWallClock.getUTCMonth();
-  const sourceDay = hongKongWallClock.getUTCDate();
-  const absoluteTargetMonth =
-    sourceYear * 12 + sourceMonth + PRO_SUBSCRIPTION_TRIAL_MONTHS;
-  const targetYear = Math.floor(absoluteTargetMonth / 12);
-  const targetMonth = absoluteTargetMonth % 12;
-  const targetDay = Math.min(
-    sourceDay,
-    daysInUtcMonth(targetYear, targetMonth),
+  return toIsoDateTime(
+    parseIsoDateTime(value, "value") + PRO_SUBSCRIPTION_TRIAL_DAYS * DAY_MS,
   );
-  const targetHongKongWallClock = Date.UTC(
-    targetYear,
-    targetMonth,
-    targetDay,
-    hongKongWallClock.getUTCHours(),
-    hongKongWallClock.getUTCMinutes(),
-    hongKongWallClock.getUTCSeconds(),
-    hongKongWallClock.getUTCMilliseconds(),
-  );
-
-  return toIsoDateTime(targetHongKongWallClock - HONG_KONG_UTC_OFFSET_MS);
 }
 
 export function calculateGracePeriodEndsAt(

@@ -2,9 +2,10 @@ import Stripe from "stripe";
 
 import { env } from "@/lib/env";
 import {
-  PRO_SUBSCRIPTION_AMOUNT_MINOR,
+  getProSubscriptionPlan,
+  isProSubscriptionPlanCode,
+  type ProSubscriptionPlanCode,
   PRO_SUBSCRIPTION_CURRENCY,
-  PRO_SUBSCRIPTION_INTERVAL,
   PRO_SUBSCRIPTION_PLAN_CODE,
 } from "@/lib/subscription-policy";
 
@@ -27,6 +28,7 @@ export interface StripeClientOptions {
 export interface StripeBillingDependencies {
   stripe?: Stripe;
   monthlyPriceId?: string;
+  priceIds?: Partial<Record<ProSubscriptionPlanCode, string>>;
   webhookSecret?: string;
   nowUnix?: () => number;
 }
@@ -100,43 +102,57 @@ function resolveStripe(dependencies: StripeBillingDependencies) {
   return dependencies.stripe ?? getStripeClient();
 }
 
-function configuredMonthlyPriceId(dependencies: StripeBillingDependencies) {
+function configuredMonthlyPriceId(
+  dependencies: StripeBillingDependencies,
+  planCode: ProSubscriptionPlanCode = PRO_SUBSCRIPTION_PLAN_CODE,
+) {
+  getProSubscriptionPlan(planCode);
+  const ids = {
+    pro_monthly_v1:
+      dependencies.monthlyPriceId ?? env.STRIPE_PRO_MONTHLY_PRICE_ID,
+    pro_3_months_v1: env.STRIPE_PRO_3_MONTHS_PRICE_ID,
+    pro_6_months_v1: env.STRIPE_PRO_6_MONTHS_PRICE_ID,
+    pro_12_months_v1: env.STRIPE_PRO_12_MONTHS_PRICE_ID,
+  };
   return requireStripeId(
-    dependencies.monthlyPriceId ?? env.STRIPE_PRO_MONTHLY_PRICE_ID ?? "",
+    dependencies.priceIds?.[planCode] ?? ids[planCode] ?? "",
     "price_",
-    "STRIPE_PRO_MONTHLY_PRICE_ID",
+    `Stripe Price for ${planCode}`,
   );
 }
 
-function assertConfiguredMonthlyPrice(
+function assertHistoricalMonthlyPlanPrice(
   price: Stripe.Price,
-  monthlyPriceId: string,
+  planCode: ProSubscriptionPlanCode = PRO_SUBSCRIPTION_PLAN_CODE,
 ) {
+  const plan = getProSubscriptionPlan(planCode);
   if (
-    price.id !== monthlyPriceId ||
-    !price.active ||
     price.type !== "recurring" ||
-    price.currency !== PRO_SUBSCRIPTION_CURRENCY ||
-    price.unit_amount !== PRO_SUBSCRIPTION_AMOUNT_MINOR ||
-    price.recurring?.interval !== PRO_SUBSCRIPTION_INTERVAL ||
-    price.recurring.interval_count !== 1
+    price.currency !== plan.currency ||
+    price.unit_amount !== plan.amountMinor ||
+    price.recurring?.interval !== plan.interval ||
+    price.recurring.interval_count !== plan.intervalCount
   ) {
     throw new StripeBillingError(
-      "The configured Stripe Price does not match the HK$100 monthly plan.",
+      `The historical Stripe Price does not match the ${planCode === PRO_SUBSCRIPTION_PLAN_CODE ? "HK$100 monthly plan" : planCode}.`,
     );
   }
 }
 
-function assertHistoricalMonthlyPlanPrice(price: Stripe.Price) {
-  if (
-    price.type !== "recurring" ||
-    price.currency !== PRO_SUBSCRIPTION_CURRENCY ||
-    price.unit_amount !== PRO_SUBSCRIPTION_AMOUNT_MINOR ||
-    price.recurring?.interval !== PRO_SUBSCRIPTION_INTERVAL ||
-    price.recurring.interval_count !== 1
-  ) {
+function assertConfiguredMonthlyPrice(
+  price: Stripe.Price,
+  priceId: string,
+  planCode: ProSubscriptionPlanCode = PRO_SUBSCRIPTION_PLAN_CODE,
+) {
+  if (price.id !== priceId || !price.active)
     throw new StripeBillingError(
-      "The historical Stripe Price does not match the HK$100 monthly plan.",
+      "The configured Stripe Price is inactive or incorrect.",
+    );
+  try {
+    assertHistoricalMonthlyPlanPrice(price, planCode);
+  } catch {
+    throw new StripeBillingError(
+      `The configured Stripe Price does not match the ${planCode === PRO_SUBSCRIPTION_PLAN_CODE ? "HK$100 monthly plan" : planCode}.`,
     );
   }
 }
@@ -272,6 +288,7 @@ export function getOrCreateStripeCustomerForPro(
 }
 
 export interface CreateCardSetupCheckoutSessionInput {
+  planCode?: ProSubscriptionPlanCode;
   proId: string;
   customerId: string;
   successUrl: string;
@@ -283,7 +300,7 @@ export interface CreateCardSetupCheckoutSessionInput {
  * Creates a hosted, card-only setup flow. There are deliberately no amount,
  * price, mode, line-item or arbitrary metadata inputs on this boundary.
  */
-export function createCardSetupCheckoutSession(
+export async function createCardSetupCheckoutSession(
   input: CreateCardSetupCheckoutSessionInput,
   dependencies: StripeBillingDependencies = {},
 ) {
@@ -293,10 +310,16 @@ export function createCardSetupCheckoutSession(
   const successUrl = requireHttpUrl(input.successUrl, "successUrl");
   const cancelUrl = requireHttpUrl(input.cancelUrl, "cancelUrl");
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
+  const priceId = configuredMonthlyPriceId(dependencies, input.planCode);
+  assertConfiguredMonthlyPrice(
+    await stripe.prices.retrieve(priceId),
+    priceId,
+    input.planCode,
+  );
   const metadata = {
     proId,
     purpose: STRIPE_CARD_SETUP_PURPOSE,
-    planCode: PRO_SUBSCRIPTION_PLAN_CODE,
+    planCode: getProSubscriptionPlan(input.planCode).code,
   };
 
   return stripe.checkout.sessions.create(
@@ -315,6 +338,7 @@ export function createCardSetupCheckoutSession(
 }
 
 export interface CreatePaidProSubscriptionCheckoutSessionInput {
+  planCode?: ProSubscriptionPlanCode;
   proId: string;
   customerId: string;
   previousSubscriptionId: string;
@@ -327,12 +351,13 @@ export interface CreatePaidProSubscriptionCheckoutSessionInput {
 function paidReactivationMetadata(
   proId: string,
   previousSubscriptionId: string,
+  planCode: ProSubscriptionPlanCode = PRO_SUBSCRIPTION_PLAN_CODE,
 ) {
   return {
     proId,
     previousSubscriptionId,
     purpose: STRIPE_PAID_REACTIVATION_PURPOSE,
-    planCode: PRO_SUBSCRIPTION_PLAN_CODE,
+    planCode,
   };
 }
 
@@ -343,6 +368,7 @@ function assertPaidProCheckoutIdentity(
     customerId: string;
     previousSubscriptionId: string;
     expectedLivemode: boolean;
+    planCode?: ProSubscriptionPlanCode;
   },
 ) {
   if (
@@ -351,7 +377,8 @@ function assertPaidProCheckoutIdentity(
     session.metadata?.proId !== input.proId ||
     session.metadata?.previousSubscriptionId !== input.previousSubscriptionId ||
     session.metadata?.purpose !== STRIPE_PAID_REACTIVATION_PURPOSE ||
-    session.metadata?.planCode !== PRO_SUBSCRIPTION_PLAN_CODE ||
+    session.metadata?.planCode !==
+      getProSubscriptionPlan(input.planCode).code ||
     expandableId(session.customer) !== input.customerId ||
     session.livemode !== input.expectedLivemode ||
     session.currency !== PRO_SUBSCRIPTION_CURRENCY ||
@@ -410,7 +437,7 @@ export async function createPaidProSubscriptionCheckoutSession(
   const successUrl = requireHttpUrl(input.successUrl, "successUrl");
   const cancelUrl = requireHttpUrl(input.cancelUrl, "cancelUrl");
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
-  const monthlyPriceId = configuredMonthlyPriceId(dependencies);
+  const monthlyPriceId = configuredMonthlyPriceId(dependencies, input.planCode);
   const [customer, price, previous] = await Promise.all([
     retrieveStripeCustomerForPro({ proId, customerId }, dependencies),
     stripe.prices.retrieve(monthlyPriceId),
@@ -424,7 +451,7 @@ export async function createPaidProSubscriptionCheckoutSession(
       dependencies,
     ),
   ]);
-  assertConfiguredMonthlyPrice(price, monthlyPriceId);
+  assertConfiguredMonthlyPrice(price, monthlyPriceId, input.planCode);
   const expectedLivemode = previous.subscription.livemode;
   if (
     customer.metadata.accountType !== "pro" ||
@@ -436,7 +463,11 @@ export async function createPaidProSubscriptionCheckoutSession(
     );
   }
 
-  const metadata = paidReactivationMetadata(proId, previousSubscriptionId);
+  const metadata = paidReactivationMetadata(
+    proId,
+    previousSubscriptionId,
+    input.planCode,
+  );
   const session = await stripe.checkout.sessions.create(
     {
       mode: "subscription",
@@ -457,6 +488,7 @@ export async function createPaidProSubscriptionCheckoutSession(
     customerId,
     previousSubscriptionId,
     expectedLivemode,
+    planCode: input.planCode,
   });
   if (session.status !== "open" || !session.url) {
     throw new StripeBillingError(
@@ -468,6 +500,7 @@ export async function createPaidProSubscriptionCheckoutSession(
 }
 
 export interface InspectOwnedPaidProSubscriptionCheckoutSessionInput {
+  planCode?: ProSubscriptionPlanCode;
   proId: string;
   customerId: string;
   previousSubscriptionId: string;
@@ -496,7 +529,7 @@ export async function inspectOwnedPaidProSubscriptionCheckoutSession(
     "sub_",
     "previousSubscriptionId",
   );
-  const monthlyPriceId = configuredMonthlyPriceId(dependencies);
+  const monthlyPriceId = configuredMonthlyPriceId(dependencies, input.planCode);
   const [session, previous] = await Promise.all([
     stripe.checkout.sessions.retrieve(checkoutSessionId, {
       expand: ["line_items.data.price"],
@@ -517,6 +550,7 @@ export async function inspectOwnedPaidProSubscriptionCheckoutSession(
     customerId,
     previousSubscriptionId,
     expectedLivemode,
+    planCode: input.planCode,
   });
 
   const lineItem = session.line_items?.data[0];
@@ -527,19 +561,23 @@ export async function inspectOwnedPaidProSubscriptionCheckoutSession(
     !price ||
     lineItem.quantity !== 1 ||
     lineItem.currency !== PRO_SUBSCRIPTION_CURRENCY ||
-    lineItem.amount_subtotal !== PRO_SUBSCRIPTION_AMOUNT_MINOR ||
-    lineItem.amount_total !== PRO_SUBSCRIPTION_AMOUNT_MINOR ||
+    lineItem.amount_subtotal !==
+      getProSubscriptionPlan(input.planCode).amountMinor ||
+    lineItem.amount_total !==
+      getProSubscriptionPlan(input.planCode).amountMinor ||
     lineItem.amount_discount !== 0 ||
     lineItem.amount_tax !== 0 ||
-    session.amount_subtotal !== PRO_SUBSCRIPTION_AMOUNT_MINOR ||
-    session.amount_total !== PRO_SUBSCRIPTION_AMOUNT_MINOR ||
+    session.amount_subtotal !==
+      getProSubscriptionPlan(input.planCode).amountMinor ||
+    session.amount_total !==
+      getProSubscriptionPlan(input.planCode).amountMinor ||
     price.livemode !== expectedLivemode
   ) {
     throw new StripeBillingError(
-      "The Stripe Checkout line item does not match the HK$100 monthly plan.",
+      "The Stripe Checkout line item does not match the selected package.",
     );
   }
-  assertConfiguredMonthlyPrice(price, monthlyPriceId);
+  assertConfiguredMonthlyPrice(price, monthlyPriceId, input.planCode);
 
   const nowUnix = dependencies.nowUnix?.() ?? Date.now() / 1_000;
   if (!Number.isFinite(nowUnix)) {
@@ -584,6 +622,7 @@ export async function inspectOwnedPaidProSubscriptionCheckoutSession(
       customerId,
       subscriptionId: stripeSubscriptionId,
       expectedPriceId: monthlyPriceId,
+      expectedPlanCode: input.planCode,
       expectedLivemode,
       expectedNoTrial: true,
     },
@@ -597,6 +636,7 @@ export async function inspectOwnedPaidProSubscriptionCheckoutSession(
 }
 
 export interface RetrieveOpenCardSetupCheckoutSessionInput {
+  planCode?: ProSubscriptionPlanCode;
   proId: string;
   customerId: string;
   checkoutSessionId: string;
@@ -626,7 +666,7 @@ export async function inspectOwnedCardSetupCheckoutSession(
     session.client_reference_id !== proId ||
     session.metadata?.proId !== proId ||
     session.metadata?.purpose !== STRIPE_CARD_SETUP_PURPOSE ||
-    session.metadata?.planCode !== PRO_SUBSCRIPTION_PLAN_CODE
+    session.metadata?.planCode !== getProSubscriptionPlan(input.planCode).code
   ) {
     throw new StripeBillingError(
       "The Stripe Checkout Session does not belong to this card setup flow.",
@@ -683,6 +723,30 @@ export async function retrieveOpenCardSetupCheckoutSession(
   return state.session;
 }
 
+/** Replacing an uncompleted checkout must expire it remotely before changing the local package. */
+export async function expireOwnedProCheckout(
+  input: {
+    proId: string;
+    customerId: string;
+    checkoutSessionId: string;
+    planCode: ProSubscriptionPlanCode;
+    previousSubscriptionId?: string;
+  },
+  dependencies: StripeBillingDependencies = {},
+) {
+  const state = input.previousSubscriptionId
+    ? await inspectOwnedPaidProSubscriptionCheckoutSession(
+        { ...input, previousSubscriptionId: input.previousSubscriptionId },
+        dependencies,
+      )
+    : await inspectOwnedCardSetupCheckoutSession(input, dependencies);
+  if (state.status !== "open")
+    throw new StripeBillingError("Only an open checkout can be replaced.");
+  return resolveStripe(dependencies).checkout.sessions.expire(
+    input.checkoutSessionId,
+  );
+}
+
 export interface VerifyStripeWebhookEventInput {
   rawBody: string | Uint8Array;
   signature: string;
@@ -704,6 +768,7 @@ export function verifyStripeWebhookEvent(
 }
 
 export interface RetrieveSucceededCardSetupInput {
+  planCode?: ProSubscriptionPlanCode;
   proId: string;
   customerId: string;
   setupIntentId: string;
@@ -744,7 +809,8 @@ export async function retrieveSucceededCardSetup(
   if (
     setupIntent.metadata?.proId !== proId ||
     setupIntent.metadata?.purpose !== STRIPE_CARD_SETUP_PURPOSE ||
-    setupIntent.metadata?.planCode !== PRO_SUBSCRIPTION_PLAN_CODE
+    setupIntent.metadata?.planCode !==
+      getProSubscriptionPlan(input.planCode).code
   ) {
     throw new StripeBillingError(
       "The Stripe SetupIntent does not belong to this professional account.",
@@ -807,6 +873,7 @@ export function setCustomerDefaultPaymentMethod(
 }
 
 export interface CreateMonthlyProSubscriptionInput {
+  planCode?: ProSubscriptionPlanCode;
   proId: string;
   customerId: string;
   trialEndUnix: number;
@@ -814,6 +881,7 @@ export interface CreateMonthlyProSubscriptionInput {
 }
 
 export interface FindExistingMonthlyProSubscriptionInput {
+  planCode?: ProSubscriptionPlanCode;
   proId: string;
   customerId: string;
   trialEndUnix: number;
@@ -831,7 +899,7 @@ export async function findExistingMonthlyProSubscription(
   const stripe = resolveStripe(dependencies);
   const proId = requireNonEmpty(input.proId, "proId");
   const customerId = requireStripeId(input.customerId, "cus_", "customerId");
-  const monthlyPriceId = configuredMonthlyPriceId(dependencies);
+  const monthlyPriceId = configuredMonthlyPriceId(dependencies, input.planCode);
   if (!Number.isSafeInteger(input.trialEndUnix) || input.trialEndUnix <= 0) {
     throw new StripeBillingError(
       "trialEndUnix must be a positive Unix timestamp in whole seconds.",
@@ -854,7 +922,7 @@ export async function findExistingMonthlyProSubscription(
         (subscription) =>
           expandableId(subscription.customer) === customerId &&
           subscription.metadata.proId === proId &&
-          subscription.metadata.planCode === PRO_SUBSCRIPTION_PLAN_CODE,
+          isProSubscriptionPlanCode(subscription.metadata.planCode),
       ),
     );
 
@@ -887,19 +955,21 @@ export async function findExistingMonthlyProSubscription(
     !["trialing", "active"].includes(subscription.status) ||
     item.quantity !== 1 ||
     subscription.collection_method !== "charge_automatically" ||
-    subscription.trial_end !== input.trialEndUnix
+    subscription.trial_end !== input.trialEndUnix ||
+    subscription.metadata.planCode !==
+      getProSubscriptionPlan(input.planCode).code
   ) {
     throw new StripeBillingError(
       "The existing Stripe subscription does not match the expected trial.",
     );
   }
-  assertConfiguredMonthlyPrice(item.price, monthlyPriceId);
+  assertConfiguredMonthlyPrice(item.price, monthlyPriceId, input.planCode);
 
   return subscription;
 }
 
 /**
- * Creates the single configured monthly plan. The saved Customer invoice
+ * Creates the selected server-configured package. The saved Customer invoice
  * default is intentionally used; no subscription-level payment method can be
  * supplied by a caller.
  */
@@ -910,7 +980,7 @@ export async function createMonthlyProSubscription(
   const stripe = resolveStripe(dependencies);
   const proId = requireNonEmpty(input.proId, "proId");
   const customerId = requireStripeId(input.customerId, "cus_", "customerId");
-  const monthlyPriceId = configuredMonthlyPriceId(dependencies);
+  const monthlyPriceId = configuredMonthlyPriceId(dependencies, input.planCode);
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
 
   if (!Number.isSafeInteger(input.trialEndUnix) || input.trialEndUnix <= 0) {
@@ -920,7 +990,7 @@ export async function createMonthlyProSubscription(
   }
 
   const price = await stripe.prices.retrieve(monthlyPriceId);
-  assertConfiguredMonthlyPrice(price, monthlyPriceId);
+  assertConfiguredMonthlyPrice(price, monthlyPriceId, input.planCode);
 
   return stripe.subscriptions.create(
     {
@@ -935,7 +1005,7 @@ export async function createMonthlyProSubscription(
       },
       metadata: {
         proId,
-        planCode: PRO_SUBSCRIPTION_PLAN_CODE,
+        planCode: getProSubscriptionPlan(input.planCode).code,
       },
     },
     { idempotencyKey },
@@ -943,6 +1013,7 @@ export async function createMonthlyProSubscription(
 }
 
 export interface RetrieveOwnedMonthlyProSubscriptionInput {
+  expectedPlanCode?: ProSubscriptionPlanCode;
   proId: string;
   customerId: string;
   subscriptionId: string;
@@ -977,7 +1048,7 @@ function assertOwnedMonthlyProSubscription(
   input: RetrieveOwnedMonthlyProSubscriptionInput,
   dependencies: StripeBillingDependencies,
 ) {
-  const monthlyPriceId = configuredMonthlyPriceId(dependencies);
+  const plan = getProSubscriptionPlan(subscription.metadata.planCode);
   const item = subscription.items.data[0];
   const trialEndUnix = expectedTrialEndUnix(input.expectedTrialEndsAt);
 
@@ -985,7 +1056,8 @@ function assertOwnedMonthlyProSubscription(
     subscription.id !== input.subscriptionId ||
     expandableId(subscription.customer) !== input.customerId ||
     subscription.metadata.proId !== input.proId ||
-    subscription.metadata.planCode !== PRO_SUBSCRIPTION_PLAN_CODE ||
+    (input.expectedPlanCode !== undefined &&
+      plan.code !== input.expectedPlanCode) ||
     subscription.collection_method !== "charge_automatically" ||
     subscription.currency !== PRO_SUBSCRIPTION_CURRENCY ||
     subscription.items.data.length !== 1 ||
@@ -1006,9 +1078,13 @@ function assertOwnedMonthlyProSubscription(
   }
 
   if (input.allowHistoricalPriceId) {
-    assertHistoricalMonthlyPlanPrice(item.price);
+    assertHistoricalMonthlyPlanPrice(item.price, plan.code);
   } else {
-    assertConfiguredMonthlyPrice(item.price, monthlyPriceId);
+    assertConfiguredMonthlyPrice(
+      item.price,
+      configuredMonthlyPriceId(dependencies, plan.code),
+      plan.code,
+    );
   }
   assertUnixTimestamp(item.current_period_start, "current period start");
   assertUnixTimestamp(item.current_period_end, "current period end");
@@ -1158,8 +1234,9 @@ function assertOwnedProSubscriptionInvoice(
     expandableId(invoice.customer) !== input.customerId ||
     invoiceSubscriptionId(invoice) !== input.subscriptionId ||
     invoice.parent?.subscription_details?.metadata?.proId !== input.proId ||
-    invoice.parent.subscription_details.metadata?.planCode !==
-      PRO_SUBSCRIPTION_PLAN_CODE ||
+    !isProSubscriptionPlanCode(
+      invoice.parent.subscription_details.metadata?.planCode,
+    ) ||
     invoice.collection_method !== "charge_automatically" ||
     invoice.currency !== PRO_SUBSCRIPTION_CURRENCY ||
     (input.expectedLivemode !== undefined &&

@@ -15,6 +15,7 @@ import {
 import { SubscriptionSetupButton } from "@/features/pro/subscription-setup-button";
 import { evaluateProSubscriptionEntitlement } from "@/lib/pro-subscription-entitlement";
 import {
+  formatProSubscriptionPlan,
   hasConsumedLifetimeTrial,
   type ProSubscription,
   type SubscriptionAccessStatus,
@@ -37,7 +38,7 @@ function statusTitle(status: SubscriptionAccessStatus, isEnglish: boolean) {
   const labels = {
     setup_required: isEnglish ? "Card setup required" : "尚未綁定付款卡",
     trialing: isEnglish ? "Free trial active" : "免費試用中",
-    active: isEnglish ? "Subscription active" : "月費訂閱已生效",
+    active: isEnglish ? "Subscription active" : "訂閱已生效",
     grace_period: isEnglish ? "Payment overdue" : "付款逾期寬限期",
     cancel_at_period_end: isEnglish
       ? "Cancellation scheduled"
@@ -70,6 +71,7 @@ export function SubscriptionStatusCard({
   subscription: ProSubscription;
   checkoutPending?: boolean;
 }) {
+  const billing = formatProSubscriptionPlan(subscription.planCode, locale);
   const isEnglish = locale === "en";
   const status = evaluateProSubscriptionEntitlement(
     subscription,
@@ -104,34 +106,34 @@ export function SubscriptionStatusCard({
   const description = activationPending
     ? isEnglish
       ? "Your card is confirmed. Stripe is finishing the monthly plan setup; no second card setup is needed."
-      : "付款卡已確認，Stripe 正在完成月費計劃設定，唔需要再次綁卡。"
+      : "付款卡已確認，Stripe 正在完成訂閱計劃設定，唔需要再次綁卡。"
     : needsSetup
       ? isEnglish
-        ? "Add a card through Stripe to begin your one-time, one-month free trial."
-        : "透過 Stripe 綁定付款卡，即可開始每位師傅一生一次、為期 1 個月嘅免費試用。"
+        ? "Add a card through Stripe to begin your one-time, 14-day free trial."
+        : "透過 Stripe 綁定付款卡，即可開始每位師傅一生一次、為期 14 日嘅免費試用。"
       : status === "trialing"
         ? isEnglish
-          ? `Your free trial ends on ${formatHongKongDate(subscription.trialEndsAt, locale)}. The first HK$100 monthly charge is due after the trial.`
-          : `免費試用期至 ${formatHongKongDate(subscription.trialEndsAt, locale)}；試用完結後先會開始每月收取 HK$100。`
+          ? `Your free trial ends on ${formatHongKongDate(subscription.trialEndsAt, locale)}. The first full package charge is due after the trial.`
+          : `免費試用期至 ${formatHongKongDate(subscription.trialEndsAt, locale)}；試用完結後按所選套餐${billing}收費。`
         : status === "active"
           ? isEnglish
-            ? `Your HK$100 monthly subscription is active. The current period runs until ${formatHongKongDate(subscription.currentPeriodEndsAt, locale)}.`
-            : `每月 HK$100 訂閱現正生效，本期使用權至 ${formatHongKongDate(subscription.currentPeriodEndsAt, locale)}。`
+            ? `Your ${billing} subscription is active. The current period runs until ${formatHongKongDate(subscription.currentPeriodEndsAt, locale)}.`
+            : `${billing}訂閱現正生效，本期使用權至 ${formatHongKongDate(subscription.currentPeriodEndsAt, locale)}。`
           : status === "grace_period"
             ? isEnglish
               ? `Stripe could not collect your monthly fee. Access remains available until ${formatHongKongDate(subscription.gracePeriodEndsAt, locale)}; update your card and retry payment before then.`
-              : `Stripe 未能收取月費；使用權會保留至 ${formatHongKongDate(subscription.gracePeriodEndsAt, locale)}，請喺限期前更新付款卡並重新繳款。`
+              : `Stripe 未能收取套餐費；使用權會保留至 ${formatHongKongDate(subscription.gracePeriodEndsAt, locale)}，請喺限期前更新付款卡並重新繳款。`
             : status === "cancel_at_period_end"
               ? isEnglish
                 ? `Automatic renewal is off. You retain access until ${formatHongKongDate(accessEndsAt, locale)} and no prorated refund is issued for a paid period.`
-                : `自動續訂已關閉；你可繼續使用至 ${formatHongKongDate(accessEndsAt, locale)}，已收取嘅當期月費不作按比例退款。`
+                : `自動續訂已關閉；你可繼續使用至 ${formatHongKongDate(accessEndsAt, locale)}，已收取嘅當期套餐費不作按比例退款。`
               : status === "suspended"
                 ? isEnglish
                   ? "New-work features are suspended. You can still sign in, manage existing work and billing; update your card and settle any outstanding invoice to restore access."
                   : "新工作功能已暫停；你仍可登入、處理現有工作及付款設定。請更新付款卡並繳清欠款以恢復功能。"
                 : isEnglish
-                  ? "This subscription has ended. You can still sign in and view existing records, or re-subscribe for HK$100 with no second trial."
-                  : "呢個訂閱已經終止；你仍可登入及查看現有紀錄，亦可支付 HK$100 重新訂閱，但不會再有免費期。";
+                  ? "This subscription has ended. You can still sign in and view existing records, or select a package to re-subscribe with no second trial."
+                  : "呢個訂閱已經終止；你仍可登入及查看現有紀錄，亦可選擇套餐重新訂閱，但不會再有免費期。";
 
   const sideLabel = activationPending
     ? isEnglish
@@ -218,11 +220,20 @@ export function SubscriptionStatusCard({
           </p>
 
           {needsSetup && !checkoutPending ? (
-            <SubscriptionSetupButton locale={locale} />
+            <SubscriptionSetupButton
+              locale={locale}
+              initialPlanCode={subscription.planCode}
+            />
           ) : null}
 
           {canReactivate && !checkoutPending ? (
-            <SubscriptionSetupButton locale={locale} mode="reactivate" />
+            <SubscriptionSetupButton
+              locale={locale}
+              mode="reactivate"
+              initialPlanCode={
+                subscription.reactivationPlanCode ?? subscription.planCode
+              }
+            />
           ) : null}
 
           {subscription.stripeSubscriptionId &&

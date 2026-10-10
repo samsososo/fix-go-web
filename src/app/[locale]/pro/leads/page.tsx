@@ -254,7 +254,7 @@ export default async function ProLeadsPage({
                     : "可以試下其他專長分類，或稍後再睇客戶新增嘅工作。"
                   : locale === "en"
                     ? "Existing jobs and billing remain available from the pro workspace."
-                    : "你仍可喺師傅工作台處理現有訂單同管理月費。"
+                    : "你仍可喺師傅工作台處理現有訂單同管理訂閱。"
             }
           />
         )}

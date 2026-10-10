@@ -18,6 +18,8 @@ import {
   type SmsVerificationConfigState,
 } from "@/lib/sms-verification-config";
 import {
+  getProSubscriptionPlan,
+  type ProSubscriptionPlanCode,
   PRO_SUBSCRIPTION_AMOUNT_MINOR,
   PRO_SUBSCRIPTION_CURRENCY,
   PRO_SUBSCRIPTION_INTERVAL,
@@ -1415,9 +1417,11 @@ export async function listMongoProSubscriptions() {
 
 export async function reserveMongoProSubscriptionCheckout(input: {
   proId: string;
+  planCode?: ProSubscriptionPlanCode;
   reservationId: string;
   reservationExpiresAt: string;
 }) {
+  const plan = getProSubscriptionPlan(input.planCode);
   const expiresAt = new Date(input.reservationExpiresAt);
   if (!Number.isFinite(expiresAt.getTime()) || expiresAt <= new Date()) {
     throw new TypeError("Checkout reservation expiry must be in the future.");
@@ -1448,6 +1452,9 @@ export async function reserveMongoProSubscriptionCheckout(input: {
         $set: {
           checkoutReservationId: input.reservationId,
           checkoutReservationExpiresAt: expiresAt.toISOString(),
+          planCode: plan.code,
+          amountMinor: plan.amountMinor,
+          intervalCount: plan.intervalCount,
           updatedAt: now,
         },
       },
@@ -1589,9 +1596,11 @@ export async function clearMongoProSubscriptionCheckoutSession(
 
 export async function reserveMongoProSubscriptionReactivationCheckout(input: {
   proId: string;
+  planCode?: ProSubscriptionPlanCode;
   reservationId: string;
   reservationExpiresAt: string;
 }) {
+  const plan = getProSubscriptionPlan(input.planCode);
   const expiresAt = new Date(input.reservationExpiresAt);
   if (!Number.isFinite(expiresAt.getTime()) || expiresAt <= new Date()) {
     throw new TypeError(
@@ -1623,6 +1632,7 @@ export async function reserveMongoProSubscriptionReactivationCheckout(input: {
         $set: {
           reactivationCheckoutReservationId: input.reservationId,
           reactivationCheckoutReservationExpiresAt: expiresAt.toISOString(),
+          reactivationPlanCode: plan.code,
           updatedAt: now,
         },
       },
@@ -1743,15 +1753,27 @@ export async function consumeMongoProLifetimeTrial(input: {
     throw new TypeError("Card binding time must be a valid date-time.");
   }
   const normalizedCardBoundAt = cardBoundAt.toISOString();
-  const expectedTrialEndsAt = calculateProTrialEndsAt(normalizedCardBoundAt);
-  if (new Date(input.trialEndsAt).toISOString() !== expectedTrialEndsAt) {
-    throw new Error(
-      "Trial end must match the one-month Hong Kong trial policy.",
-    );
-  }
-
   const db = await getMongoDb();
   const collection = db.collection<ProSubscriptionDoc>("proSubscriptions");
+  const recorded = await collection.findOne({ _id: input.proId });
+  if (recorded?.trialConsumedAt) {
+    if (
+      !recorded.trialEndsAt ||
+      recorded.checkoutSessionId !== input.checkoutSessionId ||
+      recorded.stripeCustomerId !== input.stripeCustomerId ||
+      recorded.stripeSetupIntentId !== input.stripeSetupIntentId ||
+      recorded.stripePaymentMethodId !== input.stripePaymentMethodId
+    )
+      throw new Error("The checkout session does not match this subscription.");
+    return {
+      status: "existing",
+      subscription: stripMongoId<ProSubscription>(recorded),
+    };
+  }
+  const expectedTrialEndsAt = calculateProTrialEndsAt(normalizedCardBoundAt);
+  if (new Date(input.trialEndsAt).toISOString() !== expectedTrialEndsAt)
+    throw new Error("Trial end must match the 14-day trial policy.");
+
   const subscription = await collection.findOneAndUpdate(
     {
       _id: input.proId,
@@ -1874,6 +1896,7 @@ export async function activateMongoProTrialSubscription(input: {
 
 export async function activateMongoPaidProSubscription(input: {
   proId: string;
+  planCode?: ProSubscriptionPlanCode;
   stripeCustomerId: string;
   previousStripeSubscriptionId: string;
   reactivationCheckoutSessionId: string;
@@ -1888,6 +1911,7 @@ export async function activateMongoPaidProSubscription(input: {
   lastStripeEventCreatedAt: string;
   lastStripeSyncedAt: string;
 }) {
+  const plan = getProSubscriptionPlan(input.planCode);
   const currentPeriodStartedAt = normalizedIso(
     input.currentPeriodStartedAt,
     "Current period start",
@@ -1927,6 +1951,9 @@ export async function activateMongoPaidProSubscription(input: {
         $set: {
           stripeSubscriptionId: input.stripeSubscriptionId,
           stripePriceId: input.stripePriceId,
+          planCode: plan.code,
+          amountMinor: plan.amountMinor,
+          intervalCount: plan.intervalCount,
           stripeStatus: "active",
           stripeLivemode: input.stripeLivemode,
           stripeSubscriptionHasTrial: false,
@@ -1948,6 +1975,7 @@ export async function activateMongoPaidProSubscription(input: {
           firstPaymentFailedAt: "",
           paymentFailureConfirmed: "",
           gracePeriodEndsAt: "",
+          reactivationPlanCode: "",
           reactivationCheckoutSessionId: "",
           reactivationCheckoutSessionExpiresAt: "",
           reactivationCheckoutReservationId: "",
