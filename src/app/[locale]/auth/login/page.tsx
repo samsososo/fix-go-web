@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getLocale } from "next-intl/server";
 
 import { Link } from "@/i18n/navigation";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { LoginForm } from "@/features/auth/login-form";
 import { createPageMetadata } from "@/lib/seo";
@@ -66,17 +67,20 @@ export default async function LoginPage() {
                   ? "Use your email or Hong Kong phone number together with your password."
                   : "請使用你的電郵或香港電話號碼配合密碼登入。"}
               </p>
-              <p className="mt-2 text-sm text-muted">
-                <Link
-                  href="/auth"
-                  locale={locale}
-                  className="font-semibold text-primary"
-                >
-                  {locale === "en" ? "Log in or sign up" : "登入及註冊介紹"}
-                </Link>
-              </p>
             </div>
             <LoginForm locale={locale} />
+            <div className="space-y-3 border-t border-line/70 pt-5 text-center">
+              <p className="text-sm text-muted">
+                {locale === "en" ? "Don't have an account?" : "未有帳戶？"}
+              </p>
+              <Link
+                href="/auth/signup"
+                locale={locale}
+                className={`${buttonVariants({ variant: "outline" })} w-full`}
+              >
+                {locale === "en" ? "Create an account" : "註冊帳戶"}
+              </Link>
+            </div>
           </CardContent>
         </Card>
       </div>
