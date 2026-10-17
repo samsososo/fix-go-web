@@ -1,55 +1,132 @@
-export const PRO_SUBSCRIPTION_PLAN_CODE = "pro_monthly_v1" as const;
-export const PRO_SUBSCRIPTION_AMOUNT_MINOR = 10_000 as const;
+export const PRO_SUBSCRIPTION_PLAN_CODE = "pro_monthly_v2" as const;
+export const PRO_SUBSCRIPTION_AMOUNT_MINOR = 20_000 as const;
 export const PRO_SUBSCRIPTION_CURRENCY = "hkd" as const;
 export const PRO_SUBSCRIPTION_INTERVAL = "month" as const;
 export const PRO_SUBSCRIPTION_TRIAL_DAYS = 14 as const;
 export const PRO_SUBSCRIPTION_GRACE_PERIOD_DAYS = 14 as const;
 
-export const PRO_SUBSCRIPTION_PLAN = {
-  code: PRO_SUBSCRIPTION_PLAN_CODE,
-  amountMinor: PRO_SUBSCRIPTION_AMOUNT_MINOR,
+const PRO_SUBSCRIPTION_PLAN_BASE = {
   currency: PRO_SUBSCRIPTION_CURRENCY,
   interval: PRO_SUBSCRIPTION_INTERVAL,
   trialDays: PRO_SUBSCRIPTION_TRIAL_DAYS,
   gracePeriodDays: PRO_SUBSCRIPTION_GRACE_PERIOD_DAYS,
 } as const;
 
+export const PRO_SUBSCRIPTION_PLAN = {
+  ...PRO_SUBSCRIPTION_PLAN_BASE,
+  code: PRO_SUBSCRIPTION_PLAN_CODE,
+  amountMinor: PRO_SUBSCRIPTION_AMOUNT_MINOR,
+} as const;
+
+/**
+ * Packages offered to new checkouts. Historical packages deliberately stay
+ * out of this list so UI callers cannot accidentally sell a retired price.
+ */
 export const PRO_SUBSCRIPTION_PLANS = [
   { ...PRO_SUBSCRIPTION_PLAN, intervalCount: 1 },
   {
     ...PRO_SUBSCRIPTION_PLAN,
+    code: "pro_3_months_v2",
+    amountMinor: 49_800,
+    intervalCount: 3,
+  },
+  {
+    ...PRO_SUBSCRIPTION_PLAN,
+    code: "pro_6_months_v2",
+    amountMinor: 89_800,
+    intervalCount: 6,
+  },
+  {
+    ...PRO_SUBSCRIPTION_PLAN,
+    code: "pro_12_months_v2",
+    amountMinor: 139_800,
+    intervalCount: 12,
+  },
+] as const;
+
+/** Retired packages retained for existing subscription lifecycle handling. */
+export const HISTORICAL_PRO_SUBSCRIPTION_PLANS = [
+  {
+    ...PRO_SUBSCRIPTION_PLAN_BASE,
+    code: "pro_monthly_v1",
+    amountMinor: 10_000,
+    intervalCount: 1,
+  },
+  {
+    ...PRO_SUBSCRIPTION_PLAN_BASE,
     code: "pro_3_months_v1",
     amountMinor: 24_900,
     intervalCount: 3,
   },
   {
-    ...PRO_SUBSCRIPTION_PLAN,
+    ...PRO_SUBSCRIPTION_PLAN_BASE,
     code: "pro_6_months_v1",
     amountMinor: 44_900,
     intervalCount: 6,
   },
   {
-    ...PRO_SUBSCRIPTION_PLAN,
+    ...PRO_SUBSCRIPTION_PLAN_BASE,
     code: "pro_12_months_v1",
     amountMinor: 69_900,
     intervalCount: 12,
   },
 ] as const;
+
+/** All packages that may legitimately appear in persisted data or Stripe. */
+export const ALL_PRO_SUBSCRIPTION_PLANS = [
+  ...HISTORICAL_PRO_SUBSCRIPTION_PLANS,
+  ...PRO_SUBSCRIPTION_PLANS,
+] as const;
+
 export type ProSubscriptionPlanCode =
+  (typeof ALL_PRO_SUBSCRIPTION_PLANS)[number]["code"];
+export type SaleableProSubscriptionPlanCode =
   (typeof PRO_SUBSCRIPTION_PLANS)[number]["code"];
 
 export function isProSubscriptionPlanCode(
   value: unknown,
 ): value is ProSubscriptionPlanCode {
+  return ALL_PRO_SUBSCRIPTION_PLANS.some((plan) => plan.code === value);
+}
+
+export function isSaleableProSubscriptionPlanCode(
+  value: unknown,
+): value is SaleableProSubscriptionPlanCode {
   return PRO_SUBSCRIPTION_PLANS.some((plan) => plan.code === value);
 }
 
 export function getProSubscriptionPlan(
   code: unknown = PRO_SUBSCRIPTION_PLAN_CODE,
 ) {
-  const plan = PRO_SUBSCRIPTION_PLANS.find((plan) => plan.code === code);
+  const plan = ALL_PRO_SUBSCRIPTION_PLANS.find((plan) => plan.code === code);
   if (!plan) throw new TypeError("Invalid professional subscription plan.");
   return plan;
+}
+
+export function getSaleableProSubscriptionPlan(
+  code: unknown = PRO_SUBSCRIPTION_PLAN_CODE,
+) {
+  const plan = PRO_SUBSCRIPTION_PLANS.find((plan) => plan.code === code);
+  if (!plan) {
+    throw new TypeError("Invalid saleable professional subscription plan.");
+  }
+  return plan;
+}
+
+/** Maps a persisted package version to the currently saleable same-term plan. */
+export function getCurrentProSubscriptionPlanCode(
+  code: unknown = PRO_SUBSCRIPTION_PLAN_CODE,
+): SaleableProSubscriptionPlanCode {
+  const historicalOrCurrentPlan = getProSubscriptionPlan(code);
+  const currentPlan = PRO_SUBSCRIPTION_PLANS.find(
+    (plan) => plan.intervalCount === historicalOrCurrentPlan.intervalCount,
+  );
+  if (!currentPlan) {
+    throw new TypeError(
+      "No current professional subscription plan has the same billing interval.",
+    );
+  }
+  return currentPlan.code;
 }
 
 export function formatProSubscriptionPlan(

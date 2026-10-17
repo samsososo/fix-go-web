@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ALL_PRO_SUBSCRIPTION_PLANS,
+  HISTORICAL_PRO_SUBSCRIPTION_PLANS,
   PRO_SUBSCRIPTION_AMOUNT_MINOR,
   PRO_SUBSCRIPTION_CURRENCY,
   PRO_SUBSCRIPTION_GRACE_PERIOD_DAYS,
   PRO_SUBSCRIPTION_INTERVAL,
   PRO_SUBSCRIPTION_PLAN,
+  PRO_SUBSCRIPTION_PLANS,
   PRO_SUBSCRIPTION_TRIAL_DAYS,
   calculateProTrialEndsAt,
   calculateGracePeriodEndsAt,
@@ -13,7 +16,12 @@ import {
   createLifetimeTrialWindow,
   deriveProSubscriptionEntitlement,
   deriveSubscriptionAccessStatus,
+  getCurrentProSubscriptionPlanCode,
+  getProSubscriptionPlan,
+  getSaleableProSubscriptionPlan,
   hasConsumedLifetimeTrial,
+  isProSubscriptionPlanCode,
+  isSaleableProSubscriptionPlanCode,
   type ProSubscription,
   type SubscriptionAccessStatus,
 } from "@/lib/subscription-policy";
@@ -39,20 +47,99 @@ function subscription(
 }
 
 describe("pro subscription plan", () => {
-  it("locks the first plan to HKD 100 per month", () => {
-    expect(PRO_SUBSCRIPTION_AMOUNT_MINOR).toBe(10_000);
+  it("locks the default saleable plan to HKD 200 per month", () => {
+    expect(PRO_SUBSCRIPTION_AMOUNT_MINOR).toBe(20_000);
     expect(PRO_SUBSCRIPTION_CURRENCY).toBe("hkd");
     expect(PRO_SUBSCRIPTION_INTERVAL).toBe("month");
     expect(PRO_SUBSCRIPTION_TRIAL_DAYS).toBe(14);
     expect(PRO_SUBSCRIPTION_GRACE_PERIOD_DAYS).toBe(14);
     expect(PRO_SUBSCRIPTION_PLAN).toEqual({
-      code: "pro_monthly_v1",
-      amountMinor: 10_000,
+      code: "pro_monthly_v2",
+      amountMinor: 20_000,
       currency: "hkd",
       interval: "month",
       trialDays: 14,
       gracePeriodDays: 14,
     });
+  });
+
+  it("doubles every saleable package exactly while keeping its interval", () => {
+    expect(PRO_SUBSCRIPTION_PLANS).toEqual([
+      expect.objectContaining({
+        code: "pro_monthly_v2",
+        amountMinor: 20_000,
+        intervalCount: 1,
+      }),
+      expect.objectContaining({
+        code: "pro_3_months_v2",
+        amountMinor: 49_800,
+        intervalCount: 3,
+      }),
+      expect.objectContaining({
+        code: "pro_6_months_v2",
+        amountMinor: 89_800,
+        intervalCount: 6,
+      }),
+      expect.objectContaining({
+        code: "pro_12_months_v2",
+        amountMinor: 139_800,
+        intervalCount: 12,
+      }),
+    ]);
+  });
+
+  it("keeps v1 packages readable for historical subscription lifecycle only", () => {
+    expect(HISTORICAL_PRO_SUBSCRIPTION_PLANS).toEqual([
+      expect.objectContaining({
+        code: "pro_monthly_v1",
+        amountMinor: 10_000,
+        intervalCount: 1,
+      }),
+      expect.objectContaining({
+        code: "pro_3_months_v1",
+        amountMinor: 24_900,
+        intervalCount: 3,
+      }),
+      expect.objectContaining({
+        code: "pro_6_months_v1",
+        amountMinor: 44_900,
+        intervalCount: 6,
+      }),
+      expect.objectContaining({
+        code: "pro_12_months_v1",
+        amountMinor: 69_900,
+        intervalCount: 12,
+      }),
+    ]);
+    expect(ALL_PRO_SUBSCRIPTION_PLANS).toHaveLength(8);
+    expect(isProSubscriptionPlanCode("pro_monthly_v1")).toBe(true);
+    expect(getProSubscriptionPlan("pro_monthly_v1")).toMatchObject({
+      amountMinor: 10_000,
+    });
+  });
+
+  it("rejects historical v1 packages from new sales", () => {
+    expect(isSaleableProSubscriptionPlanCode("pro_monthly_v2")).toBe(true);
+    expect(isSaleableProSubscriptionPlanCode("pro_monthly_v1")).toBe(false);
+    expect(getSaleableProSubscriptionPlan("pro_monthly_v2")).toMatchObject({
+      amountMinor: 20_000,
+    });
+    expect(() => getSaleableProSubscriptionPlan("pro_monthly_v1")).toThrow(
+      "Invalid saleable professional subscription plan",
+    );
+  });
+
+  it.each([
+    ["pro_monthly_v1", "pro_monthly_v2"],
+    ["pro_3_months_v1", "pro_3_months_v2"],
+    ["pro_6_months_v1", "pro_6_months_v2"],
+    ["pro_12_months_v1", "pro_12_months_v2"],
+    ["pro_monthly_v2", "pro_monthly_v2"],
+    ["pro_3_months_v2", "pro_3_months_v2"],
+    ["pro_6_months_v2", "pro_6_months_v2"],
+    ["pro_12_months_v2", "pro_12_months_v2"],
+  ] as const)("maps %s to the current same-term plan %s", (from, to) => {
+    expect(getCurrentProSubscriptionPlanCode(from)).toBe(to);
   });
 });
 

@@ -85,6 +85,34 @@ const envSchema = z.object({
       .regex(/^price_[A-Za-z0-9]+$/)
       .optional(),
   ),
+  STRIPE_PRO_MONTHLY_V2_PRICE_ID: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z
+      .string()
+      .regex(/^price_[A-Za-z0-9]+$/)
+      .optional(),
+  ),
+  STRIPE_PRO_3_MONTHS_V2_PRICE_ID: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z
+      .string()
+      .regex(/^price_[A-Za-z0-9]+$/)
+      .optional(),
+  ),
+  STRIPE_PRO_6_MONTHS_V2_PRICE_ID: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z
+      .string()
+      .regex(/^price_[A-Za-z0-9]+$/)
+      .optional(),
+  ),
+  STRIPE_PRO_12_MONTHS_V2_PRICE_ID: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z
+      .string()
+      .regex(/^price_[A-Za-z0-9]+$/)
+      .optional(),
+  ),
 });
 
 const parsed = envSchema.safeParse(process.env);

@@ -201,16 +201,42 @@ Stripe Billing configuration is environment-specific. Use sandbox values in
 ```bash
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
-STRIPE_PRO_MONTHLY_PRICE_ID=price_...
+STRIPE_PRO_MONTHLY_PRICE_ID=price_v1_...
+STRIPE_PRO_3_MONTHS_PRICE_ID=price_v1_...
+STRIPE_PRO_6_MONTHS_PRICE_ID=price_v1_...
+STRIPE_PRO_12_MONTHS_PRICE_ID=price_v1_...
+STRIPE_PRO_MONTHLY_V2_PRICE_ID=price_v2_...
+STRIPE_PRO_3_MONTHS_V2_PRICE_ID=price_v2_...
+STRIPE_PRO_6_MONTHS_V2_PRICE_ID=price_v2_...
+STRIPE_PRO_12_MONTHS_V2_PRICE_ID=price_v2_...
 ```
 
-Configure four reusable HKD recurring Prices: 100/249/449/699 dollars with
-`interval=month` and `interval_count=1/3/6/12`, respectively. The one-time
-14-day trial is granted after successful first card binding by application
-policy, not by the Price. Existing trial end dates and subscriptions remain
-unchanged. Additional Price IDs: `STRIPE_PRO_3_MONTHS_PRICE_ID`,
-`STRIPE_PRO_6_MONTHS_PRICE_ID`, `STRIPE_PRO_12_MONTHS_PRICE_ID`.
-Create sandbox Prices for DEV and separate live Prices before Production rollout.
+Keep the four unversioned Price IDs mapped to the legacy 100/249/449/699-dollar
+Prices for existing subscription and webhook compatibility. Configure the four
+`_V2_` IDs as reusable 200/498/898/1398-dollar HKD recurring Prices with
+`interval=month` and `interval_count=1/3/6/12`, respectively. Stripe Prices are
+immutable; do not replace the legacy IDs with the new Price values.
+
+The one-time 14-day trial is granted after successful first card binding by
+application policy, not by the Price. For the 2026-10-17 price increase, move
+trialing and active subscriptions to the matching V2 Price at their next
+scheduled charge. Do not charge immediately or prorate; preserve existing trial
+end dates and billing cycles. Create sandbox V2 Prices for DEV and separate live
+V2 Prices before Production rollout.
+
+The versioned pricing migration is dry-run by default:
+
+```bash
+npm run db:migrate-subscription-pricing:dev
+npm run db:migrate-subscription-pricing:production
+```
+
+Follow the backup, DEV apply, Production maintenance/apply, post-verification
+and failure policy in `docs/hostinger-vps-deploy.md`. Pass
+`SUBSCRIPTION_PRICING_APPLY=true` only as an ephemeral command prefix; never
+store it in an environment file. The migration is deliberately one-way and
+keeps an audit marker so native V2 subscriptions are distinguishable from the
+migrated cohort.
 
 Twilio Verify is used for production signup phone verification. Use a
 Restricted API key with only `verification/create` and

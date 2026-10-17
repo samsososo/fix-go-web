@@ -42,22 +42,27 @@ function mockStripe() {
     metadata: {
       proId: "pro-1",
       purpose: "pro_subscription_card_setup",
-      planCode: "pro_monthly_v1",
+      planCode: "pro_monthly_v2",
     },
     expires_at: 2_000_000_000,
     url: "https://checkout.stripe.test/session",
   } as unknown as Stripe.Checkout.Session;
   const price = {
-    id: "price_monthly_hkd_100",
+    id: "price_monthly_hkd_200",
     object: "price",
     active: true,
     livemode: false,
     currency: "hkd",
     type: "recurring",
-    unit_amount: 10_000,
+    billing_scheme: "per_unit",
+    transform_quantity: null,
+    tiers_mode: null,
+    unit_amount: 20_000,
     recurring: {
       interval: "month",
       interval_count: 1,
+      usage_type: "licensed",
+      trial_period_days: null,
     },
   } as unknown as Stripe.Price;
   const subscription = {
@@ -70,7 +75,7 @@ function mockStripe() {
     livemode: false,
     trial_end: 1_791_766_800,
     cancel_at_period_end: false,
-    metadata: { proId: "pro-1", planCode: "pro_monthly_v1" },
+    metadata: { proId: "pro-1", planCode: "pro_monthly_v2" },
     items: {
       data: [
         {
@@ -90,14 +95,14 @@ function mockStripe() {
     currency: "hkd",
     livemode: false,
     status: "open",
-    amount_remaining: 10_000,
+    amount_remaining: 20_000,
     hosted_invoice_url: "https://invoice.stripe.test/in_pro_1",
     parent: {
       type: "subscription_details",
       quote_details: null,
       subscription_details: {
         subscription: subscription.id,
-        metadata: { proId: "pro-1", planCode: "pro_monthly_v1" },
+        metadata: { proId: "pro-1", planCode: "pro_monthly_v2" },
       },
     },
   } as unknown as Stripe.Invoice;
@@ -122,7 +127,7 @@ function mockStripe() {
     metadata: {
       proId: "pro-1",
       purpose: "pro_subscription_card_setup",
-      planCode: "pro_monthly_v1",
+      planCode: "pro_monthly_v2",
     },
   } as unknown as Stripe.SetupIntent;
 
@@ -197,8 +202,8 @@ function paidSubscriptionCheckoutSession(
     customer: "cus_pro_1",
     client_reference_id: "pro-1",
     currency: "hkd",
-    amount_subtotal: 10_000,
-    amount_total: 10_000,
+    amount_subtotal: 20_000,
+    amount_total: 20_000,
     payment_method_types: ["card"],
     livemode: false,
     expires_at: 2_000_000_000,
@@ -208,7 +213,7 @@ function paidSubscriptionCheckoutSession(
       proId: "pro-1",
       previousSubscriptionId: "sub_previous_1",
       purpose: STRIPE_PAID_REACTIVATION_PURPOSE,
-      planCode: "pro_monthly_v1",
+      planCode: "pro_monthly_v2",
     },
     line_items: {
       data: [
@@ -218,8 +223,8 @@ function paidSubscriptionCheckoutSession(
           price,
           quantity: 1,
           currency: "hkd",
-          amount_subtotal: 10_000,
-          amount_total: 10_000,
+          amount_subtotal: 20_000,
+          amount_total: 20_000,
           amount_discount: 0,
           amount_tax: 0,
         },
@@ -330,7 +335,7 @@ describe("Stripe billing adapter", () => {
           cancelUrl: "https://hotfix24.test/pro/billing",
           idempotencyKey: "setup-checkout:pro-1:attempt-1",
         },
-        { stripe, monthlyPriceId: "price_monthly_hkd_100" },
+        { stripe, monthlyPriceId: "price_monthly_hkd_200" },
       ),
     ).resolves.toBe(checkoutSession);
 
@@ -346,13 +351,13 @@ describe("Stripe billing adapter", () => {
       metadata: {
         proId: "pro-1",
         purpose: "pro_subscription_card_setup",
-        planCode: "pro_monthly_v1",
+        planCode: "pro_monthly_v2",
       },
       setup_intent_data: {
         metadata: {
           proId: "pro-1",
           purpose: "pro_subscription_card_setup",
-          planCode: "pro_monthly_v1",
+          planCode: "pro_monthly_v2",
         },
       },
     });
@@ -362,6 +367,56 @@ describe("Stripe billing adapter", () => {
     expect(requestOptions).toEqual({
       idempotencyKey: "setup-checkout:pro-1:attempt-1",
     });
+  });
+
+  it("rejects historical v1 packages from every new sale path", async () => {
+    const { api, stripe } = mockStripe();
+
+    await expect(
+      createCardSetupCheckoutSession(
+        {
+          proId: "pro-1",
+          customerId: "cus_pro_1",
+          planCode: "pro_monthly_v1",
+          successUrl: "https://hotfix24.test/pro/billing?checkout=success",
+          cancelUrl: "https://hotfix24.test/pro/billing?checkout=cancelled",
+          idempotencyKey: "setup-checkout:historical-v1",
+        },
+        { stripe },
+      ),
+    ).rejects.toThrow("Invalid saleable professional subscription plan");
+
+    await expect(
+      createPaidProSubscriptionCheckoutSession(
+        {
+          proId: "pro-1",
+          customerId: "cus_pro_1",
+          previousSubscriptionId: "sub_previous_1",
+          planCode: "pro_monthly_v1",
+          successUrl: "https://hotfix24.test/pro/billing?checkout=reactivated",
+          cancelUrl: "https://hotfix24.test/pro/billing?checkout=cancelled",
+          idempotencyKey: "paid-reactivation:historical-v1",
+        },
+        { stripe },
+      ),
+    ).rejects.toThrow("Invalid saleable professional subscription plan");
+
+    await expect(
+      createMonthlyProSubscription(
+        {
+          proId: "pro-1",
+          customerId: "cus_pro_1",
+          planCode: "pro_monthly_v1",
+          trialEndUnix: 1_791_766_800,
+          idempotencyKey: "subscription:historical-v1",
+        },
+        { stripe },
+      ),
+    ).rejects.toThrow("Invalid saleable professional subscription plan");
+
+    expect(api.prices.retrieve).not.toHaveBeenCalled();
+    expect(api.checkout.sessions.create).not.toHaveBeenCalled();
+    expect(api.subscriptions.create).not.toHaveBeenCalled();
   });
 
   it("creates a card-only paid reactivation Checkout with the fixed monthly Price and no trial", async () => {
@@ -385,7 +440,7 @@ describe("Stripe billing adapter", () => {
           expectedLivemode: false,
           idempotencyKey: "paid-reactivation:pro-1:attempt-1",
         },
-        { stripe, monthlyPriceId: "price_monthly_hkd_100" },
+        { stripe, monthlyPriceId: "price_monthly_hkd_200" },
       ),
     ).resolves.toBe(session);
 
@@ -395,7 +450,7 @@ describe("Stripe billing adapter", () => {
         customer: "cus_pro_1",
         client_reference_id: "pro-1",
         payment_method_types: ["card"],
-        line_items: [{ price: "price_monthly_hkd_100", quantity: 1 }],
+        line_items: [{ price: "price_monthly_hkd_200", quantity: 1 }],
         allow_promotion_codes: false,
         success_url: successUrl,
         cancel_url: cancelUrl,
@@ -403,14 +458,14 @@ describe("Stripe billing adapter", () => {
           proId: "pro-1",
           previousSubscriptionId: "sub_previous_1",
           purpose: STRIPE_PAID_REACTIVATION_PURPOSE,
-          planCode: "pro_monthly_v1",
+          planCode: "pro_monthly_v2",
         },
         subscription_data: {
           metadata: {
             proId: "pro-1",
             previousSubscriptionId: "sub_previous_1",
             purpose: STRIPE_PAID_REACTIVATION_PURPOSE,
-            planCode: "pro_monthly_v1",
+            planCode: "pro_monthly_v2",
           },
         },
       },
@@ -422,14 +477,14 @@ describe("Stripe billing adapter", () => {
     );
     expect(createParams.subscription_data).not.toHaveProperty("trial_end");
     expect(api.customers.retrieve).toHaveBeenCalledWith("cus_pro_1");
-    expect(api.prices.retrieve).toHaveBeenCalledWith("price_monthly_hkd_100");
+    expect(api.prices.retrieve).toHaveBeenCalledWith("price_monthly_hkd_200");
   });
 
   it("allows a fixed-price ID rotation after the historical subscription ended", async () => {
     const { api, stripe, price, subscription } = mockStripe();
     const historicalPrice = {
       ...price,
-      id: "price_historical_hkd_100",
+      id: "price_historical_hkd_200",
       active: false,
     } as Stripe.Price;
     const previous = {
@@ -442,7 +497,7 @@ describe("Stripe billing adapter", () => {
           },
         ],
       },
-    } as Stripe.Subscription;
+    } as unknown as Stripe.Subscription;
     api.subscriptions.retrieve.mockResolvedValue(previous);
     api.checkout.sessions.create.mockResolvedValue(
       paidSubscriptionCheckoutSession(price),
@@ -459,7 +514,7 @@ describe("Stripe billing adapter", () => {
           expectedLivemode: false,
           idempotencyKey: "paid-reactivation:price-rotation",
         },
-        { stripe, monthlyPriceId: "price_monthly_hkd_100" },
+        { stripe, monthlyPriceId: "price_monthly_hkd_200" },
       ),
     ).resolves.toMatchObject({ id: "cs_paid_reactivation_1" });
   });
@@ -483,7 +538,7 @@ describe("Stripe billing adapter", () => {
         },
         {
           stripe,
-          monthlyPriceId: "price_monthly_hkd_100",
+          monthlyPriceId: "price_monthly_hkd_200",
           nowUnix: () => 1_999_999_999,
         },
       ),
@@ -525,7 +580,7 @@ describe("Stripe billing adapter", () => {
         },
         {
           stripe,
-          monthlyPriceId: "price_monthly_hkd_100",
+          monthlyPriceId: "price_monthly_hkd_200",
           nowUnix: () => 2_000_000_001,
         },
       ),
@@ -564,7 +619,7 @@ describe("Stripe billing adapter", () => {
         },
         {
           stripe,
-          monthlyPriceId: "price_monthly_hkd_100",
+          monthlyPriceId: "price_monthly_hkd_200",
           nowUnix: () => 1_999_999_999,
         },
       ),
@@ -577,7 +632,7 @@ describe("Stripe billing adapter", () => {
       endedPreviousSubscription(subscription),
     );
     api.checkout.sessions.retrieve.mockResolvedValue(
-      paidSubscriptionCheckoutSession(price, { amount_total: 20_000 }),
+      paidSubscriptionCheckoutSession(price, { amount_total: 10_000 }),
     );
 
     await expect(
@@ -591,7 +646,7 @@ describe("Stripe billing adapter", () => {
         },
         {
           stripe,
-          monthlyPriceId: "price_monthly_hkd_100",
+          monthlyPriceId: "price_monthly_hkd_200",
           nowUnix: () => 1_999_999_999,
         },
       ),
@@ -613,7 +668,7 @@ describe("Stripe billing adapter", () => {
         },
         {
           stripe,
-          monthlyPriceId: "price_monthly_hkd_100",
+          monthlyPriceId: "price_monthly_hkd_200",
           nowUnix: () => 1_999_999_999,
         },
       ),
@@ -649,7 +704,7 @@ describe("Stripe billing adapter", () => {
         },
         {
           stripe,
-          monthlyPriceId: "price_monthly_hkd_100",
+          monthlyPriceId: "price_monthly_hkd_200",
           nowUnix: () => 1_999_999_999,
         },
       ),
@@ -842,14 +897,14 @@ describe("Stripe billing adapter", () => {
           trialEndUnix,
           idempotencyKey: "subscription:pro-1:lifetime-trial",
         },
-        { stripe, monthlyPriceId: "price_monthly_hkd_100" },
+        { stripe, monthlyPriceId: "price_monthly_hkd_200" },
       ),
     ).resolves.toBe(subscription);
 
     const [params, requestOptions] = api.subscriptions.create.mock.calls[0];
     expect(params).toEqual({
       customer: "cus_pro_1",
-      items: [{ price: "price_monthly_hkd_100", quantity: 1 }],
+      items: [{ price: "price_monthly_hkd_200", quantity: 1 }],
       collection_method: "charge_automatically",
       trial_end: trialEndUnix,
       trial_settings: {
@@ -859,7 +914,7 @@ describe("Stripe billing adapter", () => {
       },
       metadata: {
         proId: "pro-1",
-        planCode: "pro_monthly_v1",
+        planCode: "pro_monthly_v2",
       },
     });
     expect(params).not.toHaveProperty("default_payment_method");
@@ -868,7 +923,7 @@ describe("Stripe billing adapter", () => {
     expect(requestOptions).toEqual({
       idempotencyKey: "subscription:pro-1:lifetime-trial",
     });
-    expect(api.prices.retrieve).toHaveBeenCalledWith("price_monthly_hkd_100");
+    expect(api.prices.retrieve).toHaveBeenCalledWith("price_monthly_hkd_200");
   });
 
   it("adopts the one matching remote subscription after a lost local write", async () => {
@@ -883,7 +938,7 @@ describe("Stripe billing adapter", () => {
       trial_end: trialEndUnix,
       metadata: {
         proId: "pro-1",
-        planCode: "pro_monthly_v1",
+        planCode: "pro_monthly_v2",
       },
       items: {
         data: [{ price, quantity: 1 }],
@@ -898,7 +953,7 @@ describe("Stripe billing adapter", () => {
           customerId: "cus_pro_1",
           trialEndUnix,
         },
-        { stripe, monthlyPriceId: "price_monthly_hkd_100" },
+        { stripe, monthlyPriceId: "price_monthly_hkd_200" },
       ),
     ).resolves.toBe(existing);
     expect(api.subscriptions.list).toHaveBeenCalledWith({
@@ -913,7 +968,7 @@ describe("Stripe billing adapter", () => {
     const { api, stripe, price } = mockStripe();
     api.prices.retrieve.mockResolvedValue({
       ...price,
-      unit_amount: 20_000,
+      unit_amount: 10_000,
     });
 
     await expect(
@@ -924,9 +979,9 @@ describe("Stripe billing adapter", () => {
           trialEndUnix: 1_791_766_800,
           idempotencyKey: "subscription:pro-1:lifetime-trial",
         },
-        { stripe, monthlyPriceId: "price_monthly_hkd_100" },
+        { stripe, monthlyPriceId: "price_monthly_hkd_200" },
       ),
-    ).rejects.toThrow("does not match the HK$100 monthly plan");
+    ).rejects.toThrow("does not match pro_monthly_v2");
     expect(api.subscriptions.create).not.toHaveBeenCalled();
   });
 
@@ -939,28 +994,30 @@ describe("Stripe billing adapter", () => {
           proId: "pro-1",
           customerId: "cus_pro_1",
           subscriptionId: "sub_pro_1",
-          expectedPriceId: "price_monthly_hkd_100",
+          expectedPriceId: "price_monthly_hkd_200",
           expectedTrialEndsAt: "2026-10-12T01:00:00.000Z",
           expectedLivemode: false,
         },
-        { stripe, monthlyPriceId: "price_monthly_hkd_100" },
+        { stripe, monthlyPriceId: "price_monthly_hkd_200" },
       ),
     ).resolves.toMatchObject({
       subscription: { id: "sub_pro_1" },
-      item: { price: { id: "price_monthly_hkd_100" } },
+      item: { price: { id: "price_monthly_hkd_200" } },
     });
     expect(api.subscriptions.retrieve).toHaveBeenCalledWith("sub_pro_1");
   });
 
-  it("validates a persisted historical Price after the configured Price rotates", async () => {
+  it("validates a persisted historical v1 Price at its original amount", async () => {
     const { api, stripe, price, subscription } = mockStripe();
     const historicalPrice = {
       ...price,
       id: "price_historical_hkd_100",
       active: false,
+      unit_amount: 10_000,
     } as Stripe.Price;
     const historicalSubscription = {
       ...subscription,
+      metadata: { proId: "pro-1", planCode: "pro_monthly_v1" },
       items: {
         data: [
           {
@@ -969,13 +1026,14 @@ describe("Stripe billing adapter", () => {
           },
         ],
       },
-    } as Stripe.Subscription;
+    } as unknown as Stripe.Subscription;
     api.subscriptions.retrieve.mockResolvedValue(historicalSubscription);
 
     const input = {
       proId: "pro-1",
       customerId: "cus_pro_1",
       subscriptionId: "sub_pro_1",
+      expectedPlanCode: "pro_monthly_v1",
       expectedPriceId: "price_historical_hkd_100",
       expectedTrialEndsAt: "2026-10-12T01:00:00.000Z",
       expectedLivemode: false,
@@ -985,7 +1043,7 @@ describe("Stripe billing adapter", () => {
     await expect(
       retrieveOwnedMonthlyProSubscription(input, {
         stripe,
-        monthlyPriceId: "price_new_monthly_hkd_100",
+        priceIds: { pro_monthly_v1: "price_new_monthly_hkd_100" },
       }),
     ).resolves.toMatchObject({
       item: { price: { id: "price_historical_hkd_100", active: false } },
@@ -994,14 +1052,20 @@ describe("Stripe billing adapter", () => {
     await expect(
       retrieveOwnedMonthlyProSubscription(
         { ...input, allowHistoricalPriceId: false },
-        { stripe, monthlyPriceId: "price_new_monthly_hkd_100" },
+        {
+          stripe,
+          priceIds: { pro_monthly_v1: "price_new_monthly_hkd_100" },
+        },
       ),
     ).rejects.toThrow("configured Stripe Price is inactive or incorrect");
 
     await expect(
       retrieveOwnedMonthlyProSubscription(
         { ...input, expectedPriceId: "price_wrong_historical" },
-        { stripe, monthlyPriceId: "price_new_monthly_hkd_100" },
+        {
+          stripe,
+          priceIds: { pro_monthly_v1: "price_new_monthly_hkd_100" },
+        },
       ),
     ).rejects.toThrow("does not match this professional plan");
 
@@ -1019,7 +1083,7 @@ describe("Stripe billing adapter", () => {
     await expect(
       retrieveOwnedMonthlyProSubscription(input, {
         stripe,
-        monthlyPriceId: "price_new_monthly_hkd_100",
+        priceIds: { pro_monthly_v1: "price_new_monthly_hkd_100" },
       }),
     ).rejects.toThrow("historical Stripe Price does not match");
   });
@@ -1032,13 +1096,13 @@ describe("Stripe billing adapter", () => {
         proId: "pro-1",
         customerId: "cus_pro_1",
         subscriptionId: "sub_pro_1",
-        expectedPriceId: "price_monthly_hkd_100",
+        expectedPriceId: "price_monthly_hkd_200",
         expectedTrialEndsAt: "2026-10-12T01:00:00.000Z",
         expectedLivemode: false,
         cancelAtPeriodEnd: true,
         idempotencyKey: "cancel:pro-1:attempt-1",
       },
-      { stripe, monthlyPriceId: "price_monthly_hkd_100" },
+      { stripe, monthlyPriceId: "price_monthly_hkd_200" },
     );
 
     expect(api.subscriptions.update).toHaveBeenCalledWith(
@@ -1131,7 +1195,7 @@ describe("Stripe billing adapter", () => {
         ...invoice.parent,
         subscription_details: {
           ...invoice.parent!.subscription_details,
-          metadata: { proId: "pro-2", planCode: "pro_monthly_v1" },
+          metadata: { proId: "pro-2", planCode: "pro_monthly_v2" },
         },
       },
     });
@@ -1152,10 +1216,10 @@ describe("Stripe billing adapter", () => {
 
 describe("professional packages", () => {
   it.each([
-    ["pro_monthly_v1", 10000, 1],
-    ["pro_3_months_v1", 24900, 3],
-    ["pro_6_months_v1", 44900, 6],
-    ["pro_12_months_v1", 69900, 12],
+    ["pro_monthly_v2", 20_000, 1],
+    ["pro_3_months_v2", 49_800, 3],
+    ["pro_6_months_v2", 89_800, 6],
+    ["pro_12_months_v2", 139_800, 12],
   ] as const)(
     "creates and validates %s with the full amount and interval",
     async (code, amount, months) => {

@@ -108,10 +108,11 @@ describe("pro subscription persistence", () => {
       expect.arrayContaining([
         expect.objectContaining({
           accessStatus: "setup_required",
-          amountMinor: 10_000,
+          amountMinor: 20_000,
           currency: "hkd",
           interval: "month",
-          planCode: "pro_monthly_v1",
+          intervalCount: 1,
+          planCode: "pro_monthly_v2",
           cancelAtPeriodEnd: false,
         }),
       ]),
@@ -218,8 +219,10 @@ describe("pro subscription persistence", () => {
     expect(second).toMatchObject({
       proId: pro.id,
       accessStatus: "setup_required",
-      amountMinor: 10_000,
+      amountMinor: 20_000,
       currency: "hkd",
+      intervalCount: 1,
+      planCode: "pro_monthly_v2",
     });
   });
 
@@ -393,17 +396,84 @@ describe("pro subscription persistence", () => {
     await ensureProSubscription(proId);
     const reserved = await reserveProSubscriptionCheckout({
       proId,
-      planCode: "pro_12_months_v1",
+      planCode: "pro_12_months_v2",
       reservationId: "annual_package",
       reservationExpiresAt: "2099-01-01T00:00:00.000Z",
     });
     expect(reserved).toMatchObject({
-      planCode: "pro_12_months_v1",
-      amountMinor: 69900,
+      planCode: "pro_12_months_v2",
+      amountMinor: 139_800,
       intervalCount: 12,
       accessStatus: "setup_required",
     });
     expect(reserved?.trialConsumedAt).toBeUndefined();
+  });
+
+  it("rejects historical v1 packages from new checkout reservations", async () => {
+    const proId = "user_pro_chan";
+    await ensureProSubscription(proId);
+
+    await expect(
+      reserveProSubscriptionCheckout({
+        proId,
+        planCode: "pro_monthly_v1",
+        reservationId: "historical_setup_package",
+        reservationExpiresAt: "2099-01-01T00:00:00.000Z",
+      }),
+    ).rejects.toThrow("Invalid saleable professional subscription plan");
+    await expect(
+      reserveProSubscriptionReactivationCheckout({
+        proId,
+        planCode: "pro_monthly_v1",
+        reservationId: "historical_reactivation_package",
+        reservationExpiresAt: "2099-01-01T00:00:00.000Z",
+      }),
+    ).rejects.toThrow("Invalid saleable professional subscription plan");
+  });
+
+  it("preserves a historical v1 amount during ordinary lifecycle sync", async () => {
+    const proId = await activateLifecycleTestSubscription();
+    const client = new MongoClient(env.MONGODB_URI!);
+    try {
+      await client.connect();
+      await client
+        .db(env.MONGODB_DATABASE)
+        .collection<{
+          _id: string;
+          planCode: string;
+          amountMinor: number;
+          intervalCount?: number;
+        }>("proSubscriptions")
+        .updateOne(
+          { _id: proId },
+          {
+            $set: {
+              planCode: "pro_monthly_v1",
+              amountMinor: 10_000,
+              intervalCount: 1,
+            },
+          },
+        );
+    } finally {
+      await client.close();
+    }
+
+    await expect(
+      syncProSubscriptionLifecycle(
+        lifecycleSyncInput({
+          stripeStatus: "active",
+          paymentUpdate: { type: "none" },
+          lastStripeEventId: "evt_historical_v1_lifecycle",
+          lastStripeEventCreatedAt: "2026-08-11T00:00:00.000Z",
+          lastStripeSyncedAt: "2026-08-11T00:00:01.000Z",
+        }),
+      ),
+    ).resolves.toMatchObject({
+      planCode: "pro_monthly_v1",
+      amountMinor: 10_000,
+      intervalCount: 1,
+      accessStatus: "active",
+    });
   });
 
   it("fails closed when a partial lifetime-trial write already exists", async () => {

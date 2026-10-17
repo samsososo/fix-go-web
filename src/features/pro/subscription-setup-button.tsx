@@ -5,10 +5,12 @@ import { useState, useTransition } from "react";
 
 import { SubscriptionPlanOptions } from "@/features/pro/subscription-plan-options";
 import {
-  getProSubscriptionPlan,
   formatProSubscriptionPlan,
+  getCurrentProSubscriptionPlanCode,
+  getSaleableProSubscriptionPlan,
   PRO_SUBSCRIPTION_PLAN_CODE,
   type ProSubscriptionPlanCode,
+  type SaleableProSubscriptionPlanCode,
 } from "@/lib/subscription-policy";
 import { Button } from "@/components/ui/button";
 import { useHydrated } from "@/hooks/use-hydrated";
@@ -25,9 +27,10 @@ export function SubscriptionSetupButton({
   initialPlanCode?: ProSubscriptionPlanCode;
   checkoutLocked?: boolean;
 }) {
-  const [planCode, setPlanCode] =
-    useState<ProSubscriptionPlanCode>(initialPlanCode);
-  const plan = getProSubscriptionPlan(planCode);
+  const [planCode, setPlanCode] = useState<SaleableProSubscriptionPlanCode>(
+    () => getCurrentProSubscriptionPlanCode(initialPlanCode),
+  );
+  const plan = getSaleableProSubscriptionPlan(planCode);
   const price = plan.amountMinor / 100;
   const billing = formatProSubscriptionPlan(planCode, locale);
   const isEnglish = locale === "en";

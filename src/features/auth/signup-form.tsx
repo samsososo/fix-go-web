@@ -219,8 +219,8 @@ export function SignupForm({
       {role === "pro" ? (
         <p className="rounded-xl bg-surface-tint p-4 text-sm leading-7 text-primary">
           註冊後選套餐及綁卡，開始每人一次 {PRO_SUBSCRIPTION_TRIAL_DAYS}{" "}
-          日免費試用。試用完結後按套餐全額自動續費：HK$100／1 個月、HK$249／3
-          個月、HK$449／6 個月、HK$699／12 個月。可隨時取消下期續費。
+          日免費試用。試用完結後按套餐全額自動續費：HK$200／1 個月、HK$498／3
+          個月、HK$898／6 個月、HK$1,398／12 個月。可隨時取消下期續費。
         </p>
       ) : null}
       <Field

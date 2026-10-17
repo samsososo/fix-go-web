@@ -31,7 +31,7 @@ export function getMarketingContent(locale: Locale) {
       faq: [
         {
           q: "How much is a professional subscription?",
-          a: "Choose HK$100 for 1 month, HK$249 for 3 months, HK$449 for 6 months or HK$699 for 12 months. Each package is charged in full and renews automatically at the same interval. Average monthly prices are for comparison only.",
+          a: "Choose HK$200 for 1 month, HK$498 for 3 months, HK$898 for 6 months or HK$1,398 for 12 months. Each package is charged in full and renews automatically at the same interval. Average monthly prices are for comparison only.",
         },
         {
           q: "How does the free trial work?",
@@ -86,7 +86,7 @@ export function getMarketingContent(locale: Locale) {
     faq: [
       {
         q: "師傅訂閱收費係點？",
-        a: "可選 HK$100／1 個月、HK$249／3 個月、HK$449／6 個月或 HK$699／12 個月。每期一次過收取套餐全額，到期自動續訂同一套餐；平均月費只供比較。",
+        a: "可選 HK$200／1 個月、HK$498／3 個月、HK$898／6 個月或 HK$1,398／12 個月。每期一次過收取套餐全額，到期自動續訂同一套餐；平均月費只供比較。",
       },
       {
         q: "免費試用有幾耐？可以再用嗎？",

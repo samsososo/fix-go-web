@@ -2,7 +2,7 @@
 
 import {
   PRO_SUBSCRIPTION_PLANS,
-  type ProSubscriptionPlanCode,
+  type SaleableProSubscriptionPlanCode,
 } from "@/lib/subscription-policy";
 import { cn } from "@/lib/utils";
 
@@ -12,17 +12,26 @@ export function SubscriptionPlanOptions({
   disabled = false,
   locale = "zh-HK",
 }: {
-  value?: ProSubscriptionPlanCode;
-  onChange?: (value: ProSubscriptionPlanCode) => void;
+  value?: SaleableProSubscriptionPlanCode;
+  onChange?: (value: SaleableProSubscriptionPlanCode) => void;
   disabled?: boolean;
   locale?: string;
 }) {
   const english = locale === "en";
+  const monthlyPlan = PRO_SUBSCRIPTION_PLANS.find(
+    (plan) => plan.intervalCount === 1,
+  );
+
+  if (!monthlyPlan) {
+    throw new Error("Monthly subscription plan is required");
+  }
+
   return (
     <div className="grid grid-cols-2 gap-3">
       {PRO_SUBSCRIPTION_PLANS.map((plan) => {
         const price = plan.amountMinor / 100;
-        const saving = plan.intervalCount * 100 - price;
+        const regularAmountMinor = plan.intervalCount * monthlyPlan.amountMinor;
+        const saving = (regularAmountMinor - plan.amountMinor) / 100;
         return (
           <label
             key={plan.code}
@@ -65,11 +74,16 @@ export function SubscriptionPlanOptions({
               })}
               ／{english ? "month" : "月"}
             </span>
-            {saving ? (
+            {saving > 0 ? (
               <span className="mt-2 text-xs font-semibold text-primary">
                 {english ? "Save" : "慳"} HK${saving} ·{" "}
                 {english ? "about" : "約"}{" "}
-                {Math.round((saving / (plan.intervalCount * 100)) * 100)}%
+                {Math.round(
+                  ((regularAmountMinor - plan.amountMinor) /
+                    regularAmountMinor) *
+                    100,
+                )}
+                %
               </span>
             ) : null}
             {plan.intervalCount === 12 ? (

@@ -108,8 +108,8 @@ function setupRequired(
 ): ProSubscription {
   return {
     proId: pro.id,
-    planCode: "pro_monthly_v1",
-    amountMinor: 10_000,
+    planCode: "pro_monthly_v2",
+    amountMinor: 20_000,
     currency: "hkd",
     interval: "month",
     accessStatus: "setup_required",
@@ -201,6 +201,7 @@ describe("pro card setup action", () => {
     expect(createCardSetupCheckoutSession).toHaveBeenCalledWith(
       expect.objectContaining({
         proId: pro.id,
+        planCode: "pro_monthly_v2",
         customerId: "cus_action_test",
         successUrl: new URL(
           "/pro/billing?checkout=success",
@@ -212,6 +213,22 @@ describe("pro card setup action", () => {
         ).toString(),
       }),
     );
+  });
+
+  it("rejects a historical v1 package from a new card-setup checkout", async () => {
+    await expect(
+      startProSubscriptionCheckoutAction({
+        locale: "zh-HK",
+        planCode: "pro_monthly_v1",
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      error: "暫時未能開啟安全綁卡頁面，請再試一次。",
+    });
+
+    expect(getOrCreateStripeCustomerForPro).not.toHaveBeenCalled();
+    expect(reserveProSubscriptionCheckout).not.toHaveBeenCalled();
+    expect(createCardSetupCheckoutSession).not.toHaveBeenCalled();
   });
 
   it("reuses the owned open Checkout Session instead of creating duplicates", async () => {
@@ -337,7 +354,7 @@ describe("pro card setup action", () => {
     expect(createCardSetupCheckoutSession).not.toHaveBeenCalled();
   });
 
-  it("starts an immediate HK$100 no-trial Checkout after a clean termination", async () => {
+  it("starts an immediate HK$200 v2 no-trial Checkout after a clean termination", async () => {
     const terminated = terminatedSubscription();
     vi.mocked(ensureProSubscription).mockResolvedValue(terminated);
     vi.mocked(reserveProSubscriptionReactivationCheckout).mockResolvedValue({
@@ -366,6 +383,7 @@ describe("pro card setup action", () => {
     expect(createPaidProSubscriptionCheckoutSession).toHaveBeenCalledWith(
       expect.objectContaining({
         proId: pro.id,
+        planCode: "pro_monthly_v2",
         customerId: "cus_action_test",
         previousSubscriptionId: "sub_action_test",
         successUrl: new URL(
@@ -509,10 +527,36 @@ describe("pro subscription lifecycle actions", () => {
         customerId: "cus_action_test",
         subscriptionId: "sub_action_test",
         expectedPriceId: "price_action_test",
+        expectedPlanCode: "pro_monthly_v2",
         expectedTrialEndsAt: "2026-09-09T10:00:00.000Z",
         expectedLivemode: false,
         allowHistoricalPriceId: true,
         cancelAtPeriodEnd: true,
+      }),
+    );
+  });
+
+  it("keeps historical v1 lifecycle cancellation supported", async () => {
+    vi.mocked(ensureProSubscription).mockResolvedValue(
+      activeSubscription({
+        planCode: "pro_monthly_v1",
+        amountMinor: 10_000,
+        stripePriceId: "price_historical_v1",
+      }),
+    );
+    vi.mocked(setProSubscriptionAutoRenewal).mockResolvedValue({} as never);
+
+    await expect(
+      setProSubscriptionAutoRenewalAction({
+        locale: "zh-HK",
+        cancelAtPeriodEnd: true,
+      }),
+    ).resolves.toMatchObject({ ok: true });
+    expect(setProSubscriptionAutoRenewal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedPlanCode: "pro_monthly_v1",
+        expectedPriceId: "price_historical_v1",
+        allowHistoricalPriceId: true,
       }),
     );
   });

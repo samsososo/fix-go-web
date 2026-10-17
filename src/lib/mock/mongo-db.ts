@@ -19,6 +19,7 @@ import {
 } from "@/lib/sms-verification-config";
 import {
   getProSubscriptionPlan,
+  getSaleableProSubscriptionPlan,
   type ProSubscriptionPlanCode,
   PRO_SUBSCRIPTION_AMOUNT_MINOR,
   PRO_SUBSCRIPTION_CURRENCY,
@@ -615,6 +616,7 @@ function buildInitialProSubscription(
     _id: proId,
     proId,
     planCode: PRO_SUBSCRIPTION_PLAN_CODE,
+    intervalCount: 1,
     amountMinor: PRO_SUBSCRIPTION_AMOUNT_MINOR,
     currency: PRO_SUBSCRIPTION_CURRENCY,
     interval: PRO_SUBSCRIPTION_INTERVAL,
@@ -1421,7 +1423,7 @@ export async function reserveMongoProSubscriptionCheckout(input: {
   reservationId: string;
   reservationExpiresAt: string;
 }) {
-  const plan = getProSubscriptionPlan(input.planCode);
+  const plan = getSaleableProSubscriptionPlan(input.planCode);
   const expiresAt = new Date(input.reservationExpiresAt);
   if (!Number.isFinite(expiresAt.getTime()) || expiresAt <= new Date()) {
     throw new TypeError("Checkout reservation expiry must be in the future.");
@@ -1600,7 +1602,7 @@ export async function reserveMongoProSubscriptionReactivationCheckout(input: {
   reservationId: string;
   reservationExpiresAt: string;
 }) {
-  const plan = getProSubscriptionPlan(input.planCode);
+  const plan = getSaleableProSubscriptionPlan(input.planCode);
   const expiresAt = new Date(input.reservationExpiresAt);
   if (!Number.isFinite(expiresAt.getTime()) || expiresAt <= new Date()) {
     throw new TypeError(

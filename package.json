@@ -13,6 +13,8 @@
     "db:seed:testing": "node --env-file=.env.dev ./node_modules/tsx/dist/cli.mjs scripts/seed-testing-marketplace.ts",
     "db:sync:facebook-pages": "node --env-file=.env.dev ./node_modules/tsx/dist/cli.mjs scripts/sync-facebook-page-leads-to-dev.ts",
     "db:migrate-schema": "node --env-file=.env.dev ./node_modules/tsx/dist/cli.mjs scripts/migrate-db-schema.ts",
+    "db:migrate-subscription-pricing:dev": "SUBSCRIPTION_PRICING_APPLY=${SUBSCRIPTION_PRICING_APPLY:-false} node --env-file=.env.dev ./node_modules/tsx/dist/cli.mjs scripts/migrate-pro-subscription-pricing.ts",
+    "db:migrate-subscription-pricing:production": "NODE_ENV=production SUBSCRIPTION_PRICING_APPLY=${SUBSCRIPTION_PRICING_APPLY:-false} node --env-file=.env.production ./node_modules/tsx/dist/cli.mjs scripts/migrate-pro-subscription-pricing.ts",
     "db:init:production": "NODE_ENV=production node --env-file=.env.production ./node_modules/tsx/dist/cli.mjs scripts/init-production-db.ts",
     "db:provision-admin": "NODE_ENV=production node --env-file=.env.production --env-file-if-exists=.env.production.admin ./node_modules/tsx/dist/cli.mjs scripts/provision-production-admin.ts",
     "db:migrate-admin-email-only": "NODE_ENV=production node --env-file=.env.production --env-file-if-exists=.env.production.admin ./node_modules/tsx/dist/cli.mjs scripts/migrate-production-admin-email-only.ts",

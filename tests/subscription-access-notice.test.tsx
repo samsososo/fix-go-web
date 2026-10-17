@@ -73,7 +73,7 @@ describe("subscription access notice", () => {
 
     expect(screen.getByRole("alert")).toHaveTextContent("新報價同新工作已暫停");
     expect(screen.getByRole("alert")).toHaveTextContent("處理現有工作");
-    expect(screen.getByRole("link", { name: /管理月費/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /管理訂閱/ })).toHaveAttribute(
       "href",
       "/pro/billing",
     );

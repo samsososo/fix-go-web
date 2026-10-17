@@ -4,6 +4,10 @@ vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
 }));
 
+vi.mock("next/headers", () => ({
+  cookies: vi.fn().mockResolvedValue({ get: vi.fn() }),
+}));
+
 vi.mock("@/lib/auth", () => ({
   clearSession: vi.fn(),
   localizedRoleHomePath: vi.fn(
@@ -127,7 +131,9 @@ describe("signup SMS verification routing", () => {
       ok: true,
       target: "/pro/billing",
     });
-    expect(createUserAccount).toHaveBeenCalledWith(signupInput);
+    expect(createUserAccount).toHaveBeenCalledWith(signupInput, {
+      marketingAttribution: undefined,
+    });
     expect(createCredential).toHaveBeenCalledWith(
       createdPro.id,
       signupInput.password,
@@ -151,7 +157,9 @@ describe("signup SMS verification routing", () => {
       ok: true,
       target: "/zh-HK/customer",
     });
-    expect(createUserAccount).toHaveBeenCalledWith(input);
+    expect(createUserAccount).toHaveBeenCalledWith(input, {
+      marketingAttribution: undefined,
+    });
     expect(createCredential).toHaveBeenCalledWith(
       customer.id,
       input.password,
@@ -230,8 +238,10 @@ describe("signup SMS verification routing", () => {
       signUpAction({ ...signupInput, interfaceLocale: "zh-HK" }),
     ).resolves.toEqual({ ok: true, target: "/pro/billing" });
 
-    expect(createUserAccount).toHaveBeenCalledWith(signupInput);
-    expect(vi.mocked(createUserAccount).mock.calls[0]).toHaveLength(1);
+    expect(createUserAccount).toHaveBeenCalledWith(signupInput, {
+      marketingAttribution: undefined,
+    });
+    expect(vi.mocked(createUserAccount).mock.calls[0]).toHaveLength(2);
     expect(createCredential).toHaveBeenCalledWith(
       createdPro.id,
       signupInput.password,
@@ -286,6 +296,7 @@ describe("signup SMS verification routing", () => {
 
     expect(createUserAccount).toHaveBeenCalledWith(signupInput, {
       phoneVerifiedAt: verifiedAt,
+      marketingAttribution: undefined,
     });
     expect(consumePendingSignupPhoneVerification).toHaveBeenCalledWith(
       signupInput.phone,

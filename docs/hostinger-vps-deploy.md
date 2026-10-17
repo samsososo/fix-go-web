@@ -13,8 +13,36 @@
 
 ## 收費基準
 
-師傅套餐為 HK$100／1 個月、HK$249／3 個月、HK$449／6 個月及 HK$699／12 個月，每期收取全額；首次成功綁卡後享有一次 14 日免費試用。DEV 使用 Stripe sandbox，Production 使用 Stripe live mode，兩邊的
+師傅套餐由 2026-10-17 起為 HK$200／1 個月、HK$498／3 個月、HK$898／6 個月及 HK$1,398／12 個月，每期收取全額；首次成功綁卡後享有一次 14 日免費試用。已在試用或有效訂閱的師傅於下一個原定收費點轉用新價，不即時扣款或收取按比例差額，並保留原有試用及帳單週期。DEV 使用 Stripe sandbox，Production 使用 Stripe live mode，兩邊的
 Price ID、secret key 及 webhook signing secret 必須分開。
+
+原有無版本後綴的四個 Price ID 環境變數必須繼續指向舊價，作現有訂閱及 webhook 相容；新價分別使用 `STRIPE_PRO_MONTHLY_V2_PRICE_ID`、`STRIPE_PRO_3_MONTHS_V2_PRICE_ID`、`STRIPE_PRO_6_MONTHS_V2_PRICE_ID` 及 `STRIPE_PRO_12_MONTHS_V2_PRICE_ID`。不得將舊變數直接改指向新價。
+
+### 2026-10-17 加價 migration runbook
+
+Migration 預設只做 dry-run；`SUBSCRIPTION_PRICING_APPLY=true` 只可作為單次 command prefix，切勿寫入任何 `.env`。先確認八個 Stripe Prices 均為 active、同週期嘅 v1／v2 Price 屬於同一 Product，並保留舊 Prices 供歷史 webhook 使用。
+
+1. 先備份 `proSubscriptions` 及安排短暫 billing maintenance window，確認沒有未完成 checkout、欠費或期末取消中的待遷移訂閱。
+2. 部署同時支援 v1 lifecycle 及 v2 新售價的 application code。
+3. 在 DEV 依次執行：
+
+   ```bash
+   npm run db:migrate-subscription-pricing:dev
+   SUBSCRIPTION_PRICING_APPLY=true npm run db:migrate-subscription-pricing:dev
+   npm run db:migrate-subscription-pricing:dev
+   ```
+
+4. DEV 驗證通過後，在 Production 依次執行：
+
+   ```bash
+   npm run db:migrate-subscription-pricing:production
+   SUBSCRIPTION_PRICING_APPLY=true npm run db:migrate-subscription-pricing:production
+   npm run db:migrate-subscription-pricing:production
+   ```
+
+5. 第二次 dry-run 必須顯示所有可遷移紀錄已是 target；另外在 Stripe 核對現有訂閱下一張 invoice 為新價、沒有 proration，原有 trial end、billing cycle anchor 及 current period 不變。
+
+Script 只容許單向 v1→v2，並以 `pro-pricing-v2-2026-10-17` marker 識別遷移 cohort；不可用通用 v2→v1 command，以免誤降加價後建立的新訂閱。任何 apply／post-verify 失敗都要立即停止，保留新舊 Prices 及已部署的雙版本相容 code，先檢查 marker、MongoDB 備份及 Stripe 狀態。如果 Stripe 已轉新價但 MongoDB 仍是舊價，而且 remote status、trial 及 period 尚未改變，可重跑同一 v2 migration 作冪等 recovery；如果 lifecycle 已前進或已發生扣款／取消，必須按 marker cohort 人手核對 Stripe invoice、status、period 及 MongoDB entitlement 後才修復，不得盲目重跑或未核對 cohort 就批量回復舊價。
 
 ## DNS
 

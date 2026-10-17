@@ -200,8 +200,8 @@ export function ProJobsCarousel({
         </div>
         <p className="mt-3 text-xs leading-6 text-white/75">
           註冊可預覽工作；成功綁卡後享每人一次 {PRO_SUBSCRIPTION_TRIAL_DAYS}{" "}
-          日免費試用。之後按所選套餐全額自動續費：HK$100／1 個月、HK$249／3
-          個月、HK$449／6 個月、HK$699／12 個月。完整資料及報價須有效訂閱。
+          日免費試用。之後按所選套餐全額自動續費：HK$200／1 個月、HK$498／3
+          個月、HK$898／6 個月、HK$1,398／12 個月。完整資料及報價須有效訂閱。
         </p>
       </div>
     </section>

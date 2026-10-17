@@ -25,8 +25,8 @@ function localSubscription(
 ): ProSubscription {
   return {
     proId: PRO_ID,
-    planCode: "pro_monthly_v1",
-    amountMinor: 10_000,
+    planCode: "pro_monthly_v2",
+    amountMinor: 20_000,
     currency: "hkd",
     interval: "month",
     accessStatus: "setup_required",
@@ -49,7 +49,7 @@ function checkoutSession(overrides: Partial<Stripe.Checkout.Session> = {}) {
     customer: CUSTOMER_ID,
     metadata: {
       proId: PRO_ID,
-      planCode: "pro_monthly_v1",
+      planCode: "pro_monthly_v2",
       purpose: "pro_subscription_card_setup",
     },
     setup_intent: SETUP_INTENT_ID,
@@ -68,15 +68,15 @@ function paidReactivationCheckoutSession(
     payment_status: "paid",
     livemode: false,
     currency: "hkd",
-    amount_subtotal: 10_000,
-    amount_total: 10_000,
+    amount_subtotal: 20_000,
+    amount_total: 20_000,
     payment_method_types: ["card"],
     client_reference_id: PRO_ID,
     customer: CUSTOMER_ID,
     subscription: NEW_SUBSCRIPTION_ID,
     metadata: {
       proId: PRO_ID,
-      planCode: "pro_monthly_v1",
+      planCode: "pro_monthly_v2",
       purpose: "pro_subscription_paid_reactivation",
       previousSubscriptionId: SUBSCRIPTION_ID,
     },
@@ -116,7 +116,7 @@ function stripeSubscription(overrides: Partial<Stripe.Subscription> = {}) {
     livemode: false,
     metadata: {
       proId: PRO_ID,
-      planCode: "pro_monthly_v1",
+      planCode: "pro_monthly_v2",
     },
     status: "trialing",
     cancel_at_period_end: false,
@@ -163,7 +163,7 @@ function stripeInvoice(overrides: Partial<Stripe.Invoice> = {}) {
     livemode: false,
     status: "open",
     attempt_count: 1,
-    amount_remaining: 10_000,
+    amount_remaining: 20_000,
     parent: {
       type: "subscription_details",
       quote_details: null,
@@ -171,7 +171,7 @@ function stripeInvoice(overrides: Partial<Stripe.Invoice> = {}) {
         subscription: SUBSCRIPTION_ID,
         metadata: {
           proId: PRO_ID,
-          planCode: "pro_monthly_v1",
+          planCode: "pro_monthly_v2",
         },
       },
     },
@@ -340,7 +340,7 @@ describe("Stripe Checkout webhook processing", () => {
       proId: PRO_ID,
       customerId: CUSTOMER_ID,
       setupIntentId: SETUP_INTENT_ID,
-      planCode: "pro_monthly_v1",
+      planCode: "pro_monthly_v2",
     });
     expect(dependencies.setCustomerDefaultPaymentMethod).toHaveBeenCalledWith({
       customerId: CUSTOMER_ID,
@@ -359,7 +359,7 @@ describe("Stripe Checkout webhook processing", () => {
       proId: PRO_ID,
       customerId: CUSTOMER_ID,
       trialEndUnix: TRIAL_END_UNIX,
-      planCode: "pro_monthly_v1",
+      planCode: "pro_monthly_v2",
       idempotencyKey: `pro-subscription:${PRO_ID}:lifetime`,
     });
     expect(dependencies.activateProTrialSubscription).toHaveBeenCalledWith({
@@ -382,7 +382,7 @@ describe("Stripe Checkout webhook processing", () => {
     expect(dependencies.failStripeWebhookEvent).not.toHaveBeenCalled();
   });
 
-  it("reactivates a terminated pro only after a full HK$100 Checkout payment", async () => {
+  it("reactivates a terminated pro only after a full HK$200 v2 Checkout payment", async () => {
     const terminated = consumedSubscription({
       accessStatus: "terminated",
       stripeSubscriptionId: SUBSCRIPTION_ID,
@@ -400,8 +400,8 @@ describe("Stripe Checkout webhook processing", () => {
     const paidInvoice = stripeInvoice({
       id: "in_reactivation_paid",
       status: "paid",
-      amount_due: 10_000,
-      amount_paid: 10_000,
+      amount_due: 20_000,
+      amount_paid: 20_000,
       amount_remaining: 0,
       parent: {
         type: "subscription_details",
@@ -410,7 +410,7 @@ describe("Stripe Checkout webhook processing", () => {
           subscription: NEW_SUBSCRIPTION_ID,
           metadata: {
             proId: PRO_ID,
-            planCode: "pro_monthly_v1",
+            planCode: "pro_monthly_v2",
           },
         },
       },
@@ -453,7 +453,7 @@ describe("Stripe Checkout webhook processing", () => {
     );
   });
 
-  it("does not reactivate when the immediate HK$100 invoice is unpaid", async () => {
+  it("does not reactivate when the immediate HK$200 v2 invoice is unpaid", async () => {
     const terminated = consumedSubscription({
       accessStatus: "terminated",
       stripeSubscriptionId: SUBSCRIPTION_ID,
@@ -484,7 +484,7 @@ describe("Stripe Checkout webhook processing", () => {
               subscription: NEW_SUBSCRIPTION_ID,
               metadata: {
                 proId: PRO_ID,
-                planCode: "pro_monthly_v1",
+                planCode: "pro_monthly_v2",
               },
             },
           },
@@ -837,6 +837,62 @@ describe("Stripe Checkout webhook processing", () => {
         cancelAtPeriodEnd: true,
         cancellationRequestedAt: CARD_BOUND_AT,
         paymentUpdate: { type: "none" },
+      }),
+    );
+  });
+
+  it("keeps historical v1 subscription lifecycle webhooks valid at the old amount", async () => {
+    const historicalPriceId = "price_historical_monthly_v1";
+    const local = lifecycleSubscription({
+      planCode: "pro_monthly_v1",
+      amountMinor: 10_000,
+      stripePriceId: historicalPriceId,
+    });
+    const remote = stripeSubscription({
+      status: "active",
+      metadata: {
+        proId: PRO_ID,
+        planCode: "pro_monthly_v1",
+      },
+      items: {
+        data: [
+          {
+            current_period_start: CARD_BOUND_UNIX,
+            current_period_end: TRIAL_END_UNIX,
+            price: { id: historicalPriceId },
+          },
+        ],
+      } as Stripe.ApiList<Stripe.SubscriptionItem>,
+    });
+    const dependencies = makeDependencies({
+      findProSubscriptionByStripeSubscriptionId: vi.fn(async () => local),
+      retrieveOwnedMonthlyProSubscription: vi.fn(async () => ({
+        subscription: remote,
+        item: remote.items.data[0],
+      })) as never,
+    });
+
+    await expect(
+      processStripeWebhookEvent(
+        stripeEvent("customer.subscription.updated", remote),
+        dependencies,
+      ),
+    ).resolves.toEqual({ status: 200, code: "event_processed" });
+
+    expect(
+      dependencies.retrieveOwnedMonthlyProSubscription,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedPlanCode: "pro_monthly_v1",
+        expectedPriceId: historicalPriceId,
+        allowHistoricalPriceId: true,
+      }),
+    );
+    expect(dependencies.syncProSubscriptionLifecycle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        proId: PRO_ID,
+        stripePriceId: historicalPriceId,
+        stripeStatus: "active",
       }),
     );
   });

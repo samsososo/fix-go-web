@@ -70,7 +70,7 @@ import {
   isProNewWorkRestrictedError,
 } from "@/lib/pro-subscription-entitlement";
 import {
-  getProSubscriptionPlan,
+  getSaleableProSubscriptionPlan,
   type ProSubscriptionPlanCode,
   hasConsumedLifetimeTrial,
 } from "@/lib/subscription-policy";
@@ -305,7 +305,7 @@ export async function startProSubscriptionCheckoutAction(input: {
   let reservationId: string | undefined;
 
   try {
-    const plan = getProSubscriptionPlan(input.planCode);
+    const plan = getSaleableProSubscriptionPlan(input.planCode);
     let subscription = await ensureProSubscription(user.id);
     const currentStatus = evaluateProSubscriptionEntitlement(
       subscription,

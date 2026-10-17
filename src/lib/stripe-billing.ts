@@ -3,8 +3,10 @@ import Stripe from "stripe";
 import { env } from "@/lib/env";
 import {
   getProSubscriptionPlan,
+  getSaleableProSubscriptionPlan,
   isProSubscriptionPlanCode,
   type ProSubscriptionPlanCode,
+  type SaleableProSubscriptionPlanCode,
   PRO_SUBSCRIPTION_CURRENCY,
   PRO_SUBSCRIPTION_PLAN_CODE,
 } from "@/lib/subscription-policy";
@@ -27,6 +29,7 @@ export interface StripeClientOptions {
 
 export interface StripeBillingDependencies {
   stripe?: Stripe;
+  /** Backwards-compatible shorthand for a monthly plan; prefer priceIds. */
   monthlyPriceId?: string;
   priceIds?: Partial<Record<ProSubscriptionPlanCode, string>>;
   webhookSecret?: string;
@@ -106,16 +109,22 @@ function configuredMonthlyPriceId(
   dependencies: StripeBillingDependencies,
   planCode: ProSubscriptionPlanCode = PRO_SUBSCRIPTION_PLAN_CODE,
 ) {
-  getProSubscriptionPlan(planCode);
+  const plan = getProSubscriptionPlan(planCode);
   const ids = {
-    pro_monthly_v1:
-      dependencies.monthlyPriceId ?? env.STRIPE_PRO_MONTHLY_PRICE_ID,
+    pro_monthly_v1: env.STRIPE_PRO_MONTHLY_PRICE_ID,
     pro_3_months_v1: env.STRIPE_PRO_3_MONTHS_PRICE_ID,
     pro_6_months_v1: env.STRIPE_PRO_6_MONTHS_PRICE_ID,
     pro_12_months_v1: env.STRIPE_PRO_12_MONTHS_PRICE_ID,
+    pro_monthly_v2: env.STRIPE_PRO_MONTHLY_V2_PRICE_ID,
+    pro_3_months_v2: env.STRIPE_PRO_3_MONTHS_V2_PRICE_ID,
+    pro_6_months_v2: env.STRIPE_PRO_6_MONTHS_V2_PRICE_ID,
+    pro_12_months_v2: env.STRIPE_PRO_12_MONTHS_V2_PRICE_ID,
   };
   return requireStripeId(
-    dependencies.priceIds?.[planCode] ?? ids[planCode] ?? "",
+    dependencies.priceIds?.[planCode] ??
+      (plan.intervalCount === 1 ? dependencies.monthlyPriceId : undefined) ??
+      ids[planCode] ??
+      "",
     "price_",
     `Stripe Price for ${planCode}`,
   );
@@ -128,13 +137,18 @@ function assertHistoricalMonthlyPlanPrice(
   const plan = getProSubscriptionPlan(planCode);
   if (
     price.type !== "recurring" ||
+    price.billing_scheme !== "per_unit" ||
     price.currency !== plan.currency ||
     price.unit_amount !== plan.amountMinor ||
+    price.transform_quantity !== null ||
+    price.tiers_mode !== null ||
     price.recurring?.interval !== plan.interval ||
-    price.recurring.interval_count !== plan.intervalCount
+    price.recurring.interval_count !== plan.intervalCount ||
+    price.recurring.usage_type !== "licensed" ||
+    price.recurring.trial_period_days !== null
   ) {
     throw new StripeBillingError(
-      `The historical Stripe Price does not match the ${planCode === PRO_SUBSCRIPTION_PLAN_CODE ? "HK$100 monthly plan" : planCode}.`,
+      `The historical Stripe Price does not match ${planCode}.`,
     );
   }
 }
@@ -152,7 +166,7 @@ function assertConfiguredMonthlyPrice(
     assertHistoricalMonthlyPlanPrice(price, planCode);
   } catch {
     throw new StripeBillingError(
-      `The configured Stripe Price does not match the ${planCode === PRO_SUBSCRIPTION_PLAN_CODE ? "HK$100 monthly plan" : planCode}.`,
+      `The configured Stripe Price does not match ${planCode}.`,
     );
   }
 }
@@ -305,21 +319,22 @@ export async function createCardSetupCheckoutSession(
   dependencies: StripeBillingDependencies = {},
 ) {
   const stripe = resolveStripe(dependencies);
+  const plan = getSaleableProSubscriptionPlan(input.planCode);
   const proId = requireNonEmpty(input.proId, "proId");
   const customerId = requireStripeId(input.customerId, "cus_", "customerId");
   const successUrl = requireHttpUrl(input.successUrl, "successUrl");
   const cancelUrl = requireHttpUrl(input.cancelUrl, "cancelUrl");
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
-  const priceId = configuredMonthlyPriceId(dependencies, input.planCode);
+  const priceId = configuredMonthlyPriceId(dependencies, plan.code);
   assertConfiguredMonthlyPrice(
     await stripe.prices.retrieve(priceId),
     priceId,
-    input.planCode,
+    plan.code,
   );
   const metadata = {
     proId,
     purpose: STRIPE_CARD_SETUP_PURPOSE,
-    planCode: getProSubscriptionPlan(input.planCode).code,
+    planCode: plan.code,
   };
 
   return stripe.checkout.sessions.create(
@@ -351,7 +366,7 @@ export interface CreatePaidProSubscriptionCheckoutSessionInput {
 function paidReactivationMetadata(
   proId: string,
   previousSubscriptionId: string,
-  planCode: ProSubscriptionPlanCode = PRO_SUBSCRIPTION_PLAN_CODE,
+  planCode: SaleableProSubscriptionPlanCode = PRO_SUBSCRIPTION_PLAN_CODE,
 ) {
   return {
     proId,
@@ -427,6 +442,7 @@ export async function createPaidProSubscriptionCheckoutSession(
   dependencies: StripeBillingDependencies = {},
 ) {
   const stripe = resolveStripe(dependencies);
+  const plan = getSaleableProSubscriptionPlan(input.planCode);
   const proId = requireNonEmpty(input.proId, "proId");
   const customerId = requireStripeId(input.customerId, "cus_", "customerId");
   const previousSubscriptionId = requireStripeId(
@@ -437,7 +453,7 @@ export async function createPaidProSubscriptionCheckoutSession(
   const successUrl = requireHttpUrl(input.successUrl, "successUrl");
   const cancelUrl = requireHttpUrl(input.cancelUrl, "cancelUrl");
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
-  const monthlyPriceId = configuredMonthlyPriceId(dependencies, input.planCode);
+  const monthlyPriceId = configuredMonthlyPriceId(dependencies, plan.code);
   const [customer, price, previous] = await Promise.all([
     retrieveStripeCustomerForPro({ proId, customerId }, dependencies),
     stripe.prices.retrieve(monthlyPriceId),
@@ -451,7 +467,7 @@ export async function createPaidProSubscriptionCheckoutSession(
       dependencies,
     ),
   ]);
-  assertConfiguredMonthlyPrice(price, monthlyPriceId, input.planCode);
+  assertConfiguredMonthlyPrice(price, monthlyPriceId, plan.code);
   const expectedLivemode = previous.subscription.livemode;
   if (
     customer.metadata.accountType !== "pro" ||
@@ -466,7 +482,7 @@ export async function createPaidProSubscriptionCheckoutSession(
   const metadata = paidReactivationMetadata(
     proId,
     previousSubscriptionId,
-    input.planCode,
+    plan.code,
   );
   const session = await stripe.checkout.sessions.create(
     {
@@ -488,7 +504,7 @@ export async function createPaidProSubscriptionCheckoutSession(
     customerId,
     previousSubscriptionId,
     expectedLivemode,
-    planCode: input.planCode,
+    planCode: plan.code,
   });
   if (session.status !== "open" || !session.url) {
     throw new StripeBillingError(
@@ -978,9 +994,10 @@ export async function createMonthlyProSubscription(
   dependencies: StripeBillingDependencies = {},
 ) {
   const stripe = resolveStripe(dependencies);
+  const plan = getSaleableProSubscriptionPlan(input.planCode);
   const proId = requireNonEmpty(input.proId, "proId");
   const customerId = requireStripeId(input.customerId, "cus_", "customerId");
-  const monthlyPriceId = configuredMonthlyPriceId(dependencies, input.planCode);
+  const monthlyPriceId = configuredMonthlyPriceId(dependencies, plan.code);
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
 
   if (!Number.isSafeInteger(input.trialEndUnix) || input.trialEndUnix <= 0) {
@@ -990,7 +1007,7 @@ export async function createMonthlyProSubscription(
   }
 
   const price = await stripe.prices.retrieve(monthlyPriceId);
-  assertConfiguredMonthlyPrice(price, monthlyPriceId, input.planCode);
+  assertConfiguredMonthlyPrice(price, monthlyPriceId, plan.code);
 
   return stripe.subscriptions.create(
     {
@@ -1005,7 +1022,7 @@ export async function createMonthlyProSubscription(
       },
       metadata: {
         proId,
-        planCode: getProSubscriptionPlan(input.planCode).code,
+        planCode: plan.code,
       },
     },
     { idempotencyKey },

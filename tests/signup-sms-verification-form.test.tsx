@@ -45,12 +45,16 @@ describe("signup phone verification form", () => {
     expect(
       screen.getByRole("checkbox", { name: "水喉維修" }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/之後每月自動收取/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/試用完結後按套餐全額自動續費：HK\$200／1 個月/),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "建立帳戶" })).toBeDisabled();
 
     await user.selectOptions(screen.getByLabelText("身份"), "customer");
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
-    expect(screen.queryByText(/之後每月自動收取/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/試用完結後按套餐全額自動續費/),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "建立帳戶" })).toBeDisabled();
     expect(mocks.signUpAction).not.toHaveBeenCalled();
   });
